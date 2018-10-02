@@ -3,36 +3,9 @@ import random
 from typing import Type, List, Dict
 
 from torch.utils.data import Dataset, DataLoader
+import numpy as np
 import pandas as pd
 import torch
-
-
-class PipelineDataset(Dataset):
-
-    def __init__(
-        self, data: List[Dict], feature_label: str, target_label: str,
-        device: str
-    ):
-        self.data = data
-        self.feature_label = feature_label
-        self.target_label = target_label
-        self.device = device
-
-    def __getitem__(self, item:int):
-        x = torch.tensor(
-            self.data[item][self.feature_label],
-            dtype=torch.float32,
-            device=self.device
-        )
-        y = torch.tensor(
-            self.data[item][self.target_label],
-            dtype=torch.float32,
-            device=self.device
-        )
-        return x, y
-
-    def __len__(self):
-        return len(self.data)
 
 
 def _preprocess_data(path):
@@ -65,14 +38,50 @@ def _preprocess_data(path):
     )
 
 
+def load_data(path):
+    """
+    Reads the dataset from path.
+    """
+    return json.load(open(path, "r"))
+
+
+class PipelineDataset(Dataset):
+
+    def __init__(
+        self, data: List[Dict], feature_label: str, target_label: str,
+        device: str
+    ):
+        self.data = data
+        self.feature_label = feature_label
+        self.target_label = target_label
+        self.device = device
+
+    def __getitem__(self, item:int):
+        x = torch.tensor(
+            self.data[item][self.feature_label],
+            dtype=torch.float32,
+            device=self.device
+        )
+        y = torch.tensor(
+            self.data[item][self.target_label],
+            dtype=torch.float32,
+            device=self.device
+        )
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+
 class GroupDataLoader(object):
     """
     Batches a dataset for PyTorch Neural Network training. Partitions the
     dataset so that batches belong to the same group.
+
     Parameters:
     -----------
-    path: str, path to JSON file containing pipeline run data. file must
-        contain an array of objects.
+    data: List[Dict], JSON compatible list of objects representing a dataset.
+        dataset_class must know how to parse the data given dataset_params.
     group_label: str, pipeline run data is grouped by group_label and each
         batch of data comes from only one group. group_label must be a key into
         each element of the pipeline run data. the value of group_label must be
@@ -83,15 +92,15 @@ class GroupDataLoader(object):
     batch_size: int, the number of data points in each batch
     drop_last: bool, default False. whether to drop the last incomplete batch.
     shuffle: bool, default True. whether to randomize the batches.
-    seed: int, default 0. random seed.
+    device: str, default "cpu". PyTorch device for the data.
     """
 
     def __init__(
-        self, path: str, group_label: str, dataset_class: Type[Dataset],
+        self, data: List[Dict], group_label: str, dataset_class: Type[Dataset],
         dataset_params: dict, batch_size: int, drop_last: bool = False,
-        shuffle: bool = True, device: str = "cpu", seed: int = 0
+        shuffle: bool = True, device: str = "cpu"
     ):
-        self.path = path
+        self.data = data
         self.group_label = group_label
         self.dataset_class = dataset_class
         self.dataset_params = dataset_params
@@ -99,35 +108,22 @@ class GroupDataLoader(object):
         self.drop_last = drop_last
         self.shuffle = shuffle
         self.device = device
-        self.seed = seed
 
-        self._load_data()
         self._init_dataloaders()
         self._init_group_metadataloader()
 
-    def _load_data(self):
-        """
-        Reads the dataset from self.path.
-        """
-        with open(self.path, "r") as f:
-            self._data = json.load(f)
-
     def _init_dataloaders(self):
         """
-        Groups self._data based on group_label. Creates a
+        Groups self.data based on group_label. Creates a
         torch.utils.data.DataLoader for each group, using self.dataset_class.
         """
         # group the data
-        grouped_data = {}
-        for data_point in self._data:
-            group = data_point[self.group_label]
-            if not group in grouped_data:
-                grouped_data[group] = []
-            grouped_data[group].append(data_point)
+        grouped_data = self._group_data(self.data, self.group_label)
 
         # create dataloaders
         self._group_dataloaders = {}
-        for group, group_data in grouped_data.items():
+        for group, group_indices in grouped_data.items():
+            group_data = [self.data[i] for i in group_indices]
             group_dataset = self.dataset_class(group_data, **self.dataset_params)
             self._group_dataloaders[group] = DataLoader(
                 dataset=group_dataset,
@@ -137,6 +133,10 @@ class GroupDataLoader(object):
             )
 
     def _init_group_metadataloader(self):
+        """
+        Creates a dataloader which randomizes the batches over the groups. This
+        allows the order of the batches to be independent of the groups.
+        """
         group_batches = []
         for group, group_dataloader in self._group_dataloaders.items():
             group_batches += [group] * len(group_dataloader)
@@ -159,6 +159,60 @@ class GroupDataLoader(object):
 
     def __len__(self):
         return len(self._group_metadataloader)
+
+    @classmethod
+    def _group_data(cls, data, group_label):
+        """
+        Groups data by group_label.
+
+        Parameters:
+        -----------
+        data: List[Dict], JSON compatible list of objects representing a dataset.
+        group_label: str, data is grouped by group_label. group_label must be a
+            key into each element of the pipeline run data. the value of
+            group_label must be hashable.
+
+        Returns:
+        --------
+        A dict with key being a group and the value is a list of indices into
+        data.
+        """
+        grouped_data = {}
+        for i, data_point in enumerate(data):
+            group = data_point[group_label]
+            if not group in grouped_data:
+                grouped_data[group] = []
+            grouped_data[group].append(i)
+        return grouped_data
+
+    @classmethod
+    def cv_folds(
+        cls, data: List[Dict], group_label: str, n_folds: int = -1,
+        seed: int = 0
+    ):
+        grouped_data = cls._group_data(data, group_label)
+        if n_folds < 0:
+            n_folds = len(grouped_data)
+        groups = grouped_data.keys()
+
+        np.random.seed(seed)
+        np.random.shuffle(groups)
+        split_groups = np.array_split(groups, n_folds)
+
+        folds = []
+        for i in range(n_folds):
+            train_indices = []
+            test_indices = []
+            for j, split_group in enumerate(split_groups):
+                for group in split_group:
+                    indices = grouped_data[group]
+                    if i == j:
+                        test_indices += indices
+                    else:
+                        train_indices += indices
+            folds.append((train_indices, test_indices))
+
+        return folds
 
 
 if __name__ == '__main__':
