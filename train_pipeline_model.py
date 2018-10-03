@@ -16,6 +16,7 @@ input_model = nn.Module
 output_model = nn.Module
 
 
+# ensures that submodels exist for a given pipeline
 def instantiate_submodels(pipeline, mf_len):
     primitive_names = pipeline.split("___")
     for primitive_name in primitive_names:
@@ -23,19 +24,30 @@ def instantiate_submodels(pipeline, mf_len):
             primitive_submodel_dict[primitive_name] = PrimitiveModel(mf_len)
 
 
+# Dynamically builds model for a given pipeline
+# pipeline is a string of primitive names, each separated by "___"
 def build_model(pipeline, mf_len):
     primitive_names = pipeline.split("___")
     primitive_models = []
+    # Prepend an input model
     primitive_models.append(input_model)
+    # Add all of the primitive models in order
     for primitive_name in primitive_names:
         primitive_models.append(primitive_submodel_dict[primitive_name])
+    # Append output model to the end of the pipeline model
     primitive_models.append(output_model)
 
     return nn.Sequential(*primitive_models)
 
 
+def save_weights():
+	for key, model in primitive_submodel_dict.items():
+		torch.save(model, "%s.pt" % key)
+
+
+
 def plot_losses(losses, save_dir="./plots/"):
-    save_path = save_dir + "losses.png"
+    save_path = save_dir + "losses2.png"
     plt.plot(losses["train"], label="train")
     plt.plot(losses["test"], label="test")
     plt.legend(loc=0)
@@ -134,7 +146,8 @@ def main():
         loop.update(1)
         if (e+1) % 10 == 0:
             plot_losses(losses)
-            json.dump(losses, open("losses.json", "w"), indent=4)
+            json.dump(losses, open("losses2.json", "w"), indent=4)
+            save_weights()
 
     loop.close()
 
