@@ -104,6 +104,8 @@ class GroupDataLoader(object):
         self.group_label = group_label
         self.dataset_class = dataset_class
         self.dataset_params = dataset_params
+        if batch_size == -1:
+            batch_size = len(self.data)
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.shuffle = shuffle
@@ -193,7 +195,7 @@ class GroupDataLoader(object):
         grouped_data = cls._group_data(data, group_label)
         if n_folds < 0:
             n_folds = len(grouped_data)
-        groups = grouped_data.keys()
+        groups = list(grouped_data.keys())
 
         np.random.seed(seed)
         np.random.shuffle(groups)
@@ -216,4 +218,8 @@ class GroupDataLoader(object):
 
 
 if __name__ == '__main__':
-    _preprocess_data("./data/complete_pipelines_and_metafeatures.json")
+    # _preprocess_data("./data/complete_pipelines_and_metafeatures.json")
+    data = load_data("./data/processed_data.json")
+    folds = GroupDataLoader.cv_folds(data, "dataset", 10, seed=np.random.randint(2**32))
+    for fold in folds:
+        print(all(i == item for i, item in enumerate(sorted(fold[0] + fold[1]))))

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 
-from dataset import PipelineDataset, GroupDataLoader
+from dataset import PipelineDataset, GroupDataLoader, load_data
 from models import PrimitiveModel, AccuracyRegressionModel
 
 
@@ -34,12 +34,29 @@ def build_model(pipeline, mf_len):
     return nn.Sequential(*primitive_models)
 
 
+def plot_losses(losses, save_dir="./plots/"):
+    save_path = save_dir + "losses.png"
+    plt.plot(losses["train"], label="train")
+    plt.plot(losses["test"], label="test")
+    plt.legend(loc=0)
+    plt.xlabel("Training Epoch")
+    plt.ylabel("Average RMSE Loss")
+    plt.yticks(np.arange(0, 70, 5) / 100)
+    plt.title("Pipeline Regressor Loss")
+    plt.savefig(save_path)
+    plt.clf()
+
+
 def main():
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    dataloader = GroupDataLoader(
-        path = "./data/processed_data.json",
+    data = np.array(load_data("./data/processed_data.json"))
+    folds = GroupDataLoader.cv_folds(data, "dataset", 10, seed=np.random.randint(2**32))
+    train_data = data[folds[0][0]]
+    test_data = data[folds[0][1]]
+    train_dataloader = GroupDataLoader(
+        data=train_data,
         group_label = "pipeline",
         dataset_class = PipelineDataset,
         dataset_params = {
@@ -49,71 +66,77 @@ def main():
         },
         batch_size = 48
     )
-    input_size = next(iter(dataloader))[1][0].shape[1]
+    test_dataloader = GroupDataLoader(
+        data=test_data,
+        group_label = "pipeline",
+        dataset_class = PipelineDataset,
+        dataset_params = {
+            "feature_label": "metafeatures",
+            "target_label": "test_accuracy",
+            "device": "cuda:0"
+        },
+        batch_size = -1
+    )
 
+    input_size = next(iter(train_dataloader))[1][0].shape[1]
 
     global input_model
     input_model = PrimitiveModel(input_size)
     global output_model
     output_model = AccuracyRegressionModel(input_size)
-
     objective = torch.nn.MSELoss(reduction="elementwise_mean")
-    n_epochs = 5000
-    # loop = tqdm(total=n_epochs, position=0)
-    losses = []
-    all_epoch_losses = []
-    for e, epoch in enumerate(range(n_epochs)):
-        # np.random.shuffle(pipelines)
-        # loop = tqdm(total=len(pipelines), position=0)
-        epoch_losses = []
-        for i, (pipeline, (x_batch, y_batch)) in enumerate(dataloader):
-            instantiate_submodels(pipeline, input_size)
 
+    losses = {
+        "train": [],
+        "test": []
+    }
+    n_epochs = 5000
+    loop = tqdm(total=n_epochs, position=0)
+    for e in range(n_epochs):
+        epoch_losses = {
+            "train": [],
+            "test": []
+        }
+
+        for pipeline, (x_batch, y_batch) in train_dataloader:
+            instantiate_submodels(pipeline, input_size)
             pipeline_regressor = build_model(pipeline, input_size)
             pipeline_regressor.cuda()
 
             optimizer = optim.Adam(pipeline_regressor.parameters(), lr=1e-4)
-
             optimizer.zero_grad()
 
             y_hat_batch = torch.squeeze(pipeline_regressor(x_batch))
             loss = torch.sqrt(objective(y_hat_batch, y_batch))
 
-            # loop.set_description('loss:{:.4f}'.format(loss.item()))
-            # loop.update(1)
-
             loss.backward()
             optimizer.step()
 
-            epoch_losses.append(loss.item())
-            losses.append(loss.item())
+            epoch_losses["train"].append(loss.item())
 
-            print(e, n_epochs, i, len(dataloader), loss.item())
+        for pipeline, (x_batch, y_batch) in test_dataloader:
+            instantiate_submodels(pipeline, input_size)
+            pipeline_regressor = build_model(pipeline, input_size)
+            pipeline_regressor.cuda()
 
-        all_epoch_losses.append(epoch_losses)
-        # print progress of loss
+            y_hat_batch = torch.squeeze(pipeline_regressor(x_batch))
+            loss = torch.sqrt(objective(y_hat_batch, y_batch))
 
-        # loop.close()
+            epoch_losses["test"].append(loss.item())
 
-        plt.plot(losses)
-        plt.xlabel("training iteration")
-        plt.ylabel("rmse loss")
-        plt.title("Pipeline Regressor Training Loss")
-        plt.savefig("all_losses.png")
-        plt.clf()
+        losses["train"].append(np.average(epoch_losses["train"]))
+        losses["test"].append(np.average(epoch_losses["test"]))
+        loop.set_description(
+            "train_loss: {:.4f} test_loss: {:.4f}".format(
+                losses["train"][-1], losses["test"][-1]
+            )
+        )
+        loop.update(1)
+        if (e+1) % 10 == 0:
+            plot_losses(losses)
+            json.dump(losses, open("losses.json", "w"), indent=4)
 
-        avg_epoch_losses = list(map(lambda x: np.mean(x), all_epoch_losses))
-        plt.plot(avg_epoch_losses)
-        plt.xlabel("epoch")
-        plt.ylabel("avg rmse loss")
-        plt.ylim((0,1))
-        plt.title("Pipeline Regressor Average Training Loss")
-        plt.savefig("avg_losses.png")
-        plt.clf()
-
-        plt.hist(losses, bins=20, range=(0,1))
-        plt.savefig("loss_hist.png")
-        plt.clf()
+    loop.close()
 
 
 if __name__ == "__main__":
