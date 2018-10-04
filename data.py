@@ -8,36 +8,6 @@ import pandas as pd
 import torch
 
 
-def _preprocess_data(path):
-    data = json.load(open(path, "r"))
-
-    metafeatures = []
-    for pipeline in data:
-        metafeatures.append(pipeline["metafeatures"])
-    mf_df = pd.DataFrame(metafeatures)
-    non_time_cols = [col for col in mf_df.columns if not "time" in col.lower()]
-    mf_df = mf_df[non_time_cols].replace([float("inf"), -float("inf")], float("nan"))
-    mf_df = mf_df.dropna(axis=1, how="any")
-    processed_mf_df = (mf_df - mf_df.mean()) / mf_df.std()
-
-    processed_data = []
-    for pipeline_data, mfs in zip(data, processed_mf_df.values.tolist()):
-        dataset, pipeline = pipeline_data["job_str"].split("___", 1)
-        processed_data.append({
-            "dataset": dataset,
-            "pipeline": pipeline,
-            "metafeatures": mfs,
-            "train_accuracy": pipeline_data["train_accuracy"],
-            "test_accuracy": pipeline_data["test_accuracy"],
-            "train_time": pipeline_data["train_fit_time"] +\
-                pipeline_data["train_predict_time"],
-            "test_time": pipeline_data["test_predict_time"]
-        })
-    json.dump(
-        processed_data, open("./data/processed_data.json", "w"), indent=4
-    )
-
-
 def load_data(path):
     """
     Reads the dataset from path.
