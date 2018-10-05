@@ -6,9 +6,11 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
+import os
 
-from dataset import PipelineDataset, GroupDataLoader, load_data
-from models import PrimitiveModel, AccuracyRegressionModel
+from models import PrimitiveModel, RegressionModel, ClassificationModel
+
+from problems import Problem
 
 
 primitive_submodel_dict = {}
@@ -21,7 +23,7 @@ def instantiate_submodels(pipeline, mf_len):
     primitive_names = pipeline.split("___")
     for primitive_name in primitive_names:
         if not primitive_name in primitive_submodel_dict:
-            primitive_submodel_dict[primitive_name] = PrimitiveModel(mf_len)
+            primitive_submodel_dict[primitive_name] = PrimitiveModel(primitive_name, mf_len)
 
 
 # Dynamically builds model for a given pipeline
@@ -45,57 +47,52 @@ def save_weights():
 		torch.save(model, "%s.pt" % key)
 
 
-
-def plot_losses(losses, save_dir="./plots/"):
-    save_path = save_dir + "losses2.png"
+def plot_losses(losses, name=""):
+    save_dir = "./results/plots"
+    save_path = os.path.join(save_dir, name + ".png")
     plt.plot(losses["train"], label="train")
     plt.plot(losses["test"], label="test")
     plt.legend(loc=0)
     plt.xlabel("Training Epoch")
     plt.ylabel("Average RMSE Loss")
-    plt.yticks(np.arange(0, 70, 5) / 100)
+    plt.yticks(np.arange(0, 1.05, .05))
     plt.title("Pipeline Regressor Loss")
     plt.savefig(save_path)
     plt.clf()
 
 
+class DNAExperimenter(object):
+    """
+    A Dynamic Neural Architecture experiment using the PyTorch framework
+    """
+
+    def __init__(self, exp_name, train_data, test_data):
+        self.exp_name = exp_name
+        self.device = torch.device(
+            "cuda:0" if torch.cuda.is_available() else "cpu"
+        )
+
+
+
+
 def main():
+    id_ = "3_layer_with_single_batch_norm_except_on_task_model"
+    print(id_)
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    data = np.array(load_data("./data/processed_data.json"))
-    folds = GroupDataLoader.cv_folds(data, "dataset", 10, seed=np.random.randint(2**32))
-    train_data = data[folds[0][0]]
-    test_data = data[folds[0][1]]
-    train_dataloader = GroupDataLoader(
-        data=train_data,
-        group_label = "pipeline",
-        dataset_class = PipelineDataset,
-        dataset_params = {
-            "feature_label": "metafeatures",
-            "target_label": "test_accuracy",
-            "device": "cuda:0"
-        },
-        batch_size = 48
-    )
-    test_dataloader = GroupDataLoader(
-        data=test_data,
-        group_label = "pipeline",
-        dataset_class = PipelineDataset,
-        dataset_params = {
-            "feature_label": "metafeatures",
-            "target_label": "test_accuracy",
-            "device": "cuda:0"
-        },
-        batch_size = -1
+    problem = Problem(
+        device = device
     )
 
-    input_size = next(iter(train_dataloader))[1][0].shape[1]
+    input_size = problem.feature_size
+    output_size = problem.target_size
 
     global input_model
-    input_model = PrimitiveModel(input_size)
+    input_model = PrimitiveModel("input", input_size)
     global output_model
-    output_model = AccuracyRegressionModel(input_size)
+    output_model = RegressionModel(input_size)
+    # objective = torch.nn.MultiLabelSoftMarginLoss(reduction="elementwise_mean")
     objective = torch.nn.MSELoss(reduction="elementwise_mean")
 
     losses = {
@@ -104,18 +101,18 @@ def main():
     }
     n_epochs = 5000
     loop = tqdm(total=n_epochs, position=0)
+    learning_rate = 1e-4
     for e in range(n_epochs):
         epoch_losses = {
             "train": [],
             "test": []
         }
-
-        for pipeline, (x_batch, y_batch) in train_dataloader:
+        for pipeline, (x_batch, y_batch) in problem.train_data_loader:
             instantiate_submodels(pipeline, input_size)
             pipeline_regressor = build_model(pipeline, input_size)
             pipeline_regressor.cuda()
 
-            optimizer = optim.Adam(pipeline_regressor.parameters(), lr=1e-4)
+            optimizer = optim.Adam(pipeline_regressor.parameters(), lr=learning_rate)
             optimizer.zero_grad()
 
             y_hat_batch = torch.squeeze(pipeline_regressor(x_batch))
@@ -126,7 +123,7 @@ def main():
 
             epoch_losses["train"].append(loss.item())
 
-        for pipeline, (x_batch, y_batch) in test_dataloader:
+        for pipeline, (x_batch, y_batch) in problem.test_data_loader:
             instantiate_submodels(pipeline, input_size)
             pipeline_regressor = build_model(pipeline, input_size)
             pipeline_regressor.cuda()
@@ -145,9 +142,9 @@ def main():
         )
         loop.update(1)
         if (e+1) % 10 == 0:
-            plot_losses(losses)
-            json.dump(losses, open("losses2.json", "w"), indent=4)
-            save_weights()
+            plot_losses(losses, id_+"_losses")
+            json.dump(losses, open(f"{id_}_losses.json", "w"), indent=4)
+            # save_weights()
 
     loop.close()
 
