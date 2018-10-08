@@ -1,3 +1,4 @@
+import random
 from typing import Type, List, Dict
 
 from torch.utils.data import DataLoader
@@ -69,19 +70,14 @@ class GroupDataLoader(object):
         Creates a dataloader which randomizes the batches over the groups. This
         allows the order of the batches to be independent of the groups.
         """
-        group_batches = []
+        self._group_batches = []
         for group, group_dataloader in self._group_dataloaders.items():
-            group_batches += [group] * len(group_dataloader)
-        self._group_metadataloader = DataLoader(
-            dataset=group_batches,
-            batch_size=1,
-            shuffle=self.shuffle
-        )
+            self._group_batches += [group] * len(group_dataloader)
+        random.shuffle(self._group_batches)
 
     def __iter__(self):
         group_dataloader_iters = {}
-        for group in self._group_metadataloader:
-            group = group[0]
+        for group in self._group_batches:
             if not group in group_dataloader_iters:
                 group_dataloader_iters[group] = iter(
                     self._group_dataloaders[group]
@@ -90,4 +86,4 @@ class GroupDataLoader(object):
         raise StopIteration()
 
     def __len__(self):
-        return len(self._group_metadataloader)
+        return len(self._group_batches)

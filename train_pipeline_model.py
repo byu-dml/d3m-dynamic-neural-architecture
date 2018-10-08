@@ -8,9 +8,9 @@ import torch
 from tqdm import tqdm
 import os
 
-from models import PrimitiveModel, RegressionModel, ClassificationModel
+from models import PrimitiveModel, RegressionModel, ClassificationModel, SiameseModel
 
-from problems import Problem
+from problems import Siamese, Regression
 
 
 primitive_submodel_dict = {}
@@ -47,11 +47,13 @@ def save_weights():
 		torch.save(model, "%s.pt" % key)
 
 
-def plot_losses(losses, name=""):
+def plot_losses(losses, baseline_losses, name=""):
     save_dir = "./results/plots"
     save_path = os.path.join(save_dir, name + ".png")
     plt.plot(losses["train"], label="train")
     plt.plot(losses["test"], label="test")
+    for label, loss in baseline_losses.items():
+        plt.plot([loss] * len(losses["train"]), label=label)
     plt.legend(loc=0)
     plt.xlabel("Training Epoch")
     plt.ylabel("Average RMSE Loss")
@@ -76,77 +78,74 @@ class DNAExperimenter(object):
 
 
 def main():
-    id_ = "3_layer_with_single_batch_norm_except_on_task_model"
+    id_ = "test"
     print(id_)
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda:0" if use_cuda else "cpu")
 
-    problem = Problem(
+    problem = Siamese(
+        drop_last = True, # workaround todo handle batches of size 1
         device = device
     )
-
-    input_size = problem.feature_size
-    output_size = problem.target_size
-
-    global input_model
-    input_model = PrimitiveModel("input", input_size)
-    global output_model
-    output_model = RegressionModel(input_size)
-    # objective = torch.nn.MultiLabelSoftMarginLoss(reduction="elementwise_mean")
-    objective = torch.nn.MSELoss(reduction="elementwise_mean")
 
     losses = {
         "train": [],
         "test": []
     }
-    n_epochs = 5000
-    loop = tqdm(total=n_epochs, position=0)
-    learning_rate = 1e-4
+    n_epochs = 500
+    learning_rate = 1e-3
     for e in range(n_epochs):
+        loop = tqdm(total=len(problem.train_data_loader), position=0)
         epoch_losses = {
             "train": [],
             "test": []
         }
-        for pipeline, (x_batch, y_batch) in problem.train_data_loader:
-            instantiate_submodels(pipeline, input_size)
-            pipeline_regressor = build_model(pipeline, input_size)
-            pipeline_regressor.cuda()
-
-            optimizer = optim.Adam(pipeline_regressor.parameters(), lr=learning_rate)
+        for pipelines, (x_batch, y_batch) in problem.train_data_loader:
+            model = problem.model
+            model.cuda()
+            optimizer = optim.Adam(model.parameters(), lr=learning_rate)
             optimizer.zero_grad()
 
-            y_hat_batch = torch.squeeze(pipeline_regressor(x_batch))
-            loss = torch.sqrt(objective(y_hat_batch, y_batch))
+            y_hat_batch = torch.squeeze(model(x_batch, *pipelines))
+            loss = problem.loss_function(y_hat_batch, y_batch)
 
             loss.backward()
             optimizer.step()
 
             epoch_losses["train"].append(loss.item())
+            loop.set_description(
+                "train_loss: {:.4f}".format(epoch_losses["train"][-1])
+            )
+            loop.update(1)
 
-        for pipeline, (x_batch, y_batch) in problem.test_data_loader:
-            instantiate_submodels(pipeline, input_size)
-            pipeline_regressor = build_model(pipeline, input_size)
-            pipeline_regressor.cuda()
+        loop.close()
+        losses["train"].append(np.average(epoch_losses["train"]))
 
-            y_hat_batch = torch.squeeze(pipeline_regressor(x_batch))
-            loss = torch.sqrt(objective(y_hat_batch, y_batch))
+        loop = tqdm(total=len(problem.test_data_loader), position=0)
+        for pipelines, (x_batch, y_batch) in problem.test_data_loader:
+            model = problem.model
+            model.cuda()
+
+            y_hat_batch = torch.squeeze(model(x_batch, *pipelines))
+            loss = problem.loss_function(y_hat_batch, y_batch)
 
             epoch_losses["test"].append(loss.item())
-
-        losses["train"].append(np.average(epoch_losses["train"]))
-        losses["test"].append(np.average(epoch_losses["test"]))
-        loop.set_description(
-            "train_loss: {:.4f} test_loss: {:.4f}".format(
-                losses["train"][-1], losses["test"][-1]
+            loop.set_description(
+                "train_loss: {:.4f}".format(epoch_losses["test"][-1])
             )
-        )
-        loop.update(1)
-        if (e+1) % 10 == 0:
-            plot_losses(losses, id_+"_losses")
+            loop.update(1)
+        loop.close()
+
+
+        losses["test"].append(np.average(epoch_losses["test"]))
+        print("train loss: {} test loss: {}".format(losses["train"][-1], losses["test"][-1]))
+
+        if (e+1) % 1 == 0:
+            plot_losses(losses, problem.baseline_losses, id_+"_losses")
             json.dump(losses, open(f"{id_}_losses.json", "w"), indent=4)
             # save_weights()
 
-    loop.close()
+
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from typing import List, Dict
 import torch
 from torch.utils.data import Dataset
 
+
 class Dataset(Dataset):
     """
     A subclass of torch.utils.data.Dataset for handling simple JSON structed
@@ -24,6 +25,12 @@ class Dataset(Dataset):
         self.data = data
         self.features_key = features_key
         self.target_key = target_key
+        # todo
+        # self.task_type = task_type
+        # if self.task_type == "CLASSIFICATION":
+        #     self._y_dtype = torch.int64
+        # elif self.task_type == "REGRESSION":
+        #     self._y_dtype = torch.float32
         self.device = device
 
     def __getitem__(self, item: int):
@@ -34,7 +41,7 @@ class Dataset(Dataset):
         )
         y = torch.tensor(
             self.data[item][self.target_key],
-            dtype=torch.float32,
+            dtype=torch.int64,
             device=self.device
         )
         return x, y

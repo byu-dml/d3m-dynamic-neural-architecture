@@ -1,18 +1,22 @@
 import random
+from typing import Type, Dict, List
 
 import numpy as np
 import pandas as pd
 
-from data import TRAIN_DATA_PATH, read_data, make_cv_folds
-from . import GroupDataLoader, Dataset
+from data import read_data, make_cv_folds
+from . import Dataset, GroupDataLoader
 
-class Problem(object):
+class BaseProblem(object):
 
     def __init__(
-        self, data_path=TRAIN_DATA_PATH, n_folds: int = 5, batch_size = 48,
-        drop_last = False, device = "cpu", seed = None
+        self, data_path: str, batch_group_key: str, target_key: str,
+        n_folds: int, batch_size: int, drop_last: bool, device: str,
+        seed: int = None
     ):
         self.data_path = data_path
+        self.batch_group_key = batch_group_key
+        self.target_key = target_key
         self.n_folds = n_folds
         self.batch_size = batch_size
         self.drop_last = drop_last
@@ -20,54 +24,51 @@ class Problem(object):
         if seed is None:
             seed = random.randint(0, 2**32-1)
         self.seed = seed
-        self._group_key = "dataset"
-        self._features_key = "metafeatures"
-        self._target_key = "test_accuracy"
+
+        self._data = read_data(self.data_path)
+        self._process_data()
+
         self._random = random.Random()
         self._random.seed(self.seed)
-        self._data = read_data(TRAIN_DATA_PATH)
         self._cv_folds = make_cv_folds(
-            self._data, "dataset", n_folds, self._random
+            self._data, self.batch_group_key, self.n_folds, self._random
         )
-        self._fold_index = 0
-        self._init_fold()
+        self._fold = 0
+        self._init_fold(self._fold)
 
+    def _process_data(self):
+        raise NotImplementedError()
 
-        self.feature_size = len(self._data[0][self._features_key])
-        try:
-            self.target_size = len(self._data[0][self._target_key])
-        except TypeError:
-            self.target_size = 1
-
-    def _init_fold(self):
+    def _init_fold(self, fold):
         train_data = [
-            self._data[i] for i in self._cv_folds[self._fold_index][0]
+            self._data[i] for i in self._cv_folds[fold][0]
         ]
         test_data = [
-            self._data[i] for i in self._cv_folds[self._fold_index][1]
+            self._data[i] for i in self._cv_folds[fold][1]
         ]
-        train_data, test_data = self._preprocess_data(train_data, test_data)
-        self.feature_size = train_data[0][self._features_key]
-        self.train_data_loader = GroupDataLoader(
+        train_data, test_data = self._process_metafeatures(
+            train_data, test_data
+        )
+        self._train_data_loader = GroupDataLoader(
             data = train_data,
-            group_key = self._group_key,
+            group_key = self.batch_group_key,
             dataset_class = Dataset,
             dataset_params = {
                 "features_key": "metafeatures",
-                "target_key": "test_accuracy",
+                "target_key": self.target_key,
                 "device": self.device
             },
             batch_size = self.batch_size,
             drop_last = self.drop_last,
             shuffle = True,
         )
-        self.test_data_loader = GroupDataLoader(
+        self._test_data_loader = GroupDataLoader(
             data = test_data,
-            group_key = self._group_key,
+            group_key = self.batch_group_key,
             dataset_class = Dataset,
             dataset_params = {
                 "features_key": "metafeatures",
-                "target_key": "test_accuracy",
+                "target_key": self.target_key,
                 "device": self.device
             },
             batch_size = self.batch_size,
@@ -75,7 +76,7 @@ class Problem(object):
             shuffle = True,
         )
 
-    def _preprocess_data(self, train_data, test_data):
+    def _process_metafeatures(self, train_data, test_data):
         train_mfs = pd.DataFrame([item["metafeatures"] for item in train_data])
         test_mfs = pd.DataFrame([item["metafeatures"] for item in test_data])
 
@@ -87,6 +88,7 @@ class Problem(object):
         train_mfs.drop(labels=drop_cols, axis=1, inplace=True)
         test_mfs.drop(labels=drop_cols, axis=1, inplace=True)
 
+        # dev testing
         if train_mfs.shape[1] != test_mfs.shape[1]:
             raise Exception(
                 "train and test metafeature size does not match: {} and {}".format(train_mfs.shape[1], test_mfs.shape[1])
@@ -107,5 +109,25 @@ class Problem(object):
         return train_data, test_data
 
     def next_fold(self):
-        self.fold_index += 1
-        self._init_fold()
+        self._fold += 1
+        self._init_fold(self._fold)
+
+    @property
+    def train_data_loader(self):
+        return self._train_data_loader
+
+    @property
+    def test_data_loader(self):
+        return self._test_data_loader
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def loss_function(self):
+        return self._loss_function
+
+    @property
+    def baseline_losses(self):
+        return self._baseline_losses

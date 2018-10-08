@@ -42,11 +42,15 @@ def reformat_data():
     reformatted_data = []
     for item in data:
         dataset, pipeline = item["job_str"].split("___", 1)
+        metafeatures = {
+            k: v for k, v in item["metafeatures"].items() if not "time" in k.lower()
+        }
+        metafeatures["TotalTime"] = item["metafeatures_time"]
         train_time = item["train_fit_time"] + item["train_predict_time"]
         reformatted_data.append({
             "dataset": dataset,
             "pipeline": pipeline,
-            "metafeatures": {k: v for k, v in item["metafeatures"].items() if not "time" in k.lower()},
+            "metafeatures": metafeatures,
             "train_accuracy": item["train_accuracy"],
             "test_accuracy": item["test_accuracy"],
             "train_time": train_time,
@@ -111,9 +115,11 @@ def make_cv_folds(
     grouped_data_indices = group_json_objects(data, group_key)
     if n_folds < 0:
         n_folds = len(grouped_data_indices)
-    groups = list(grouped_data_indices.keys())
 
+    groups = list(grouped_data_indices.keys())
+    group_type = type(groups[0])
     rnd.shuffle(groups)
+
     split_groups = np.array_split(groups, n_folds)
 
     folds = []
@@ -122,6 +128,7 @@ def make_cv_folds(
         test_indices = []
         for j, split_group in enumerate(split_groups):
             for group in split_group:
+                group = group_type(group)
                 indices = grouped_data_indices[group]
                 if i == j:
                     test_indices += indices
