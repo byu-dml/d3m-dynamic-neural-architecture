@@ -84,7 +84,8 @@ class SiameseModel(nn.Module):
         self.submodels = submodels
         self.output_model = output_model
 
-    def forward(self, x, left_pipeline, right_pipeline):
+    def forward(self, args):
+        (left_pipeline, right_pipeline), x = args
         h1 = self.input_model(x)
         left_model = nn.Sequential(
             *[self.submodels[name] for name in left_pipeline.split("___")]

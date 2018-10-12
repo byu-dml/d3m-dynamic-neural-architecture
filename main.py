@@ -9,7 +9,7 @@ from tqdm import tqdm
 import os
 
 from models import PrimitiveModel, RegressionModel, ClassificationModel, SiameseModel
-
+from pytorch_model_trainer import PyTorchModelTrainer
 from problems import Siamese, Regression
 
 
@@ -47,37 +47,13 @@ def save_weights():
 		torch.save(model, "%s.pt" % key)
 
 
-def plot_losses(losses, baseline_losses, name=""):
-    save_dir = "./results/plots"
-    save_path = os.path.join(save_dir, name + ".png")
-    plt.plot(losses["train"], label="train")
-    plt.plot(losses["test"], label="test")
-    for label, loss in baseline_losses.items():
-        plt.plot([loss] * len(losses["train"]), label=label)
-    plt.legend(loc=0)
-    plt.xlabel("Training Epoch")
-    plt.ylabel("Average RMSE Loss")
-    plt.yticks(np.arange(0, 1.05, .05))
-    plt.title("Pipeline Regressor Loss")
-    plt.savefig(save_path)
-    plt.clf()
+def accuracy(y_hat, y):
+    y_hat = torch.argmax(y_hat, dim=1)
+
+    return torch.sum(y_hat == y, dtype=torch.float32) / y.shape[0]
 
 
-class DNAExperimenter(object):
-    """
-    A Dynamic Neural Architecture experiment using the PyTorch framework
-    """
-
-    def __init__(self, exp_name, train_data, test_data):
-        self.exp_name = exp_name
-        self.device = torch.device(
-            "cuda:0" if torch.cuda.is_available() else "cpu"
-        )
-
-
-
-
-def main():
+def main2():
     id_ = "test"
     print(id_)
     use_cuda = torch.cuda.is_available()
@@ -92,11 +68,19 @@ def main():
         "train": [],
         "test": []
     }
+    accuracies = {
+        "train": [],
+        "test": []
+    }
     n_epochs = 500
     learning_rate = 1e-3
     for e in range(n_epochs):
         loop = tqdm(total=len(problem.train_data_loader), position=0)
         epoch_losses = {
+            "train": [],
+            "test": []
+        }
+        epoch_accuracies = {
             "train": [],
             "test": []
         }
@@ -107,46 +91,71 @@ def main():
             optimizer.zero_grad()
 
             y_hat_batch = torch.squeeze(model(x_batch, *pipelines))
-            loss = problem.loss_function(y_hat_batch, y_batch)
 
+            loss = problem.loss_function(y_hat_batch, y_batch)
+            epoch_accuracies["train"].append(accuracy(y_hat_batch, y_batch))
             loss.backward()
             optimizer.step()
 
             epoch_losses["train"].append(loss.item())
-            loop.set_description(
-                "train_loss: {:.4f}".format(epoch_losses["train"][-1])
-            )
             loop.update(1)
 
         loop.close()
         losses["train"].append(np.average(epoch_losses["train"]))
+        accuracies["train"].append(np.average(epoch_accuracies["train"]))
 
         loop = tqdm(total=len(problem.test_data_loader), position=0)
-        for pipelines, (x_batch, y_batch) in problem.test_data_loader:
-            model = problem.model
-            model.cuda()
+        with torch.no_grad(): # don't compute gradients
+            for pipelines, (x_batch, y_batch) in problem.test_data_loader:
+                model = problem.model
+                model.cuda()
 
-            y_hat_batch = torch.squeeze(model(x_batch, *pipelines))
-            loss = problem.loss_function(y_hat_batch, y_batch)
-
-            epoch_losses["test"].append(loss.item())
-            loop.set_description(
-                "train_loss: {:.4f}".format(epoch_losses["test"][-1])
-            )
-            loop.update(1)
+                y_hat_batch = torch.squeeze(model(x_batch, *pipelines))
+                loss = problem.loss_function(y_hat_batch, y_batch)
+                epoch_accuracies["test"].append(accuracy(y_hat_batch, y_batch))
+                epoch_losses["test"].append(loss.item())
+                loop.update(1)
         loop.close()
 
 
         losses["test"].append(np.average(epoch_losses["test"]))
-        print("train loss: {} test loss: {}".format(losses["train"][-1], losses["test"][-1]))
+        accuracies["test"].append(np.average(epoch_accuracies["test"]))
+        print("train acc: {} test acc: {}".format(accuracies["train"][-1], accuracies["test"][-1]))
 
         if (e+1) % 1 == 0:
-            plot_losses(losses, problem.baseline_losses, id_+"_losses")
+            plot_losses(accuracies, problem.baseline_losses, id_+"_losses")
             json.dump(losses, open(f"{id_}_losses.json", "w"), indent=4)
             # save_weights()
+    
 
+def accuracy(y_hat, y):
+    y_hat = np.argmax(y_hat, axis=1)
 
+    return np.sum(y_hat == y, dtype=np.float32) / len(y)
 
+def main():
+    use_cuda = torch.cuda.is_available()
+    problem = Siamese(
+        drop_last = True, # workaround todo handle batches of size 1
+        device = torch.device("cuda:0" if use_cuda else "cpu")
+    )
+    problem.model.cuda()
+    learning_rate = 1e-4
+    optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)
+    pmt = PyTorchModelTrainer(
+        problem.model,
+        problem.train_data_loader,
+        problem.test_data_loader,
+        None,
+        problem.loss_function
+    )
+    pmt.train_epoch(optimizer)
+    pmt.train_epoch(optimizer)
+    pmt.plot_results(
+        {"Accuracy": accuracy},
+        "Siamese Model Accuracy",
+        "Accuracy"
+    )
 
 if __name__ == "__main__":
     main()

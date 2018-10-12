@@ -82,7 +82,8 @@ class GroupDataLoader(object):
                 group_dataloader_iters[group] = iter(
                     self._group_dataloaders[group]
                 )
-            yield group, next(group_dataloader_iters[group])
+            x_batch, y_batch = next(group_dataloader_iters[group])
+            yield (group, x_batch), y_batch
         raise StopIteration()
 
     def __len__(self):
