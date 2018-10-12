@@ -58,6 +58,7 @@ class ClassificationModel(nn.Module):
         super(ClassificationModel, self).__init__()
 
         self.net = nn.Sequential(
+            # nn.BatchNorm1d(input_size),
             nn.Linear(
                 input_size, input_size
             ),

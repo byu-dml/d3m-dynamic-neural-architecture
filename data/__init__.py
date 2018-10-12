@@ -5,6 +5,7 @@ import random
 from typing import List, Dict
 
 import numpy as np
+import pandas as pd
 
 
 DATA_DIR = "./data"
@@ -18,18 +19,18 @@ TRAIN_DATA_PATH = os.path.join(DATA_DIR, "train_data.json")
 TEST_DATA_PATH = os.path.join(DATA_DIR, "test_data.json")
 
 
-def read_data(path):
+def read_json(path):
     """
     Reads JSON formatted data.
     """
     return json.load(open(path, "r"))
 
-def write_data(data, path, pretty=False):
+def write_json(data, path, pretty=False):
     """
     Writes JSON structured data. Indents 4 spaces when pretty is True.
     """
     if pretty:
-        json.dump(data, open(path, "w"), indent=4)
+        json.dump(data, open(path, "w"), indent=4, sort_keys=True)
     else:
         json.dump(data, open(path, "w"))
 
@@ -38,7 +39,7 @@ def extract_data():
         tar.extract(RAW_DATA_NAME + ".json", DATA_DIR)
 
 def reformat_data():
-    data = read_data(RAW_DATA_PATH)
+    data = read_json(RAW_DATA_PATH)
     reformatted_data = []
     for item in data:
         dataset, pipeline = item["job_str"].split("___", 1)
@@ -56,7 +57,7 @@ def reformat_data():
             "train_time": train_time,
             "test_time": item["test_predict_time"]
         })
-    write_data(reformatted_data, ALL_DATA_PATH, pretty=True)
+    write_json(reformatted_data, ALL_DATA_PATH, pretty=True)
 
 def group_json_objects(json_objects, group_key):
     """
@@ -82,8 +83,24 @@ def group_json_objects(json_objects, group_key):
         grouped_objects[group].append(i)
     return grouped_objects
 
+def drop_nan_metafeatures():
+    all_data = read_json(ALL_DATA_PATH)
+
+    mfs = pd.DataFrame([item["metafeatures"] for item in all_data])
+    mfs.replace(
+        to_replace=[np.inf, - np.inf], value=np.nan, inplace=True
+    )
+
+    drop_cols = list(mfs.columns[mfs.isnull().any()])
+    mfs.drop(labels=drop_cols, axis=1, inplace=True)
+
+    for item, mfs in zip(all_data, mfs.values.tolist()):
+        item["metafeatures"] = mfs
+
+    write_json(all_data, ALL_DATA_PATH, pretty=True)
+
 def split_data():
-    all_data = read_data(ALL_DATA_PATH)
+    all_data = read_json(ALL_DATA_PATH)
     grouped_data_indices = group_json_objects(all_data, "dataset")
     groups = list(grouped_data_indices.keys())
 
@@ -101,12 +118,11 @@ def split_data():
         for i in grouped_data_indices[group]:
             test_data.append(all_data[i])
 
-    write_data(train_data, TRAIN_DATA_PATH, pretty=True)
-    write_data(test_data, TEST_DATA_PATH, pretty=True)
+    write_json(train_data, TRAIN_DATA_PATH, pretty=True)
+    write_json(test_data, TEST_DATA_PATH, pretty=True)
 
 def make_cv_folds(
-    data: List[Dict], group_key: str, n_folds: int = -1,
-    rnd: random.Random = None
+    data: List[Dict], group_key: str, n_folds: int = -1, seed: int = 0
 ):
     """
     Generates cross validation folds with indices into data. Places data points
@@ -118,6 +134,8 @@ def make_cv_folds(
 
     groups = list(grouped_data_indices.keys())
     group_type = type(groups[0])
+    rnd = random.Random()
+    rnd.seed(seed)
     rnd.shuffle(groups)
 
     split_groups = np.array_split(groups, n_folds)
@@ -138,9 +156,11 @@ def make_cv_folds(
 
     return folds
 
+
 def main():
     extract_data()
     reformat_data()
+    drop_nan_metafeatures()
     split_data()
 
 if __name__ == '__main__':

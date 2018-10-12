@@ -1,6 +1,10 @@
+import json
+
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 import torch
+
+from data import write_json
 
 try:
     from contextlib import nullcontext
@@ -58,9 +62,7 @@ class PyTorchModelTrainer(object):
         )
 
         with context_manager:
-            for i, (x_batch, y_batch) in enumerate(data_loader):
-                if i > 100:
-                    break
+            for x_batch, y_batch in data_loader:
                 y_hat_batch = self.model(x_batch)
 
                 if not optimizer is None:
@@ -140,6 +142,9 @@ class PyTorchModelTrainer(object):
                 measured_validation_data.append(measure(predictions, targets))
 
             x = range(1, len(measured_train_data) + 1)
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.yaxis.set_ticks_position('both')
             plt.plot(x, measured_train_data, label=f"Train {label}")
             plt.plot(x, measured_validation_data, label=f"Validation {label}")
             # todo baselines
@@ -154,7 +159,7 @@ class PyTorchModelTrainer(object):
             plt.clf()
 
     def save_results(self, path):
-        pass
+        write_json(self._results, path, pretty=True)
 
     @property
     def n_completed_epochs(self):

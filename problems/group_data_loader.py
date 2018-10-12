@@ -1,10 +1,37 @@
 import random
 from typing import Type, List, Dict
 
-from torch.utils.data import DataLoader
+from torch.utils.data import Sampler, DataLoader
 
 from data import group_json_objects
 from problems import Dataset
+
+
+class RandomSampler(Sampler):
+    """
+    Samples indices uniformly without replacement.
+
+    Parameters
+    ----------
+    n: int
+        the number of indices to sample
+    seed: int
+        used to reproduce randomization
+    """
+
+    def __init__(self, n, seed):
+        self.n = n
+        self._indices = list(range(n))
+        self._random = random.Random()
+        self._random.seed(seed)
+
+    def __iter__(self):
+        self._random.shuffle(self._indices)
+        return iter(self._indices)
+
+    def __len__(self):
+        return self.n
+
 
 class GroupDataLoader(object):
     """
@@ -29,18 +56,20 @@ class GroupDataLoader(object):
 
     def __init__(
         self, data: List[Dict], group_key: str, dataset_class: Type[Dataset],
-        dataset_params: dict, batch_size: int, drop_last: bool = False,
-        shuffle: bool = True
+        dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
+        seed: int
     ):
         self.data = data
         self.group_key = group_key
         self.dataset_class = dataset_class
         self.dataset_params = dataset_params
-        if batch_size == -1:
-            batch_size = len(self.data)
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.shuffle = shuffle
+        self.seed = seed
+
+        self._random = random.Random()
+        self._random.seed(seed)
 
         self._init_dataloaders()
         self._init_group_metadataloader()
@@ -58,12 +87,24 @@ class GroupDataLoader(object):
         for group, group_indices in grouped_data.items():
             group_data = [self.data[i] for i in group_indices]
             group_dataset = self.dataset_class(group_data, **self.dataset_params)
-            self._group_dataloaders[group] = DataLoader(
-                dataset=group_dataset,
-                batch_size=self.batch_size,
-                shuffle=self.shuffle,
-                drop_last=self.drop_last
+            self._group_dataloaders[group] = self._get_data_loader(
+                group_dataset
             )
+
+    def _get_data_loader(self, data):
+        if self.shuffle:
+            sampler = RandomSampler(len(data), self._randint())
+        else:
+            sampler = None
+        return DataLoader(
+            dataset = data,
+            sampler =  sampler,
+            batch_size = self.batch_size,
+            drop_last = self.drop_last
+        )
+
+    def _randint(self):
+        return self._random.randint(0,2**32-1)
 
     def _init_group_metadataloader(self):
         """
@@ -73,9 +114,12 @@ class GroupDataLoader(object):
         self._group_batches = []
         for group, group_dataloader in self._group_dataloaders.items():
             self._group_batches += [group] * len(group_dataloader)
-        random.shuffle(self._group_batches)
+        self._random.shuffle(self._group_batches)
 
     def __iter__(self):
+        return iter(self._iter())
+
+    def _iter(self):
         group_dataloader_iters = {}
         for group in self._group_batches:
             if not group in group_dataloader_iters:
