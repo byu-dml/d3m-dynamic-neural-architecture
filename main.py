@@ -24,7 +24,7 @@ def main():
         seed = 37
     )
     learning_rate = 1e-4
-    n_epochs = 3
+    n_epochs = 50
     optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)
     trainer = PyTorchModelTrainer(
         problem.model,
