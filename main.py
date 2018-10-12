@@ -19,6 +19,7 @@ def accuracy(y_hat, y):
 
 
 def main():
+    name = "temp"
     use_cuda = torch.cuda.is_available()
     problem = Siamese(
         seed = 37
@@ -39,10 +40,10 @@ def main():
             {"Accuracy": accuracy},
             "Siamese Model Accuracy",
             "Accuracy",
-            path="./results/plots/siamese.png"
+            path = f"./results/plots/{name}.png"
         )
         if (e + 1) % 3 == 0:
-            trainer.save_results("./results/siamese.json")
+            trainer.save_results(f"./results/{name}.json")
 
 if __name__ == "__main__":
     main()

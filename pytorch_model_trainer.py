@@ -148,15 +148,16 @@ class PyTorchModelTrainer(object):
             plt.plot(x, measured_train_data, label=f"Train {label}")
             plt.plot(x, measured_validation_data, label=f"Validation {label}")
             # todo baselines
-            plt.legend(loc=0)
-            plt.xlabel(xlabel)
-            plt.ylabel(ylabel)
-            plt.title(title)
-            if path is None:
-                plt.show()
-            else:
-                plt.savefig(path)
-            plt.clf()
+        plt.legend(loc=0)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title(title)
+        if path is None:
+            plt.show()
+        else:
+            plt.savefig(path)
+        plt.clf()
+        plt.close()
 
     def save_results(self, path):
         write_json(self._results, path, pretty=True)
