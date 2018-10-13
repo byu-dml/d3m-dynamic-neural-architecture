@@ -102,8 +102,12 @@ class BaseProblem(object):
         return self._loss_function
 
     @property
-    def baseline_losses(self):
-        return self._baseline_losses
+    def baselines(self):
+        return self._baselines
+
+    @property
+    def model(self):
+        return self._model
 
     def _randint(self):
         return self._random.randint(0, 2**32-1)

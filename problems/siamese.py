@@ -1,3 +1,5 @@
+from collections import Counter
+
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -27,7 +29,6 @@ class Siamese(BaseProblem):
         )
         self._shape = (len(self._train_data[0]["metafeatures"]), 2)
         self._loss_function = torch.nn.CrossEntropyLoss()
-        self._baseline_losses = {"cross_entropy": 0.5}
         self._build_models()
 
     def _process_train_data(self):
@@ -87,6 +88,64 @@ class Siamese(BaseProblem):
             self._model.cuda()
         torch.random.set_rng_state(torch_state)
 
-    @property
-    def model(self):
-        return self._model
+    def _init_fold(self, fold):
+        super(Siamese, self)._init_fold(fold)
+        self._compute_baselines()
+
+    def _compute_baselines(self):
+        self._baselines = self._default_baseline()
+        self._baselines.update(self._mode_baseline())
+
+    def _default_baseline(self):
+        return {
+            "default": {
+                "train": .5,
+                "test": .5
+            }
+        }
+
+    def _mode_baseline(self):
+        pipeline_win_counts = {}
+        for x_batch, y_batch in self._train_data_loader:
+            left_pipeline, right_pipeline = x_batch[0]
+            counts = Counter(y_batch.cpu().numpy())
+
+            if not left_pipeline in pipeline_win_counts:
+                pipeline_win_counts[left_pipeline] = 0
+            pipeline_win_counts[left_pipeline] += counts.get(0, 0)
+
+            if not right_pipeline in pipeline_win_counts:
+                pipeline_win_counts[right_pipeline] = 0
+            pipeline_win_counts[right_pipeline] = counts.get(1, 0)
+
+        return {
+            "mode_accuracy": {
+                "train": self._mode_accuracy(
+                    pipeline_win_counts, self._train_data_loader
+                ),
+                "validation_accuracy": self._mode_accuracy(
+                    pipeline_win_counts, self._validation_data_loader
+                )
+            }
+        }
+
+    def _mode_accuracy(self, win_counts, data_loader):
+        correct = 0
+        total = 0
+        for x_batch, y_batch in data_loader:
+            left_pipeline, right_pipeline = x_batch[0]
+            guess = 0
+            if win_counts[left_pipeline] < win_counts[right_pipeline]:
+                guess = 1
+            counts = Counter(y_batch.cpu().numpy())
+            correct += counts.get(guess, 0)
+            total += y_batch.shape[0]
+        return correct / total
+
+
+def main():
+    problem = Siamese(seed = 0)
+    print(problem.baselines)
+
+if __name__ == '__main__':
+    main()
