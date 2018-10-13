@@ -60,7 +60,9 @@ class PyTorchModelTrainer(object):
             total = len(data_loader),
             position = 0
         )
-
+        progress.set_description("epoch {}".format(
+            self.n_completed_epochs + 1
+        ))
         with context_manager:
             for x_batch, y_batch in data_loader:
                 y_hat_batch = self.model(x_batch)

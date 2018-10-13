@@ -22,10 +22,10 @@ def main():
     name = "temp"
     use_cuda = torch.cuda.is_available()
     problem = Siamese(
-        seed = 37
+        seed = 37,
     )
     learning_rate = 1e-4
-    n_epochs = 50
+    n_epochs = 500
     optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)
     trainer = PyTorchModelTrainer(
         problem.model,
@@ -42,7 +42,7 @@ def main():
             "Accuracy",
             path = f"./results/plots/{name}.png"
         )
-        if (e + 1) % 3 == 0:
+        if (e + 1) % 10 == 0:
             trainer.save_results(f"./results/{name}.json")
 
 if __name__ == "__main__":
