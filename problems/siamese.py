@@ -88,10 +88,6 @@ class Siamese(BaseProblem):
             self._model.cuda()
         torch.random.set_rng_state(torch_state)
 
-    def _init_fold(self, fold):
-        super(Siamese, self)._init_fold(fold)
-        self._compute_baselines()
-
     def _compute_baselines(self):
         self._baselines = self._default_baseline()
         self._baselines.update(self._mode_baseline())

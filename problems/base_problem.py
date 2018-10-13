@@ -64,6 +64,16 @@ class BaseProblem(object):
         ]
         self._train_data_loader = self._get_data_loader(train_data)
         self._validation_data_loader = self._get_data_loader(validation_data)
+        self._compute_baselines()
+
+    def _compute_baselines(self):
+        self._baselines = {
+            "default": {
+                "train": np.nan,
+                "validation": np.nan,
+                "test": np.nan
+            }
+        }
 
     def _get_data_loader(self, data):
         return GroupDataLoader(
