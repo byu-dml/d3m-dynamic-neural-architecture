@@ -3,6 +3,7 @@ import numpy as np
 
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
+from models import PrimitiveModel, RegressionModel, DNAModel
 
 
 class Regression(BaseProblem):
@@ -18,8 +19,9 @@ class Regression(BaseProblem):
         super(Regression, self).__init__(
             train_data_path = train_data_path,
             test_data_path = test_data_path,
-            batch_group_key = "dataset",
+            batch_group_key = "pipeline",
             target_key = self._target_key,
+            task_type = "REGRESSION",
             n_folds = n_folds,
             batch_size = batch_size,
             drop_last = drop_last,
@@ -27,6 +29,30 @@ class Regression(BaseProblem):
             seed = seed
         )
         self._shape = (len(self._train_data[0]["metafeatures"]), 1)
+        self._init_model()
+
+    def _init_model(self):
+        torch_state = torch.random.get_rng_state()
+
+        torch.manual_seed(self._randint())
+        torch.cuda.manual_seed_all(self._randint())
+        input_model = PrimitiveModel("input", self._shape[0])
+        input_model.cuda()
+        submodels = {}
+        for item in self._train_data:
+            primitive_names = item["pipeline"].split("___")
+            for primitive_name in primitive_names:
+                if not primitive_name in submodels:
+                    submodels[primitive_name] = PrimitiveModel(
+                        primitive_name, self._shape[0]
+                    )
+                    submodels[primitive_name].cuda()
+        output_model = RegressionModel(self._shape[0])
+        output_model.cuda()
+        self._model = DNAModel(input_model, submodels, output_model)
+        if "cuda" in self.device:
+            self._model.cuda()
+        torch.random.set_rng_state(torch_state)
 
     def _process_train_data(self):
         pass

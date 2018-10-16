@@ -21,6 +21,7 @@ class Siamese(BaseProblem):
             test_data_path = test_data_path,
             batch_group_key = "pipelines",
             target_key = self._target_key,
+            task_type = "CLASSIFICATION",
             n_folds = n_folds,
             batch_size = batch_size,
             drop_last = drop_last,
@@ -74,6 +75,7 @@ class Siamese(BaseProblem):
         torch.manual_seed(self._randint())
         torch.cuda.manual_seed_all(self._randint())
         input_model = PrimitiveModel("input", self._shape[0])
+        input_model.cuda()
         submodels = {}
         for item in self._train_data:
             primitive_names = item["pipelines"][0].split("___")
@@ -82,7 +84,9 @@ class Siamese(BaseProblem):
                     submodels[primitive_name] = PrimitiveModel(
                         primitive_name, self._shape[0]
                     )
+                    submodels[primitive_name].cuda()
         output_model = ClassificationModel(2 * self._shape[0], self._shape[1])
+        output_model.cuda()
         self._model = SiameseModel(input_model, submodels, output_model)
         if "cuda" in self.device:
             self._model.cuda()

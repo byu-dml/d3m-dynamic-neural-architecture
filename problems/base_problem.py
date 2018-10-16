@@ -15,13 +15,14 @@ class BaseProblem(object):
 
     def __init__(
         self, train_data_path: str, test_data_path: str, batch_group_key: str,
-        target_key: str, n_folds: int, batch_size: int, drop_last: bool,
-        device: str, seed: int
+        target_key: str, task_type: str, n_folds: int, batch_size: int,
+        drop_last: bool, device: str, seed: int
     ):
         self.train_data_path = train_data_path
         self.test_data_path = test_data_path
         self.batch_group_key = batch_group_key
         self.target_key = target_key
+        self.task_type = task_type
         self.n_folds = n_folds
         self.batch_size = batch_size
         self.drop_last = drop_last
@@ -83,6 +84,7 @@ class BaseProblem(object):
             dataset_params = {
                 "features_key": "metafeatures",
                 "target_key": self.target_key,
+                "task_type": self.task_type,
                 "device": self.device
             },
             batch_size = self.batch_size,

@@ -20,17 +20,17 @@ class Dataset(Dataset):
     """
 
     def __init__(
-        self, data: List[Dict], features_key: str, target_key: str, device: str
+        self, data: List[Dict], features_key: str, target_key: str,
+        task_type: str, device: str
     ):
         self.data = data
         self.features_key = features_key
         self.target_key = target_key
-        # todo
-        # self.task_type = task_type
-        # if self.task_type == "CLASSIFICATION":
-        #     self._y_dtype = torch.int64
-        # elif self.task_type == "REGRESSION":
-        #     self._y_dtype = torch.float32
+        self.task_type = task_type
+        if self.task_type == "CLASSIFICATION":
+            self._y_dtype = torch.int64
+        elif self.task_type == "REGRESSION":
+            self._y_dtype = torch.float32
         self.device = device
 
     def __getitem__(self, item: int):
@@ -41,7 +41,7 @@ class Dataset(Dataset):
         )
         y = torch.tensor(
             self.data[item][self.target_key],
-            dtype=torch.int64,
+            dtype=self._y_dtype,
             device=self.device
         )
         return x, y
