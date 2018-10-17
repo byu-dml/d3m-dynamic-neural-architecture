@@ -1,4 +1,5 @@
 import json
+import os
 
 from tqdm import tqdm
 from matplotlib import pyplot as plt
@@ -30,21 +31,14 @@ class PyTorchModelTrainer(object):
         self.test_data_loader = test_data_loader
         self.loss_f = loss_f
 
-        # each element in the these list represents an entire epoch's data
-        self._results = {
-            "train": {
-                "predictions": [],
-                "targets": []
-            },
-            "validation": {
-                "predictions": [],
-                "targets": []
-            },
-            "test": {
-                "predictions": [],
-                "targets": []
-            }
-        }
+        self._n_completed_epochs = 0
+
+        self._train_predictions = None
+        self._train_targets = None
+        self._validation_predictions = None
+        self._validation_targets = None
+        self._test_predictions = None
+        self._test_targets = None
 
     def _epoch(self, data_loader, optimizer=None):
         if optimizer is None:
@@ -61,7 +55,7 @@ class PyTorchModelTrainer(object):
             position = 0
         )
         progress.set_description("epoch {}".format(
-            self.n_completed_epochs + 1
+            self._n_completed_epochs + 1
         ))
         with context_manager:
             for x_batch, y_batch in data_loader:
@@ -82,28 +76,29 @@ class PyTorchModelTrainer(object):
         return predictions, targets
 
     def train_epoch(self, optimizer):
-        # todo in case of failure, reset model to before epoch
-        train_predictions, train_targets = self._epoch(
+        self._train_predictions, self._train_targets = self._epoch(
             self.train_data_loader, optimizer
         )
-        validation_predictions, validation_targets = self._epoch(
+        self._validation_predictions, self._validation_targets = self._epoch(
             self.validation_data_loader
         )
-        # record data only after an entire epoch has completed
-        self._results["train"]["predictions"].append(train_predictions)
-        self._results["train"]["targets"].append(train_targets)
-        self._results["validation"]["predictions"].append(validation_predictions)
-        self._results["validation"]["targets"].append(validation_targets)
+
+        self._n_completed_epochs += 1
+
+        return (
+            self._train_predictions, self._train_targets,
+            self._validation_predictions, self._validation_targets
+        )
 
     def test(self):
-        if len(self._results["test"]["predictions"]) > 0:
-            raise Exception("Evaluating test data can only be performed once")
+        self._test_predictions, self._test_targets = self._epoch(self.test_data_loader)
+        return self._test_predictions, self._test_targets
 
-        predictions, targets = self._epoch(self.test_data_loader)
-        self._results["test"]["predictions"] = predictions
-        self._results["test"]["targets"] = targets
-
-    def plot_results(self, measures, title, ylabel=None, xlabel="Epoch", path=None):
+    @classmethod
+    def plot(
+        cls, measures, title = None, ylabel = None, xlabel = "Epoch",
+        path = None
+    ):
         """
         Computes each measure on the train and validation data per epoch and
         plots the measures over epochs. Uses the keys in measures as the labels
@@ -111,7 +106,7 @@ class PyTorchModelTrainer(object):
 
         Parameters
         ----------
-        measures: Dict[str, Callable[Iterable, Iterable]]
+        measures: Dict[str, List[float]]
             A mapping of strings to functions. Each function performs some
             measure of model performance using the predictions and targets on
             a per epoch basis. The string key is the text for the label in the
@@ -127,29 +122,13 @@ class PyTorchModelTrainer(object):
             The path in which to save the plot. If None, then the plot is shown
             instead.
         """
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        ax.yaxis.set_ticks_position('both')
 
         for label, measure in measures.items():
-            measured_train_data = []
-            for predictions, targets in zip(
-                self._results["train"]["predictions"],
-                self._results["train"]["targets"]
-            ):
-                measured_train_data.append(measure(predictions, targets))
+            plt.plot(measure, label = label)
 
-            measured_validation_data = []
-            for predictions, targets in zip(
-                self._results["validation"]["predictions"],
-                self._results["validation"]["targets"]
-            ):
-                measured_validation_data.append(measure(predictions, targets))
-
-            x = range(1, len(measured_train_data) + 1)
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.yaxis.set_ticks_position('both')
-            plt.plot(x, measured_train_data, label=f"Train {label}")
-            plt.plot(x, measured_validation_data, label=f"Validation {label}")
-            # todo baselines
         plt.legend(loc=0)
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
@@ -161,12 +140,54 @@ class PyTorchModelTrainer(object):
         plt.clf()
         plt.close()
 
-    def save_results(self, path):
-        write_json(self._results, path, pretty=True)
+    def save_outputs(self, save_dir, n_total_epochs = None):
+        # todo expose inner method to avoid test data epoch problem
+        if n_total_epochs is None:
+            n_total_epochs = 0
+
+        epoch_str = str(self._n_completed_epochs).zfill(
+            len(str(n_total_epochs))
+        )
+
+        self._save_outputs(
+            self._train_predictions,
+            self._train_targets,
+            "train",
+            epoch_str,
+            save_dir
+        )
+        self._save_outputs(
+            self._validation_predictions,
+            self._validation_targets,
+            "validation",
+            epoch_str,
+            save_dir
+        )
+        self._save_outputs(
+            self._test_predictions,
+            self._test_targets,
+            "validation",
+            epoch_str,
+            save_dir
+        )
+
+    def _save_outputs(self, predictions, targets, phase, epoch_str, save_dir):
+        if not (predictions is None or targets is None):
+            save_dir = os.path.join(save_dir, phase)
+            if not os.path.isdir(save_dir):
+                os.makedirs(save_dir)
+            path = os.path.join(save_dir, f"{epoch_str}.json")
+            results = {
+                "phase": phase,
+                "epoch": epoch_str,
+                "predictions": predictions,
+                "targets": targets
+            }
+            write_json(results, path)
 
     @property
     def n_completed_epochs(self):
-        return len(self._results["train"]["predictions"])
+        return self._n_completed_epochs
 
     @property
     def train_predictions(self):

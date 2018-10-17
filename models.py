@@ -1,3 +1,6 @@
+import os
+import json
+
 import torch
 import torch.nn as nn
 
@@ -94,6 +97,40 @@ class DNAModel(nn.Module):
         h2 = pipeline_model(h1)
         return torch.squeeze(self.output_model(h2))
 
+    def save(self, save_dir):
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+
+        path = os.path.join(save_dir, "input_model.pt")
+        self._save(self.input_model, path)
+
+        for name, model in self.submodels.items():
+            path = os.path.join(save_dir, f"{name}_model.pt")
+            self._save(model, path)
+
+        path = os.path.join(save_dir, "output_model.pt")
+        self._save(self.output_model, path)
+
+    def _save(self, model, save_path):
+        torch.save(model.state_dict(), save_path)
+
+    def load(self, save_dir):
+        if not os.path.isdir(save_dir):
+            raise ValueError(f"save_dir {save_dir} does not exist")
+
+        path = os.path.join(save_dir, "input_model.pt")
+        self._load(self.input_model, path)
+
+        for name, model in self.submodels.items():
+            path = os.path.join(save_dir, f"{name}_model.pt")
+            self._load(model, path)
+
+        path = os.path.join(save_dir, "output_model.pt")
+        self._load(self.output_model, path)
+
+    def _load(self, model, path):
+        model.load_state_dict(torch.load(path))
+
 
 class SiameseModel(nn.Module):
 
@@ -116,3 +153,37 @@ class SiameseModel(nn.Module):
         right_h2 = right_model(h1)
         h2 = torch.cat((left_h2, right_h2), 1)
         return self.output_model(h2)
+
+    def save(self, save_dir):
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+
+        path = os.path.join(save_dir, "input_model.pt")
+        self._save(self.input_model, path)
+
+        for name, model in self.submodels.items():
+            path = os.path.join(save_dir, f"{name}_model.pt")
+            self._save(model, path)
+
+        path = os.path.join(save_dir, "output_model.pt")
+        self._save(self.output_model, path)
+
+    def _save(self, model, save_path):
+        torch.save(model.state_dict(), save_path)
+
+    def load(self, save_dir):
+        if not os.path.isdir(save_dir):
+            raise ValueError(f"save_dir {save_dir} does not exist")
+
+        path = os.path.join(save_dir, "input_model.pt")
+        self._load(self.input_model, path)
+
+        for name, model in self.submodels.items():
+            path = os.path.join(save_dir, f"{name}_model.pt")
+            self._load(model, path)
+
+        path = os.path.join(save_dir, "output_model.pt")
+        self._load(self.output_model, path)
+
+    def _load(self, model, path):
+        model.load_state_dict(torch.load(path))
