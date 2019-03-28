@@ -1,4 +1,2 @@
-.idea/
-venv/
 __pycache__/
-data/*.json
+dna/data/*.json

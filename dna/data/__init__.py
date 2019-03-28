@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 
-DATA_DIR = "./data"
+DATA_DIR = "./dna/data"
 RAW_DATA_NAME = "complete_pipelines_and_metafeatures"
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
