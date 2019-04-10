@@ -9,7 +9,7 @@ import pandas as pd
 
 
 DATA_DIR = "./dna/data"
-RAW_DATA_NAME = "complete_pipelines_and_metafeatures"
+RAW_DATA_NAME = "complete_pipelines_and_metafeatures_test_short"
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
 ALL_DATA_PATH = os.path.join(DATA_DIR, "all_data.json")
@@ -42,12 +42,13 @@ def reformat_data():
     data = read_json(RAW_DATA_PATH)
     reformatted_data = []
     for item in data:
-        dataset, pipeline = item["job_str"].split("___", 1)
+        dataset = item["raw_dataset_name"]
+        pipeline = item["pipeline"]
         metafeatures = {
             k: v for k, v in item["metafeatures"].items() if not "time" in k.lower()
         }
         metafeatures["TotalTime"] = item["metafeatures_time"]
-        train_time = item["train_fit_time"] + item["train_predict_time"]
+        train_time = item["train_time"]
         reformatted_data.append({
             "dataset": dataset,
             "pipeline": pipeline,
@@ -55,7 +56,7 @@ def reformat_data():
             "train_accuracy": item["train_accuracy"],
             "test_accuracy": item["test_accuracy"],
             "train_time": train_time,
-            "test_time": item["test_predict_time"]
+            "test_time": item["test_time"]
         })
     write_json(reformatted_data, ALL_DATA_PATH, pretty=True)
 

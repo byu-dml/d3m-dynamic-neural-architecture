@@ -1,0 +1,176 @@
+import collections
+import json
+import os
+import pymongo
+import subprocess
+import re
+from bson import json_util, ObjectId
+from d3m.metadata.pipeline import Pipeline
+from dateutil.parser import parse
+import collections
+
+try:
+    real_mongo_port = int(os.environ['REAL_MONGO_PORT'])
+    default_mongo_port = int(os.environ['DEFAULT_MONGO_PORT'])
+    lab_hostname = os.environ['LAB_HOSTNAME']
+    docker_hostname = os.environ['DOCKER_HOSTNAME']
+except Exception as E:
+    print("ERROR: environment variables not set")
+    raise E
+
+
+def flatten(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+class DatabaseToJson:
+    def __init__(self):
+        self.connect_to_mongo()
+
+    def connect_to_mongo(self, host_name=lab_hostname, mongo_port=real_mongo_port):
+        """
+        Connects and returns a session to the mongo database
+        :param host_name: the host computer that has the database server
+        :param mongo_port: the port number of the database
+        :return: a MongoDB session
+        """
+        try:
+            self.mongo_client = pymongo.MongoClient(host_name, mongo_port)
+        except Exception as e:
+            print("Cannot connect to the Mongo Client at port {}. Error is {}".format(mongo_port, e))
+
+    def get_primitives_used(self, pipeline_run):
+        """
+        A helper function for getting the primitives used
+        :param pipeline_run: a dictionary-like object containing the pipeline run
+        :return: a list of strings where each string is the python path of the primitive
+        """
+        primitives = []
+        for step in pipeline_run['steps']:
+            primitives.append(step['primitive']['python_path'])
+        return primitives
+
+    def get_time_elapsed(self, pipeline_run):
+        """
+        A helper function for finding the time of the pipeline_run
+        :param pipeline_run: a dictionary-like object containing the pipeline run
+        :return: the total time in seconds it took the pipeline to execute
+        """
+        begin = pipeline_run["steps"][0]["method_calls"][0]["start"]
+        begin_val = parse(begin)
+        end = pipeline_run["steps"][-1]["method_calls"][-1]["end"]
+        end_val = parse(end)
+        total_time = (end_val - begin_val).total_seconds()
+        return total_time
+
+    def get_pipeline_from_run(self, pipeline_run):
+        db = self.mongo_client.metalearning
+        collection = db.pipelines
+        pipeline_doc = collection.find({"$and": [{"id": pipeline_run["pipeline"]["id"]},
+                                                 {"digest": pipeline_run["pipeline"]["digest"]}]})[0]
+        return pipeline_doc
+
+    def get_pipeline_run_info(self, pipeline_run):
+        """
+        Collects and gathers the data needed for the DNA system from a pipeline run
+        :param pipeline_run: the pipeline run object to be summarized
+        :return: a dictionary object summarizing the pipeline run
+        """
+        pipeline = self.get_pipeline_from_run(pipeline_run)
+        problem_type = self.get_problem_type_from_pipeline(pipeline)
+        raw_dataset_name = pipeline_run["datasets"][0]["id"]
+        test_accuracy = pipeline_run["run"]["results"]["scores"][0]["value"]
+        test_predict_time = self.get_time_elapsed(pipeline_run)
+        train_accuracy = 0
+        train_predict_time = 0  # TODO have this find the fit pipeline and get the time
+        pipeline_run_info = {
+                                "pipeline": pipeline,
+                                "problem_type": problem_type,
+                                "raw_dataset_name": raw_dataset_name,
+                                "test_accuracy": test_accuracy,
+                                "test_time": test_predict_time,
+                                "train_accuracy": train_accuracy,
+                                "train_time": train_predict_time
+                            }
+        return pipeline_run_info
+
+    def get_metafeature_info(self, pipeline_run):
+        """
+        Collects and gathers the data needed for the DNA system from a metafeature
+        :param dataset_name: the name/id of the dataset
+        :return: a dictionary object summarizing the dataset in metafeatures
+        """
+        db = self.mongo_client.metalearning
+        collection = db.metafeatures
+        try:
+            metafeatures = collection.find({"$and": [{"datasets.id": pipeline_run["datasets"][0]["id"]},
+                                                     {"datasets.digest": pipeline_run["datasets"][0]["digest"]}]})[0]
+            features = metafeatures["steps"][2]["method_calls"][1]["metadata"]["produce"][0]["metadata"]["data_metafeatures"]
+            features_flat = flatten(features)
+            # TODO: implement this
+            metafeatures_time = 0
+            return {"metafeatures": features_flat, "metafeatures_time": metafeatures_time}
+        except Exception as e:
+            # don't use this pipeline_run
+            return {}
+
+    def collect_pipeline_runs(self):
+        """
+        This is the main function that collects, and writes to file, all pipeline runs and metafeature information
+        It writes the file to data/complete_pipelines_and_metafeatures.json
+        :param mongo_client: a connection to the Mongo database
+        """
+        db = self.mongo_client.metalearning
+        collection = db.pipeline_runs
+        collection_size = collection.count()
+        pipeline_cursor = collection.find()
+        list_of_experiments = []
+        for index, pipeline_run in enumerate(pipeline_cursor):
+            if index % 1000 == 0:
+                print("At {} out of {} documents".format(index, collection_size))
+                if index == 500000:
+                    # running into memory errors
+                    break
+            pipeline_run_info = self.get_pipeline_run_info(pipeline_run)
+            metafeatures = self.get_metafeature_info(pipeline_run)
+            # TODO: get all metafeatures so we don't need this
+            if metafeatures != {}:
+                experiment_json = dict(pipeline_run_info, **metafeatures)
+                list_of_experiments.append(experiment_json)
+
+        final_data_file = json.dumps(list_of_experiments, sort_keys=True, indent=4, default=json_util.default)
+        with open("data/complete_pipelines_and_metafeatures_test_short.json", "w") as file:
+            file.write(final_data_file)
+
+        return
+
+    def is_phrase_in(self, phrase, text):
+        return re.search(r"\b{}\b".format(phrase), text, re.IGNORECASE) is not None
+
+    def get_problem_type_from_pipeline(self, pipeline):
+        is_classification = self.is_phrase_in("d3m.primitives.classification", json.dumps(pipeline['steps']))
+        is_regression = self.is_phrase_in("d3m.primitives.regression", json.dumps(pipeline['steps']))
+        if is_classification and is_regression:
+            print("Cannot be both")
+            raise Exception
+        elif is_classification:
+            predictor_model = "classification"
+        elif is_regression:
+            predictor_model = "regression"
+        else:
+            print("Cannot be none")
+            raise Exception
+
+        return predictor_model
+
+
+if __name__ == "__main__":
+    db_to_json = DatabaseToJson()
+    db_to_json.collect_pipeline_runs()
