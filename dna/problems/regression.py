@@ -19,7 +19,7 @@ class Regression(BaseProblem):
         super(Regression, self).__init__(
             train_data_path = train_data_path,
             test_data_path = test_data_path,
-            batch_group_key = "pipeline",
+            batch_group_key = "pipeline_id",
             target_key = self._target_key,
             task_type = "REGRESSION",
             n_folds = n_folds,
@@ -40,7 +40,7 @@ class Regression(BaseProblem):
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
-            primitive_names = item["pipeline"].split("___")
+            primitive_names = [dict_obj["name"] for dict_obj in item["pipeline"]]
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
                     submodels[primitive_name] = PrimitiveModel(

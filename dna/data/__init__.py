@@ -52,6 +52,7 @@ def reformat_data():
         reformatted_data.append({
             "dataset": dataset,
             "pipeline": pipeline,
+            "pipeline_id": item["pipeline_id"],
             "metafeatures": metafeatures,
             "train_accuracy": item["train_accuracy"],
             "test_accuracy": item["test_accuracy"],
@@ -77,7 +78,6 @@ def group_json_objects(json_objects, group_key):
     json_objects.
     """
     grouped_objects = {}
-    import pdb; pdb.set_trace()
     for i, obj in enumerate(json_objects):
         group = obj[group_key]
         if not group in grouped_objects:
