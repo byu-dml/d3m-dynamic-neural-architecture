@@ -11,9 +11,7 @@ import collections
 
 try:
     real_mongo_port = int(os.environ['REAL_MONGO_PORT'])
-    default_mongo_port = int(os.environ['DEFAULT_MONGO_PORT'])
     lab_hostname = os.environ['LAB_HOSTNAME']
-    docker_hostname = os.environ['DOCKER_HOSTNAME']
 except Exception as E:
     print("ERROR: environment variables not set")
     raise E
@@ -84,6 +82,8 @@ class DatabaseToJson:
         :return: a dictionary object summarizing the pipeline run
         """
         pipeline = self.get_pipeline_from_run(pipeline_run)
+        pipeline_id = pipeline["id"]
+        simple_pipeline  = self.parse_simpler_pipeline(pipeline)
         problem_type = self.get_problem_type_from_pipeline(pipeline)
         raw_dataset_name = pipeline_run["datasets"][0]["id"]
         test_accuracy = pipeline_run["run"]["results"]["scores"][0]["value"]
@@ -91,7 +91,8 @@ class DatabaseToJson:
         train_accuracy = 0
         train_predict_time = 0  # TODO have this find the fit pipeline and get the time
         pipeline_run_info = {
-                                "pipeline": pipeline,
+                                "pipeline": simple_pipeline,
+                                "pipeline_id": pipeline_id,
                                 "problem_type": problem_type,
                                 "raw_dataset_name": raw_dataset_name,
                                 "test_accuracy": test_accuracy,
@@ -135,7 +136,7 @@ class DatabaseToJson:
         for index, pipeline_run in enumerate(pipeline_cursor):
             if index % 1000 == 0:
                 print("At {} out of {} documents".format(index, collection_size))
-                if index == 500000:
+                if index == 2000:
                     # running into memory errors
                     break
             pipeline_run_info = self.get_pipeline_run_info(pipeline_run)
@@ -146,7 +147,7 @@ class DatabaseToJson:
                 list_of_experiments.append(experiment_json)
 
         final_data_file = json.dumps(list_of_experiments, sort_keys=True, indent=4, default=json_util.default)
-        with open("data/complete_pipelines_and_metafeatures_test_short.json", "w") as file:
+        with open("data/complete_pipelines_and_metafeatures_test_again.json", "w") as file:
             file.write(final_data_file)
 
         return
@@ -169,6 +170,29 @@ class DatabaseToJson:
             raise Exception
 
         return predictor_model
+
+    def parse_simpler_pipeline(self, full_pipeline):
+        pipeline_steps = full_pipeline["steps"]
+        simple_pipeline = []
+        for pipeline_step in pipeline_steps:
+            pipeline_step_name = pipeline_step["primitive"]["python_path"]
+            inputs_list = []
+            for key, value in pipeline_step["arguments"].items():
+                string_name = value["data"]
+                pipeline_step_inputs = self.parse_input_string(string_name)
+                inputs_list.append(pipeline_step_inputs)
+            # add info to our pipeline
+            simple_pipeline.append({"name": pipeline_step_name, "inputs": inputs_list})
+
+        return simple_pipeline
+
+    def parse_input_string(self, string_name):
+        list_of_parts = string_name.split(".")
+        if list_of_parts[0] == "inputs":
+            return string_name
+        else:
+            # return only the integer part
+            return int(list_of_parts[1])
 
 
 if __name__ == "__main__":

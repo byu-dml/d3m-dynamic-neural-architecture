@@ -9,12 +9,12 @@ import pandas as pd
 
 
 DATA_DIR = "./dna/data"
-RAW_DATA_NAME = "complete_pipelines_and_metafeatures_test_short"
+RAW_DATA_NAME = "complete_pipelines_and_metafeatures_test_again"
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
 ALL_DATA_PATH = os.path.join(DATA_DIR, "all_data.json")
 TRAIN_TEST_SPLIT_SEED = 1607242652
-N_TEST_DATASETS = 42
+N_TEST_DATASETS = 2
 TRAIN_DATA_PATH = os.path.join(DATA_DIR, "train_data.json")
 TEST_DATA_PATH = os.path.join(DATA_DIR, "test_data.json")
 
@@ -77,6 +77,7 @@ def group_json_objects(json_objects, group_key):
     json_objects.
     """
     grouped_objects = {}
+    import pdb; pdb.set_trace()
     for i, obj in enumerate(json_objects):
         group = obj[group_key]
         if not group in grouped_objects:

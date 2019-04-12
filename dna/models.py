@@ -87,14 +87,13 @@ class DNAModel(nn.Module):
         self.input_model = input_model
         self.submodels = submodels
         self.output_model = output_model
+        self.h1 = None
 
     def forward(self, args):
         pipeline, x = args
-        h1 = self.input_model(x)
-        pipeline_model = nn.Sequential(
-            *[self.submodels[name] for name in pipeline.split("___")]
-        )
-        h2 = pipeline_model(h1)
+        self.h1 = self.input_model(x)
+        # dynamically constructs dag
+        h2 = self.recursive_get_output(pipeline, len(pipeline) - 1)
         return torch.squeeze(self.output_model(h2))
 
     def save(self, save_dir):
@@ -130,6 +129,24 @@ class DNAModel(nn.Module):
 
     def _load(self, model, path):
         model.load_state_dict(torch.load(path))
+
+    def recursive_get_output(self, pipeline, current_index):
+        """
+        The recursive call to find the input
+        :param pipeline: the pipeline list containing the submodels
+        :param current_index: the index of the current submodel
+        :return:
+        """
+        current_submodel = self.submodels[pipeline[current_index]["name"]]
+        if "inputs.0" in pipeline[current_index]["inputs"]:
+            return current_submodel(self.h1)
+
+        outputs = []
+        for input in pipeline[current_index]["inputs"]:
+            curr_output = self.recursive_get_output(pipeline, input)
+            outputs.append(curr_output)
+        new_output = current_submodel.cat(tuple(outputs), dim=0)
+        return new_output
 
 
 class SiameseModel(nn.Module):

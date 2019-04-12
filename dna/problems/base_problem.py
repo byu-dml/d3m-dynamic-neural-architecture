@@ -33,7 +33,6 @@ class BaseProblem(object):
         self._random.seed(seed)
 
         self._load_data()
-
         self._cv_folds = make_cv_folds(
             self._train_data,
             self.batch_group_key,
