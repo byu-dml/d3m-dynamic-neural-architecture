@@ -26,6 +26,9 @@ lookup_input_size = {
     "d3m.primitives.feature_selection.select_fwe.SKlearn": 2,
     "d3m.primitives.feature_selection.select_percentile.SKlearn": 2,
     "d3m.primitives.feature_selection.generic_univariate_select.SKlearn": 2,
+    'd3m.primitives.regression.extra_trees.SKlearn': 2,
+    "d3m.primitives.regression.svr.SKlearn": 2,
+    "d3m.primitives.regression.svr.SKlearn": 2,
 
 }
 
