@@ -5,13 +5,19 @@ from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
 from models import PrimitiveModel, RegressionModel, DNAModel
 
+# TODO: make this dynamic
+lookup_input_size = {
+    "Done with d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
+    "d3m.primitives.classification.gaussian_naive_bayes.SKlearn": 2,
+
+}
 
 class Regression(BaseProblem):
 
     def __init__(
         self, train_data_path: str = TRAIN_DATA_PATH,
         test_data_path: str = TEST_DATA_PATH, n_folds: int = 5,
-        batch_size = 48, drop_last = True, device = "cuda:0", seed = 0
+        batch_size = 2, drop_last = True, device = "cuda:0", seed = 0
     ):
         self._target_key = "test_accuracy"
         objective = torch.nn.MSELoss(reduction="elementwise_mean")
@@ -43,8 +49,12 @@ class Regression(BaseProblem):
             primitive_names = [dict_obj["name"] for dict_obj in item["pipeline"]]
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
+                    try:
+                        n_inputs =  lookup_input_size[primitive_name]
+                    except KeyError as e:
+                        n_inputs = 1
                     submodels[primitive_name] = PrimitiveModel(
-                        primitive_name, self._shape[0]
+                        primitive_name, n_inputs * self._shape[0]
                     )
                     submodels[primitive_name].cuda()
         output_model = RegressionModel(self._shape[0])

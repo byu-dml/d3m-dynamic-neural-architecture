@@ -59,9 +59,12 @@ class PyTorchModelTrainer(object):
         ))
         with context_manager:
             for x_batch, y_batch in data_loader:
+                print("Printing batch ###")
+                print(x_batch, y_batch)
                 y_hat_batch = self.model(x_batch)
 
                 if not optimizer is None:
+                    import pdb; pdb.set_trace()
                     loss = self.loss_f(y_hat_batch, y_batch)
                     loss.backward()
                     optimizer.step()
