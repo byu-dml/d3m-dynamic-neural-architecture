@@ -7,8 +7,25 @@ from models import PrimitiveModel, RegressionModel, DNAModel
 
 # TODO: make this dynamic
 lookup_input_size = {
-    "Done with d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
+    "d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
     "d3m.primitives.classification.gaussian_naive_bayes.SKlearn": 2,
+    'd3m.primitives.classification.linear_svc.SKlearn': 2,
+    "d3m.primitives.classification.random_forest.SKlearn": 2,
+    "d3m.primitives.classification.gradient_boosting.SKlearn": 2,
+    "d3m.primitives.classification.bagging.SKlearn": 2,
+    "d3m.primitives.classification.bernoulli_naive_bayes.SKlearn": 2,
+    "d3m.primitives.classification.decision_tree.SKlearn": 2,
+    "d3m.primitives.classification.k_neighbors.SKlearn": 2,
+    "d3m.primitives.classification.linear_discriminant_analysis.SKlearn": 2,
+    "d3m.primitives.classification.logistic_regression.SKlearn": 2,
+    "d3m.primitives.classification.linear_svc.SKlearn": 2,
+    "d3m.primitives.classification.sgd.SKlearn": 2,
+    "d3m.primitives.classification.svc.SKlearn": 2,
+    "d3m.primitives.classification.extra_trees.SKlearn": 2,
+    "d3m.primitives.classification.passive_aggressive.SKlearn": 2,
+    "d3m.primitives.feature_selection.select_fwe.SKlearn": 2,
+    "d3m.primitives.feature_selection.select_percentile.SKlearn": 2,
+    "d3m.primitives.feature_selection.generic_univariate_select.SKlearn": 2,
 
 }
 
@@ -42,7 +59,7 @@ class Regression(BaseProblem):
 
         torch.manual_seed(self._randint())
         torch.cuda.manual_seed_all(self._randint())
-        input_model = PrimitiveModel("input", self._shape[0])
+        input_model = PrimitiveModel("input", self._shape[0], self._shape[0])
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
@@ -50,11 +67,11 @@ class Regression(BaseProblem):
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
                     try:
-                        n_inputs =  lookup_input_size[primitive_name]
+                        n_inputs = lookup_input_size[primitive_name]
                     except KeyError as e:
                         n_inputs = 1
                     submodels[primitive_name] = PrimitiveModel(
-                        primitive_name, n_inputs * self._shape[0]
+                        primitive_name, n_inputs * self._shape[0], self._shape[0]
                     )
                     submodels[primitive_name].cuda()
         output_model = RegressionModel(self._shape[0])

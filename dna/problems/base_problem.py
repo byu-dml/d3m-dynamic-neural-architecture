@@ -28,7 +28,6 @@ class BaseProblem(object):
         self.drop_last = drop_last
         self.device = device
         self.seed = seed
-
         self._random = random.Random()
         self._random.seed(seed)
 

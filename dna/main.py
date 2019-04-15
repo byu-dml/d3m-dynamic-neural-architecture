@@ -62,7 +62,6 @@ def main():
            seed = seed,
         )
     # problem.model.load(config["weights_dir"])
-
     learning_rate = 1e-4
     optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)
 

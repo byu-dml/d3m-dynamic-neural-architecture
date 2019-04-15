@@ -1,13 +1,11 @@
-import collections
 import json
-import os
 import pymongo
-import subprocess
 import re
-from bson import json_util, ObjectId
-from d3m.metadata.pipeline import Pipeline
+from bson import json_util
 from dateutil.parser import parse
 import collections
+import os
+
 
 try:
     real_mongo_port = int(os.environ['REAL_MONGO_PORT'])
@@ -25,7 +23,10 @@ def flatten(d, parent_key='', sep='_'):
             items.extend(flatten(v, new_key, sep=sep).items())
         else:
             items.append((new_key, v))
-    return dict(items)
+    items = dict(items)
+    # remove info like PCA primitive ID
+    items_not_strings = {k: v for k, v in items.items() if type(v) != str}
+    return dict(items_not_strings)
 
 
 class DatabaseToJson:
@@ -136,7 +137,7 @@ class DatabaseToJson:
         for index, pipeline_run in enumerate(pipeline_cursor):
             if index % 1000 == 0:
                 print("At {} out of {} documents".format(index, collection_size))
-                if index == 2000:
+                if index == 500000:
                     # running into memory errors
                     break
             pipeline_run_info = self.get_pipeline_run_info(pipeline_run)
@@ -147,7 +148,7 @@ class DatabaseToJson:
                 list_of_experiments.append(experiment_json)
 
         final_data_file = json.dumps(list_of_experiments, sort_keys=True, indent=4, default=json_util.default)
-        with open("data/complete_pipelines_and_metafeatures_test_again.json", "w") as file:
+        with open("data/complete_pipelines_and_metafeatures_test_full.json", "w") as file:
             file.write(final_data_file)
 
         return

@@ -90,7 +90,7 @@ class GroupDataLoader(object):
             new_dataloader = self._get_data_loader(
                 group_dataset
             )
-            assert(len(new_dataloader) != 0)
+            # assert(len(new_dataloader) != 0)
             self._group_dataloaders[group] = new_dataloader
 
     def _get_data_loader(self, data):
@@ -104,7 +104,7 @@ class GroupDataLoader(object):
             batch_size = self.batch_size,
             drop_last = self.drop_last
         )
-        assert(len(dataloader) != 0)
+        # assert(len(dataloader) != 0)
         return dataloader
 
     def _randint(self):
@@ -117,7 +117,7 @@ class GroupDataLoader(object):
         """
         self._group_batches = []
         for group, group_dataloader in self._group_dataloaders.items():
-            assert(len(group_dataloader) != 0)
+            # assert(len(group_dataloader) != 0)
             self._group_batches += [group] * len(group_dataloader)
         self._random.shuffle(self._group_batches)
 

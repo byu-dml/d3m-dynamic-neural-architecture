@@ -3,7 +3,7 @@ import json
 import tarfile
 import random
 from typing import List, Dict
-
+import pprint
 import numpy as np
 import pandas as pd
 
@@ -80,6 +80,7 @@ def group_json_objects(json_objects, group_key):
     grouped_objects = {}
     for i, obj in enumerate(json_objects):
         group = obj[group_key]
+        group = tuple(group)
         if not group in grouped_objects:
             grouped_objects[group] = []
         grouped_objects[group].append(i)
@@ -87,7 +88,6 @@ def group_json_objects(json_objects, group_key):
 
 def drop_nan_metafeatures():
     all_data = read_json(ALL_DATA_PATH)
-
     mfs = pd.DataFrame([item["metafeatures"] for item in all_data])
     mfs.replace(
         to_replace=[np.inf, - np.inf], value=np.nan, inplace=True

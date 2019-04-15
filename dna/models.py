@@ -7,7 +7,7 @@ import torch.nn as nn
 
 class PrimitiveModel(nn.Module):
 
-    def __init__(self, name, visible_layer_size):
+    def __init__(self, name, visible_layer_size, output_size):
         super(PrimitiveModel, self).__init__()
 
         self.net = nn.Sequential(
@@ -21,13 +21,12 @@ class PrimitiveModel(nn.Module):
             ),
             nn.ReLU(),
             nn.Linear(
-                visible_layer_size, visible_layer_size
+                visible_layer_size, output_size
             ),
             nn.ReLU()
         )
 
     def forward(self, x):
-        print("In the foward pass x is ", x)
         return self.net(x)
 
 
@@ -94,10 +93,8 @@ class DNAModel(nn.Module):
         pipeline_id, x, pipeline = args
         x = x[0]
         self.h1 = self.input_model(x)
-        print(pipeline)
         # dynamically constructs dag
         h2 = self.recursive_get_output(pipeline, len(pipeline) - 1)
-        print("The resucivse output is ", h2)
         return torch.squeeze(self.output_model(h2))
 
     def save(self, save_dir):
@@ -141,27 +138,25 @@ class DNAModel(nn.Module):
         :param current_index: the index of the current submodel
         :return:
         """
-        current_submodel = self.submodels[pipeline[current_index]["name"]]
-        print("On current submodel: {}".format(pipeline[current_index]["name"]))
-        if "inputs.0" in pipeline[current_index]["inputs"]:
-            return current_submodel(self.h1)
+        try:
+            current_submodel = self.submodels[pipeline[current_index]["name"]]
+            if "inputs.0" in pipeline[current_index]["inputs"]:
+                return current_submodel(self.h1)
 
-        outputs = []
-        for input in pipeline[current_index]["inputs"]:
-            curr_output = self.recursive_get_output(pipeline, input)
-            outputs.append(curr_output)
-            print("added input", input, curr_output)
+            outputs = []
+            for input in pipeline[current_index]["inputs"]:
+                curr_output = self.recursive_get_output(pipeline, input)
+                outputs.append(curr_output)
 
-        if len(outputs) >  1:
-            new_output = current_submodel(torch.cat(tuple(outputs), dim=1))
-        else:
-            new_output = current_submodel(curr_output)
-
-        print("Done with",  pipeline[current_index]["name"])
-        print("The output shape is ", new_output.shape)
-        print(new_output)
-        return new_output
-
+            if len(outputs) > 1:
+                new_output = current_submodel(torch.cat(tuple(outputs), dim=1))
+            else:
+                new_output = current_submodel(curr_output)
+            return new_output
+        except Exception as e:
+            print("There was an error in the foward pass.  It was ", e)
+            print(pipeline[current_index])
+            quit(1)
 
 class SiameseModel(nn.Module):
 
