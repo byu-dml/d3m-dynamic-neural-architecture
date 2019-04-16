@@ -28,7 +28,9 @@ lookup_input_size = {
     "d3m.primitives.feature_selection.select_fwe.SKlearn": 2,
     "d3m.primitives.feature_selection.select_percentile.SKlearn": 2,
     "d3m.primitives.feature_selection.generic_univariate_select.SKlearn": 2,
-
+    'd3m.primitives.regression.extra_trees.SKlearn': 2,
+    "d3m.primitives.regression.svr.SKlearn": 2,
+    "d3m.primitives.regression.svr.SKlearn": 2,
 }
 
 class Siamese(BaseProblem):
@@ -36,7 +38,7 @@ class Siamese(BaseProblem):
     def __init__(
         self, train_data_path: str = TRAIN_DATA_PATH,
         test_data_path: str = TEST_DATA_PATH, n_folds: int = 5,
-        batch_size = 48, drop_last = True, device = "cuda:0", seed = 0
+        batch_size = 2, drop_last = True, device = "cuda:0", seed = 0
     ):
         self._target_key = "target"
         super(Siamese, self).__init__(
@@ -104,7 +106,7 @@ class Siamese(BaseProblem):
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
-            primitive_names = item["pipelines"][0].split("___")
+            primitive_names = [dict_obj["name"] for dict_obj in item["pipelines"][0]]
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
                     try:

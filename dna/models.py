@@ -167,8 +167,12 @@ class SiameseModel(nn.Module):
         self.output_model = output_model
 
     def forward(self, args):
-        (left_pipeline, right_pipeline), x = args
+        # (left_pipeline, right_pipeline), x = args
+        pipeline_id, x, (left_pipeline, right_pipeline) = args
+        x = x[0]
         h1 = self.input_model(x)
+
+        # NEED TO IMPLEMENT DYNAMIC CONSTRUCTION OF THE DAG FOR SIAMESE HERE
         left_model = nn.Sequential(
             *[self.submodels[name] for name in left_pipeline.split("___")]
         )
