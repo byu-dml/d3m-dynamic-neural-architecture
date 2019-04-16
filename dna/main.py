@@ -23,7 +23,7 @@ def rmse(y_hat, y):
 
 
 def main():
-    task = "regression"
+    task = "siamese"
     seed = 1022357373
     n_epochs = 1000
 
