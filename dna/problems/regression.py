@@ -40,7 +40,7 @@ class Regression(BaseProblem):
         batch_size = 2, drop_last = True, device = "cuda:0", seed = 0
     ):
         self._target_key = "test_accuracy"
-        objective = torch.nn.MSELoss(reduction="elementwise_mean")
+        objective = torch.nn.MSELoss(reduction="mean")
         self._loss_function = lambda y, y_hat: torch.sqrt(objective(y, y_hat))
         super(Regression, self).__init__(
             train_data_path = train_data_path,
