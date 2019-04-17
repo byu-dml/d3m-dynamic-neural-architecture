@@ -16,6 +16,13 @@ except Exception as E:
 
 
 def flatten(d, parent_key='', sep='_'):
+    """
+    This flattens a dictionary
+    :param d: the dictionary to be flattened
+    :param parent_key: the token used to indicate it came from a previous key
+    :param sep: the seperator between parent and child
+    :return: a flattened non-string dictionary
+    """
     items = []
     for k, v in d.items():
         new_key = parent_key + sep + k if parent_key else k
@@ -70,6 +77,11 @@ class DatabaseToJson:
         return total_time
 
     def get_pipeline_from_run(self, pipeline_run):
+        """
+        This function gets the pipeline that corresponds to a pipeline run
+        :param pipeline_run: the produce pipeline run
+        :return: the pipeline that corresponds to the pipeline_run
+        """
         db = self.mongo_client.metalearning
         collection = db.pipelines
         pipeline_doc = collection.find({"$and": [{"id": pipeline_run["pipeline"]["id"]},
@@ -133,30 +145,42 @@ class DatabaseToJson:
         collection = db.pipeline_runs
         collection_size = collection.count()
         pipeline_cursor = collection.find()
-        list_of_experiments = []
+        list_of_experiments = {"classification": [], "regression": []}
         for index, pipeline_run in enumerate(pipeline_cursor):
             if index % 1000 == 0:
                 print("At {} out of {} documents".format(index, collection_size))
-                if index == 500000:
-                    # running into memory errors
-                    break
+                # if index == 2000:
+                #     # running into memory errors
+                #     break
             pipeline_run_info = self.get_pipeline_run_info(pipeline_run)
             metafeatures = self.get_metafeature_info(pipeline_run)
             # TODO: get all metafeatures so we don't need this
             if metafeatures != {}:
                 experiment_json = dict(pipeline_run_info, **metafeatures)
-                list_of_experiments.append(experiment_json)
+                list_of_experiments[experiment_json["problem_type"]].append(experiment_json)
 
-        final_data_file = json.dumps(list_of_experiments, sort_keys=True, indent=4, default=json_util.default)
-        with open("data/complete_pipelines_and_metafeatures_test_full.json", "w") as file:
-            file.write(final_data_file)
+        for problem_type in list_of_experiments.keys():
+            final_data_file = json.dumps(list_of_experiments[problem_type], sort_keys=True, indent=4, default=json_util.default)
+            with open("data/complete_pipelines_and_metafeatures_test_{}.json".format(problem_type), "w") as file:
+                file.write(final_data_file)
 
         return
 
     def is_phrase_in(self, phrase, text):
+        """
+        A simple regex search
+        :param phrase: the phrase to search for
+        :param text: the text to be searched
+        :return:
+        """
         return re.search(r"\b{}\b".format(phrase), text, re.IGNORECASE) is not None
 
     def get_problem_type_from_pipeline(self, pipeline):
+        """
+        This function finds the problem type from the pipeline steps
+        :param pipeline: the full d3m pipeline
+        :return: a string containing the type of problem
+        """
         is_classification = self.is_phrase_in("d3m.primitives.classification", json.dumps(pipeline['steps']))
         is_regression = self.is_phrase_in("d3m.primitives.regression", json.dumps(pipeline['steps']))
         if is_classification and is_regression:
@@ -173,6 +197,12 @@ class DatabaseToJson:
         return predictor_model
 
     def parse_simpler_pipeline(self, full_pipeline):
+        """
+        This function takes a pipeline object from D3M and turns it into a list of dictionaries where
+        each dictionary is a primitive containing the primitive name and the inputs (a list of ints)
+        :param full_pipeline: the full d3m pipeline
+        :return: The simplified pipeline
+        """
         pipeline_steps = full_pipeline["steps"]
         simple_pipeline = []
         for pipeline_step in pipeline_steps:
@@ -188,6 +218,11 @@ class DatabaseToJson:
         return simple_pipeline
 
     def parse_input_string(self, string_name):
+        """
+        This helper function parses the input name from the D3M version (aka `steps.0.produce` to 0)
+        :param string_name: the string name from D3M
+        :return: the simplified name of the input
+        """
         list_of_parts = string_name.split(".")
         if list_of_parts[0] == "inputs":
             return string_name

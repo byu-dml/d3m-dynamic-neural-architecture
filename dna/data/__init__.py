@@ -9,7 +9,10 @@ import pandas as pd
 
 
 DATA_DIR = "./dna/data"
-RAW_DATA_NAME = "complete_pipelines_and_metafeatures_test_full"
+# use this for a dataset of ~2k, this comes with the repo
+RAW_DATA_NAME = "complete_pipelines_and_metafeatures_test_again"
+#### use this for a dataset of ~550k and comment out the above ####
+# RAW_DATA_NAME = "complete_classification"
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
 ALL_DATA_PATH = os.path.join(DATA_DIR, "all_data.json")

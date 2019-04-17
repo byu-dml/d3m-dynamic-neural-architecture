@@ -28,7 +28,7 @@ lookup_input_size = {
     "d3m.primitives.feature_selection.generic_univariate_select.SKlearn": 2,
     'd3m.primitives.regression.extra_trees.SKlearn': 2,
     "d3m.primitives.regression.svr.SKlearn": 2,
-    "d3m.primitives.regression.svr.SKlearn": 2,
+    'd3m.primitives.data_transformation.horizontal_concat.DataFrameConcat': 2,
 
 }
 
