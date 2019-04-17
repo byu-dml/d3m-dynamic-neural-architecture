@@ -133,8 +133,7 @@ class GroupDataLoader(object):
                 )
             x_batch, y_batch = next(group_dataloader_iters[group])
             # since all pipeline are the same in this group, just grab one of them
-            pipeline = self._group_dataloaders[group].dataset.data[0]["pipelines"]  # WORKS FOR SIAMESE
-            # pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]  # WORKS FOR REGRESSION
+            pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]
             yield (group, x_batch, pipeline), y_batch
         raise StopIteration()
 

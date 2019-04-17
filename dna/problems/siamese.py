@@ -87,7 +87,7 @@ class Siamese(BaseProblem):
                     processed_data.append({
                         "dataset": dataset,
                         "metafeatures": mfs,
-                        "pipelines": (
+                        "pipeline": (
                             data_point_i["pipeline"], data_point_j["pipeline"]
                         ),
                         'pipeline_ids': (
@@ -106,7 +106,7 @@ class Siamese(BaseProblem):
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
-            primitive_names = [dict_obj["name"] for dict_obj in item["pipelines"][0]]
+            primitive_names = [dict_obj["name"] for dict_obj in item["pipeline"][0]]
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
                     try:

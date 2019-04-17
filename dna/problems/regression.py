@@ -29,7 +29,6 @@ lookup_input_size = {
     'd3m.primitives.regression.extra_trees.SKlearn': 2,
     "d3m.primitives.regression.svr.SKlearn": 2,
     "d3m.primitives.regression.svr.SKlearn": 2,
-
 }
 
 class Regression(BaseProblem):
