@@ -24,7 +24,7 @@ def rmse(y_hat, y):
 
 
 def main():
-    task = "siamese"
+    task = "regression"
     name = "{}_{}".format(task, uuid.uuid4())
     seed = 1022357373
     n_epochs = 250
