@@ -37,7 +37,7 @@ class Regression(BaseProblem):
     def __init__(
         self, train_data_path: str = TRAIN_DATA_PATH,
         test_data_path: str = TEST_DATA_PATH, n_folds: int = 5,
-        batch_size = 1024**2, drop_last = False, device = "cuda:0", seed = 0
+        batch_size = 32, drop_last = False, device = "cuda:0", seed = 0
     ):
         self._target_key = "test_accuracy"
         objective = torch.nn.MSELoss(reduction="mean")

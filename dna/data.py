@@ -10,20 +10,20 @@ import pandas as pd
 
 DATA_DIR = "./data"
 # use this for a dataset of ~2k, this comes with the repo
-RAW_DATA_NAME = "small_classification"  # 14 datasets
-N_TEST_DATASETS = 2
+# RAW_DATA_NAME = "small_classification"  # 14 datasets
+# N_TEST_DATASETS = 2
 
 # use this for a dataset of ~550k and comment out the above
-# RAW_DATA_NAME = "complete_classification"  # 199 datasets
-# N_TEST_DATASETS = 40
+RAW_DATA_NAME = "classification"  # 199 datasets
+N_TEST_DATASETS = 40
 
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
-ALL_DATA_PATH = os.path.join(DATA_DIR, "all_data.json")
-TRAIN_TEST_SPLIT_SEED = 3746673648
+PROCESSED_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + '_processed' + '.json')
+TRAIN_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + '_train' + '.json')
+TEST_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + '_test' + '.json')
 
-TRAIN_DATA_PATH = os.path.join(DATA_DIR, "train_data.json")
-TEST_DATA_PATH = os.path.join(DATA_DIR, "test_data.json")
+TRAIN_TEST_SPLIT_SEED = 3746673648
 
 
 def read_json(path):
@@ -66,7 +66,7 @@ def reformat_data():
             "train_time": train_time,
             "test_time": item["test_time"]
         })
-    write_json(reformatted_data, ALL_DATA_PATH, pretty=True)
+    write_json(reformatted_data, PROCESSED_DATA_PATH, pretty=True)
 
 def group_json_objects(json_objects, group_key):
     """
@@ -94,8 +94,8 @@ def group_json_objects(json_objects, group_key):
     return grouped_objects
 
 def drop_nan_metafeatures():
-    all_data = read_json(ALL_DATA_PATH)
-    mfs = pd.DataFrame([item["metafeatures"] for item in all_data])
+    processed_data = read_json(PROCESSED_DATA_PATH)
+    mfs = pd.DataFrame([item["metafeatures"] for item in processed_data])
     mfs.replace(
         to_replace=[np.inf, - np.inf], value=np.nan, inplace=True
     )
@@ -103,14 +103,14 @@ def drop_nan_metafeatures():
     drop_cols = list(mfs.columns[mfs.isnull().any()])
     mfs.drop(labels=drop_cols, axis=1, inplace=True)
 
-    for item, mfs in zip(all_data, mfs.values.tolist()):
+    for item, mfs in zip(processed_data, mfs.values.tolist()):
         item["metafeatures"] = mfs
 
-    write_json(all_data, ALL_DATA_PATH, pretty=True)
+    write_json(processed_data, PROCESSED_DATA_PATH, pretty=True)
 
 def split_data():
-    all_data = read_json(ALL_DATA_PATH)
-    grouped_data_indices = group_json_objects(all_data, "dataset")
+    processed_data = read_json(PROCESSED_DATA_PATH)
+    grouped_data_indices = group_json_objects(processed_data, "dataset")
     groups = list(grouped_data_indices.keys())
 
     rnd = random.Random()
@@ -120,12 +120,12 @@ def split_data():
     train_data = []
     for group in groups[N_TEST_DATASETS:]:
         for i in grouped_data_indices[group]:
-            train_data.append(all_data[i])
+            train_data.append(processed_data[i])
 
     test_data = []
     for group in groups[:N_TEST_DATASETS]:
         for i in grouped_data_indices[group]:
-            test_data.append(all_data[i])
+            test_data.append(processed_data[i])
 
     write_json(train_data, TRAIN_DATA_PATH, pretty=True)
     write_json(test_data, TEST_DATA_PATH, pretty=True)

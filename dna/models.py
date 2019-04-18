@@ -90,7 +90,7 @@ class DNAModel(nn.Module):
         self.h1 = None
 
     def forward(self, args):
-        pipeline_id, x, pipeline = args
+        pipeline_id, pipeline, x = args
         x = x[0]
         self.h1 = self.input_model(x)
         # dynamically constructs dag
@@ -168,7 +168,7 @@ class SiameseModel(nn.Module):
         self.h1 = None
 
     def forward(self, args):
-        pipeline_id, x, (left_pipeline, right_pipeline) = args
+        pipeline_id, (left_pipeline, right_pipeline), x = args
         x = x[0]
         self.h1 = self.input_model(x)
 
