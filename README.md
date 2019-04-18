@@ -2,8 +2,8 @@
 
 
 ## Instructions for use:
-0. Gather the data from the directory that contains the Datasets.
-1. Make sure the data is in the dna/data folder and is in a tar.gz file
-2. From the root directory, run `dna/data/__init__.py` to get the train test splits from the tar.gz file
-3. To run the model, use `dna/main.py`
-4. To use Siamese instead of Regression, edit the main.py file.
+0. Copy the compressed data (<filename>.tar.xz) into ./data
+1. Configure the dataset path and size of the test split in ./dna/data/py
+2. Extract the data and create train/test splits by running `python3 dna/data.py`
+3. Configure the model type (`'regression'` or `'siamese'`) by setting `task` in ./dna/main.py
+4. Run the model using `python3 dna/main.py`

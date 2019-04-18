@@ -35,9 +35,9 @@ class Dataset(Dataset):
 
     def __getitem__(self, item: int):
         x = torch.tensor(
-                self.data[item][self.features_key],
-                dtype=torch.float32,
-                device=self.device
+            self.data[item][self.features_key],
+            dtype=torch.float32,
+            device=self.device
         ),
         y = torch.tensor(
             self.data[item][self.target_key],

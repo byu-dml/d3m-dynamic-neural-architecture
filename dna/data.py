@@ -8,16 +8,20 @@ import numpy as np
 import pandas as pd
 
 
-DATA_DIR = "./dna/data"
+DATA_DIR = "./data"
 # use this for a dataset of ~2k, this comes with the repo
-RAW_DATA_NAME = "complete_pipelines_and_metafeatures_test_again"
-#### use this for a dataset of ~550k and comment out the above ####
-# RAW_DATA_NAME = "complete_classification"
+RAW_DATA_NAME = "small_classification"  # 14 datasets
+N_TEST_DATASETS = 2
+
+# use this for a dataset of ~550k and comment out the above
+# RAW_DATA_NAME = "complete_classification"  # 199 datasets
+# N_TEST_DATASETS = 40
+
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
 ALL_DATA_PATH = os.path.join(DATA_DIR, "all_data.json")
-TRAIN_TEST_SPLIT_SEED = 1607242652
-N_TEST_DATASETS = 2
+TRAIN_TEST_SPLIT_SEED = 3746673648
+
 TRAIN_DATA_PATH = os.path.join(DATA_DIR, "train_data.json")
 TEST_DATA_PATH = os.path.join(DATA_DIR, "test_data.json")
 
