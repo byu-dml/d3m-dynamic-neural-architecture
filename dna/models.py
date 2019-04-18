@@ -3,6 +3,7 @@ import json
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class PrimitiveModel(nn.Module):
@@ -22,8 +23,7 @@ class PrimitiveModel(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 visible_layer_size, output_size
-            ),
-            nn.ReLU()
+            )
         )
 
     def forward(self, x):
@@ -47,8 +47,7 @@ class RegressionModel(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 input_size, 1
-            ),
-            # nn.Sigmoid(),
+            )
         )
 
     def forward(self, x):
@@ -72,8 +71,7 @@ class ClassificationModel(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 input_size, output_size
-            ),
-            nn.Sigmoid()
+            )
         )
 
     def forward(self, x):
@@ -92,9 +90,8 @@ class DNAModel(nn.Module):
     def forward(self, args):
         pipeline_id, pipeline, x = args
         x = x[0]
-        self.h1 = self.input_model(x)
-        # dynamically constructs dag
-        h2 = self.recursive_get_output(pipeline, len(pipeline) - 1)
+        self.h1 = F.relu(self.input_model(x))
+        h2 = F.relu(self.recursive_get_output(pipeline, len(pipeline) - 1))
         return torch.squeeze(self.output_model(h2))
 
     def save(self, save_dir):
@@ -141,7 +138,7 @@ class DNAModel(nn.Module):
         try:
             current_submodel = self.submodels[pipeline[current_index]["name"]]
             if "inputs.0" in pipeline[current_index]["inputs"]:
-                return current_submodel(self.h1)
+                return F.relu(current_submodel(self.h1))
 
             outputs = []
             for input in pipeline[current_index]["inputs"]:
@@ -149,14 +146,16 @@ class DNAModel(nn.Module):
                 outputs.append(curr_output)
 
             if len(outputs) > 1:
-                new_output = current_submodel(torch.cat(tuple(outputs), dim=1))
+                new_output = F.relu(current_submodel(torch.cat(tuple(outputs), dim=1)))
             else:
-                new_output = current_submodel(curr_output)
+                new_output = F.relu(current_submodel(curr_output))
+
             return new_output
         except Exception as e:
             print("There was an error in the foward pass.  It was ", e)
             print(pipeline[current_index])
             quit(1)
+
 
 class SiameseModel(nn.Module):
 

@@ -87,7 +87,6 @@ def group_json_objects(json_objects, group_key):
     grouped_objects = {}
     for i, obj in enumerate(json_objects):
         group = obj[group_key]
-        group = tuple(group)
         if not group in grouped_objects:
             grouped_objects[group] = []
         grouped_objects[group].append(i)
