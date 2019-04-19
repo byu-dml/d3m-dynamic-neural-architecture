@@ -6,15 +6,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
+ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
+ACTIVATION = 'relu'
+
 class PrimitiveModel(nn.Module):
 
     def __init__(self, name, input_layer_size, output_size):
         super(PrimitiveModel, self).__init__()
 
         n_layers = 1
-        n_hidden_nodes = 2
+        n_hidden_nodes = 1
         batch_norms = [True]
-        activation = nn.ReLU
+        activation = ACTIVATIONS[ACTIVATION]
 
         # The length of the batch norms list must be this size to account for the hidden layers and input layer
         assert len(batch_norms) == n_layers
@@ -58,16 +62,18 @@ class RegressionModel(nn.Module):
     def __init__(self, input_size):
         super(RegressionModel, self).__init__()
 
+        activation = ACTIVATIONS[ACTIVATION]
+
         self.net = nn.Sequential(
             # nn.BatchNorm1d(input_size),
             nn.Linear(
                 input_size, input_size
             ),
-            nn.ReLU(),
+            activation(),
             nn.Linear(
                 input_size, input_size
             ),
-            nn.ReLU(),
+            activation(),
             nn.Linear(
                 input_size, 1
             )
@@ -82,16 +88,18 @@ class ClassificationModel(nn.Module):
     def __init__(self, input_size, output_size):
         super(ClassificationModel, self).__init__()
 
+        activation = ACTIVATIONS[ACTIVATION]
+
         self.net = nn.Sequential(
             # nn.BatchNorm1d(input_size),
             nn.Linear(
                 input_size, input_size
             ),
-            nn.ReLU(),
+            activation(),
             nn.Linear(
                 input_size, input_size
             ),
-            nn.ReLU(),
+            activation(),
             nn.Linear(
                 input_size, output_size
             )
@@ -109,12 +117,13 @@ class DNAModel(nn.Module):
         self.submodels = submodels
         self.output_model = output_model
         self.h1 = None
+        self.f_activation = F_ACTIVATIONS[ACTIVATION]
 
     def forward(self, args):
         pipeline_id, pipeline, x = args
         x = x[0]
-        self.h1 = F.relu(self.input_model(x))
-        h2 = F.relu(self.recursive_get_output(pipeline, len(pipeline) - 1))
+        self.h1 = self.f_activation(self.input_model(x))
+        h2 = self.f_activation(self.recursive_get_output(pipeline, len(pipeline) - 1))
         return torch.squeeze(self.output_model(h2))
 
     def save(self, save_dir):
@@ -161,7 +170,7 @@ class DNAModel(nn.Module):
         try:
             current_submodel = self.submodels[pipeline[current_index]["name"]]
             if "inputs.0" in pipeline[current_index]["inputs"]:
-                return F.relu(current_submodel(self.h1))
+                return self.f_activation(current_submodel(self.h1))
 
             outputs = []
             for input in pipeline[current_index]["inputs"]:
@@ -169,9 +178,9 @@ class DNAModel(nn.Module):
                 outputs.append(curr_output)
 
             if len(outputs) > 1:
-                new_output = F.relu(current_submodel(torch.cat(tuple(outputs), dim=1)))
+                new_output = self.f_activation(current_submodel(torch.cat(tuple(outputs), dim=1)))
             else:
-                new_output = F.relu(current_submodel(curr_output))
+                new_output = self.f_activation(current_submodel(curr_output))
 
             return new_output
         except Exception as e:
@@ -188,6 +197,7 @@ class SiameseModel(nn.Module):
         self.submodels = submodels
         self.output_model = output_model
         self.h1 = None
+        self.f_activation = F_ACTIVATIONS[ACTIVATION]
 
     def forward(self, args):
         pipeline_id, (left_pipeline, right_pipeline), x = args
@@ -243,7 +253,7 @@ class SiameseModel(nn.Module):
         try:
             current_submodel = self.submodels[pipeline[current_index]["name"]]
             if "inputs.0" in pipeline[current_index]["inputs"]:
-                return current_submodel(self.h1)
+                return self.f_activation(current_submodel(self.h1))
 
             outputs = []
             for input in pipeline[current_index]["inputs"]:
@@ -251,11 +261,13 @@ class SiameseModel(nn.Module):
                 outputs.append(curr_output)
 
             if len(outputs) > 1:
-                new_output = current_submodel(torch.cat(tuple(outputs), dim=1))
+                new_output = self.f_activation(current_submodel(torch.cat(tuple(outputs), dim=1)))
             else:
-                new_output = current_submodel(curr_output)
+                new_output = self.f_activation(current_submodel(curr_output))
+
             return new_output
         except Exception as e:
             print("There was an error in the foward pass.  It was ", e)
             print(pipeline[current_index])
             quit(1)
+

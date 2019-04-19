@@ -26,6 +26,7 @@ def rmse(y_hat, y):
 def main():
     task = "regression"
     name = "{}_{}".format(task, uuid.uuid4())
+    print('NAME:', name)
     seed = 1022357373
     n_epochs = 100
     batch_size = 32
