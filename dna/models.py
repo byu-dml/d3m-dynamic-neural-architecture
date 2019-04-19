@@ -8,23 +8,46 @@ import torch.nn.functional as F
 
 class PrimitiveModel(nn.Module):
 
-    def __init__(self, name, visible_layer_size, output_size):
+    def __init__(self, name, input_layer_size, output_size):
         super(PrimitiveModel, self).__init__()
 
-        self.net = nn.Sequential(
-            nn.BatchNorm1d(visible_layer_size),
-            nn.Linear(
-                visible_layer_size, visible_layer_size
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                visible_layer_size, visible_layer_size
-            ),
-            nn.ReLU(),
-            nn.Linear(
-                visible_layer_size, output_size
-            )
-        )
+        n_layers = 1
+        n_hidden_nodes = 2
+        batch_norms = [True]
+        activation = nn.ReLU
+
+        # The length of the batch norms list must be this size to account for the hidden layers and input layer
+        assert len(batch_norms) == n_layers
+        assert n_layers >= 1
+        assert n_hidden_nodes >= 1
+
+        layers = []
+        if n_layers == 1:
+            # Create a single without an activation function
+            if batch_norms[0]:
+                layers.append(nn.BatchNorm1d(input_layer_size))
+            layers.append(nn.Linear(input_layer_size, output_size))
+        else:
+            # Create the first layer
+            if batch_norms[0]:
+                layers.append(nn.BatchNorm1d(input_layer_size))
+            layers.append(nn.Linear(input_layer_size, n_hidden_nodes))
+            layers.append(activation())
+
+            # Create the hidden layers not including the output layer
+            last_index = n_layers - 1
+            for i in range(1, last_index):
+                if batch_norms[i]:
+                    layers.append(nn.BatchNorm1d(n_hidden_nodes))
+                layers.append(nn.Linear(n_hidden_nodes, n_hidden_nodes))
+                layers.append(activation())
+
+            # Create the output layer without an activation function
+            if batch_norms[last_index]:
+                layers.append(nn.BatchNorm1d(n_hidden_nodes))
+            layers.append(nn.Linear(n_hidden_nodes, output_size))
+
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.net(x)

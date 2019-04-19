@@ -14,7 +14,7 @@ DATA_DIR = "./data"
 # N_TEST_DATASETS = 2
 
 # use this for a dataset of ~550k and comment out the above
-RAW_DATA_NAME = "classification"  # 199 datasets
+RAW_DATA_NAME = "complete_classification"  # 199 datasets
 N_TEST_DATASETS = 40
 
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")

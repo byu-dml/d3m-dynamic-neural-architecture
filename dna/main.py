@@ -27,7 +27,7 @@ def main():
     task = "regression"
     name = "{}_{}".format(task, uuid.uuid4())
     seed = 1022357373
-    n_epochs = 250
+    n_epochs = 100
     batch_size = 32
     drop_last = True
 
