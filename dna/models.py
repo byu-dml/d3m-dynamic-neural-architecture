@@ -10,10 +10,10 @@ F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoi
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
 ACTIVATION = 'relu'
 
-class PrimitiveModel(nn.Module):
+class Submodule(nn.Module):
 
-    def __init__(self, name, input_layer_size, output_size):
-        super(PrimitiveModel, self).__init__()
+    def __init__(self, name, input_layer_size, output_size, *, use_skip=False):
+        super(Submodule, self).__init__()
 
         n_layers = 1
         n_hidden_nodes = 1
@@ -53,60 +53,20 @@ class PrimitiveModel(nn.Module):
 
         self.net = nn.Sequential(*layers)
 
-    def forward(self, x):
-        return self.net(x)
+        if use_skip:
+            if input_layer_size == output_size:
+                self.skip = nn.Sequential()
+            else:
+                self.skip = nn.Linear(input_layer_size, output_size)
+        else:
+            self.skip = None
 
-
-class RegressionModel(nn.Module):
-
-    def __init__(self, input_size):
-        super(RegressionModel, self).__init__()
-
-        activation = ACTIVATIONS[ACTIVATION]
-
-        self.net = nn.Sequential(
-            # nn.BatchNorm1d(input_size),
-            nn.Linear(
-                input_size, input_size
-            ),
-            activation(),
-            nn.Linear(
-                input_size, input_size
-            ),
-            activation(),
-            nn.Linear(
-                input_size, 1
-            )
-        )
 
     def forward(self, x):
-        return self.net(x) # torch.clamp(self.net(x), 0, 1) #
-
-
-class ClassificationModel(nn.Module):
-
-    def __init__(self, input_size, output_size):
-        super(ClassificationModel, self).__init__()
-
-        activation = ACTIVATIONS[ACTIVATION]
-
-        self.net = nn.Sequential(
-            # nn.BatchNorm1d(input_size),
-            nn.Linear(
-                input_size, input_size
-            ),
-            activation(),
-            nn.Linear(
-                input_size, input_size
-            ),
-            activation(),
-            nn.Linear(
-                input_size, output_size
-            )
-        )
-
-    def forward(self, x):
-        return self.net(x) # torch.clamp(self.net(x), 0, 1)
+        if self.skip:
+            return self.net(x) + self.skip(x)
+        else:
+            return self.net(x)
 
 
 class DNAModel(nn.Module):
@@ -270,4 +230,3 @@ class SiameseModel(nn.Module):
             print("There was an error in the foward pass.  It was ", e)
             print(pipeline[current_index])
             quit(1)
-

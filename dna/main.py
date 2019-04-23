@@ -113,7 +113,7 @@ def main():
             config["plot"]["ylabel"],
             path = config["plot"]["path"]
         )
-    print("baselines", problem.baselines)
+    # print("baselines", problem.baselines)
 
 if __name__ == "__main__":
     main()
