@@ -118,6 +118,12 @@ class Regression(BaseProblem):
             }
         }
 
+    def rank(self):
+        # Use the problem's training set, validation set, and model
+        # Return list of ordered pipelines in descending order
+        # TODO: Handle ties
+        pass
+
 def main():
     problem = Regression(seed = 0)
     print(problem.baselines)

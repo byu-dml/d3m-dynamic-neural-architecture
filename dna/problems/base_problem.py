@@ -121,3 +121,6 @@ class BaseProblem(object):
 
     def _randint(self):
         return self._random.randint(0, 2**32-1)
+
+    def rank(self):
+        raise NotImplementedError()
