@@ -28,7 +28,8 @@ def main():
     name = "{}_{}".format(task, uuid.uuid4())
     print('NAME:', name)
     seed = 1022357373
-    n_epochs = 100
+    n_epochs = 300
+    print('Number Of Epochs:', n_epochs)
     batch_size = 32
     drop_last = True
 
@@ -68,8 +69,9 @@ def main():
         seed = seed,
     )
     # problem.model.load(config["weights_dir"])
-    learning_rate = 1e-4
-    optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)
+    learning_rate = 5e-5
+    print('Learning Rate:', learning_rate)
+    optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)  # Adam, SGD, Adagrad
 
     trainer = PyTorchModelTrainer(
         problem.model,
