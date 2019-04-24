@@ -28,12 +28,10 @@ class BaseProblem(object):
         self.drop_last = drop_last
         self.device = device
         self.seed = seed
-
         self._random = random.Random()
         self._random.seed(seed)
 
         self._load_data()
-
         self._cv_folds = make_cv_folds(
             self._train_data,
             self.batch_group_key,
@@ -65,7 +63,7 @@ class BaseProblem(object):
         ]
         self._train_data_loader = self._get_data_loader(train_data)
         self._validation_data_loader = self._get_data_loader(validation_data)
-        self._compute_baselines()
+        # self._compute_baselines()
 
     def _compute_baselines(self):
         self._baselines = {

@@ -87,21 +87,25 @@ class GroupDataLoader(object):
         for group, group_indices in grouped_data.items():
             group_data = [self.data[i] for i in group_indices]
             group_dataset = self.dataset_class(group_data, **self.dataset_params)
-            self._group_dataloaders[group] = self._get_data_loader(
+            new_dataloader = self._get_data_loader(
                 group_dataset
             )
+            # assert(len(new_dataloader) != 0)
+            self._group_dataloaders[group] = new_dataloader
 
     def _get_data_loader(self, data):
         if self.shuffle:
             sampler = RandomSampler(len(data), self._randint())
         else:
             sampler = None
-        return DataLoader(
+        dataloader = DataLoader(
             dataset = data,
             sampler =  sampler,
             batch_size = self.batch_size,
             drop_last = self.drop_last
         )
+        # assert(len(dataloader) != 0)
+        return dataloader
 
     def _randint(self):
         return self._random.randint(0,2**32-1)
@@ -113,6 +117,7 @@ class GroupDataLoader(object):
         """
         self._group_batches = []
         for group, group_dataloader in self._group_dataloaders.items():
+            # assert(len(group_dataloader) != 0)
             self._group_batches += [group] * len(group_dataloader)
         self._random.shuffle(self._group_batches)
 
@@ -127,7 +132,9 @@ class GroupDataLoader(object):
                     self._group_dataloaders[group]
                 )
             x_batch, y_batch = next(group_dataloader_iters[group])
-            yield (group, x_batch), y_batch
+            # since all pipeline are the same in this group, just grab one of them
+            pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]
+            yield (group, pipeline, x_batch), y_batch
         raise StopIteration()
 
     def __len__(self):

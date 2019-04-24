@@ -1,16 +1,17 @@
-import numpy as np
-import torch.optim as optim
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+import torch.optim as optim
+import uuid
 
 from data import write_json
-from problems import Siamese, Regression
+from problems import Regression, Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
 
 
 def save_weights():
-	for key, model in primitive_submodel_dict.items():
-		torch.save(model, "%s.pt" % key)
+    for key, model in primitive_submodel_dict.items():
+        torch.save(model, "%s.pt" % key)
 
 
 def accuracy(y_hat, y):
@@ -24,11 +25,13 @@ def rmse(y_hat, y):
 
 def main():
     task = "regression"
+    name = "{}_{}".format(task, uuid.uuid4())
     seed = 1022357373
-    n_epochs = 1000
+    n_epochs = 250
+    batch_size = 32
+    drop_last = True
 
     if task == "regression":
-        name = "temp_regression"
         config = {
             "weights_dir": f"./results/{name}/weights",
             "outputs_dir": f"./results/{name}/outputs",
@@ -41,11 +44,9 @@ def main():
                 "path": f"./results/{name}/plot.pdf",
             }
         }
-        problem = Regression(
-           seed = seed,
-        )
+        problem_class = Regression
+
     elif task == "siamese":
-        name = "temp_siamese"
         config = {
             "weights_dir": f"./results/{name}/weights",
             "outputs_dir": f"./results/{name}/outputs",
@@ -58,11 +59,14 @@ def main():
                 "path": f"./results/{name}/plot.pdf",
             }
         }
-        problem = Siamese(
-           seed = seed,
-        )
-    # problem.model.load(config["weights_dir"])
+        problem_class = Siamese
 
+    problem = problem_class(
+        batch_size = batch_size,
+        drop_last = drop_last,
+        seed = seed,
+    )
+    # problem.model.load(config["weights_dir"])
     learning_rate = 1e-4
     optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)
 

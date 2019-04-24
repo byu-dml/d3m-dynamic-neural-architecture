@@ -38,7 +38,7 @@ class Dataset(Dataset):
             self.data[item][self.features_key],
             dtype=torch.float32,
             device=self.device
-        )
+        ),
         y = torch.tensor(
             self.data[item][self.target_key],
             dtype=self._y_dtype,

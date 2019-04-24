@@ -3,11 +3,12 @@ import json
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class PrimitiveModel(nn.Module):
 
-    def __init__(self, name, visible_layer_size):
+    def __init__(self, name, visible_layer_size, output_size):
         super(PrimitiveModel, self).__init__()
 
         self.net = nn.Sequential(
@@ -21,9 +22,8 @@ class PrimitiveModel(nn.Module):
             ),
             nn.ReLU(),
             nn.Linear(
-                visible_layer_size, visible_layer_size
-            ),
-            nn.ReLU()
+                visible_layer_size, output_size
+            )
         )
 
     def forward(self, x):
@@ -47,8 +47,7 @@ class RegressionModel(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 input_size, 1
-            ),
-            # nn.Sigmoid(),
+            )
         )
 
     def forward(self, x):
@@ -72,8 +71,7 @@ class ClassificationModel(nn.Module):
             nn.ReLU(),
             nn.Linear(
                 input_size, output_size
-            ),
-            nn.Sigmoid()
+            )
         )
 
     def forward(self, x):
@@ -87,14 +85,13 @@ class DNAModel(nn.Module):
         self.input_model = input_model
         self.submodels = submodels
         self.output_model = output_model
+        self.h1 = None
 
     def forward(self, args):
-        pipeline, x = args
-        h1 = self.input_model(x)
-        pipeline_model = nn.Sequential(
-            *[self.submodels[name] for name in pipeline.split("___")]
-        )
-        h2 = pipeline_model(h1)
+        pipeline_id, pipeline, x = args
+        x = x[0]
+        self.h1 = F.relu(self.input_model(x))
+        h2 = F.relu(self.recursive_get_output(pipeline, len(pipeline) - 1))
         return torch.squeeze(self.output_model(h2))
 
     def save(self, save_dir):
@@ -131,6 +128,34 @@ class DNAModel(nn.Module):
     def _load(self, model, path):
         model.load_state_dict(torch.load(path))
 
+    def recursive_get_output(self, pipeline, current_index):
+        """
+        The recursive call to find the input
+        :param pipeline: the pipeline list containing the submodels
+        :param current_index: the index of the current submodel
+        :return:
+        """
+        try:
+            current_submodel = self.submodels[pipeline[current_index]["name"]]
+            if "inputs.0" in pipeline[current_index]["inputs"]:
+                return F.relu(current_submodel(self.h1))
+
+            outputs = []
+            for input in pipeline[current_index]["inputs"]:
+                curr_output = self.recursive_get_output(pipeline, input)
+                outputs.append(curr_output)
+
+            if len(outputs) > 1:
+                new_output = F.relu(current_submodel(torch.cat(tuple(outputs), dim=1)))
+            else:
+                new_output = F.relu(current_submodel(curr_output))
+
+            return new_output
+        except Exception as e:
+            print("There was an error in the foward pass.  It was ", e)
+            print(pipeline[current_index])
+            quit(1)
+
 
 class SiameseModel(nn.Module):
 
@@ -139,18 +164,15 @@ class SiameseModel(nn.Module):
         self.input_model = input_model
         self.submodels = submodels
         self.output_model = output_model
+        self.h1 = None
 
     def forward(self, args):
-        (left_pipeline, right_pipeline), x = args
-        h1 = self.input_model(x)
-        left_model = nn.Sequential(
-            *[self.submodels[name] for name in left_pipeline.split("___")]
-        )
-        right_model = nn.Sequential(
-            *[self.submodels[name] for name in right_pipeline.split("___")]
-        )
-        left_h2 = left_model(h1)
-        right_h2 = right_model(h1)
+        pipeline_id, (left_pipeline, right_pipeline), x = args
+        x = x[0]
+        self.h1 = self.input_model(x)
+
+        left_h2 = self.recursive_get_output(left_pipeline, len(left_pipeline) - 1)
+        right_h2 = self.recursive_get_output(right_pipeline, len(right_pipeline) - 1)
         h2 = torch.cat((left_h2, right_h2), 1)
         return self.output_model(h2)
 
@@ -187,3 +209,30 @@ class SiameseModel(nn.Module):
 
     def _load(self, model, path):
         model.load_state_dict(torch.load(path))
+
+    def recursive_get_output(self, pipeline, current_index):
+        """
+        The recursive call to find the input
+        :param pipeline: the pipeline list containing the submodels
+        :param current_index: the index of the current submodel
+        :return:
+        """
+        try:
+            current_submodel = self.submodels[pipeline[current_index]["name"]]
+            if "inputs.0" in pipeline[current_index]["inputs"]:
+                return current_submodel(self.h1)
+
+            outputs = []
+            for input in pipeline[current_index]["inputs"]:
+                curr_output = self.recursive_get_output(pipeline, input)
+                outputs.append(curr_output)
+
+            if len(outputs) > 1:
+                new_output = current_submodel(torch.cat(tuple(outputs), dim=1))
+            else:
+                new_output = current_submodel(curr_output)
+            return new_output
+        except Exception as e:
+            print("There was an error in the foward pass.  It was ", e)
+            print(pipeline[current_index])
+            quit(1)
