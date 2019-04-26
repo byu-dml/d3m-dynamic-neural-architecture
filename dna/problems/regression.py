@@ -4,6 +4,7 @@ import numpy as np
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
 from models import PrimitiveModel, RegressionModel, DNAModel
+from scipy.stats import spearmanr
 
 # TODO: make this dynamic
 lookup_input_size = {
@@ -118,11 +119,57 @@ class Regression(BaseProblem):
             }
         }
 
-    def rank(self):
-        # Use the problem's training set, validation set, and model
-        # Return list of ordered pipelines in descending order
+    def get_correlation_coefficient(self):
         # TODO: Handle ties
-        pass
+        dataset_performances = {}
+        pipeline_key = 'pipeline_ids'
+        actual_key = 'f1_actuals'
+        predict_key = 'f1_predictions'
+        # self.test_data_loader.shuffle = False
+        for x_batch, y_batch in self.test_data_loader:
+            y_hat_batch = self.model(x_batch)
+
+            # Get the pipeline id and the data set ids that correspond to it
+            pipeline_id, pipeline, x, dataset_ids = x_batch
+
+            # Create a list of tuples containing the pipeline id and its f1 values for each data set in this batch
+            for i in range(len(dataset_ids)):
+                dataset_id = dataset_ids[i]
+                f1_actual = y_batch[i].item()
+                f1_predict = y_hat_batch[i].item()
+                if dataset_id in dataset_performances:
+                    dataset_performance = dataset_performances[dataset_id]
+                    pipeline_ids = dataset_performance[pipeline_key]
+                    f1_actuals = dataset_performance[actual_key]
+                    f1_predictions = dataset_performance[predict_key]
+                    pipeline_ids.append(pipeline_id)
+                    f1_actuals.append(f1_actual)
+                    f1_predictions.append(f1_predict)
+                else:
+                    dataset_performance = {pipeline_key: [pipeline_id], actual_key: [f1_actual], predict_key: [f1_predict]}
+                    dataset_performances[dataset_id] = dataset_performance
+
+        dataset_cc_sum = 0.0
+        dataset_performances = dataset_performances.values()
+        for dataset_performance in dataset_performances:
+            f1_actuals = dataset_performance[actual_key]
+            f1_predictions = dataset_performance[predict_key]
+            actual_ranks = self.rank(f1_actuals)
+            predicted_ranks = self.rank(f1_predictions)
+
+            # Get the spearman correlation coefficient for this data set
+            spearman_result = spearmanr(actual_ranks, predicted_ranks)
+            dataset_cc = spearman_result.correlation
+            dataset_cc_sum += dataset_cc
+        num_datasets = len(dataset_performances)
+        mean_dataset_cc = dataset_cc_sum / num_datasets
+        return mean_dataset_cc
+
+    @staticmethod
+    def rank(performances):
+        ranks = np.argsort(performances)[::-1]
+        return ranks
+
 
 def main():
     problem = Regression(seed = 0)

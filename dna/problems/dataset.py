@@ -26,6 +26,7 @@ class Dataset(Dataset):
         self.data = data
         self.features_key = features_key
         self.target_key = target_key
+        self.dataset_key = 'dataset'
         self.task_type = task_type
         if self.task_type == "CLASSIFICATION":
             self._y_dtype = torch.int64
@@ -33,14 +34,17 @@ class Dataset(Dataset):
             self._y_dtype = torch.float32
         self.device = device
 
-    def __getitem__(self, item: int):
-        x = torch.tensor(
-            self.data[item][self.features_key],
+    def __getitem__(self, index: int):
+        item = self.data[index]
+        dataset = item[self.dataset_key]
+        metafeatures = torch.tensor(
+            item[self.features_key],
             dtype=torch.float32,
             device=self.device
-        ),
+        )
+        x = (dataset, metafeatures)
         y = torch.tensor(
-            self.data[item][self.target_key],
+            item[self.target_key],
             dtype=self._y_dtype,
             device=self.device
         )

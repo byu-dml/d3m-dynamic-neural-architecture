@@ -131,10 +131,12 @@ class GroupDataLoader(object):
                 group_dataloader_iters[group] = iter(
                     self._group_dataloaders[group]
                 )
-            x_batch, y_batch = next(group_dataloader_iters[group])
-            # since all pipeline are the same in this group, just grab one of them
+            # Get the next batch of metafeatures vectors, targets, and their corresponding data set ids
+            (dataset_ids, x_batch), y_batch = next(group_dataloader_iters[group])
+
+            # Since all pipeline are the same in this group, just grab one of them
             pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]
-            yield (group, pipeline, x_batch), y_batch
+            yield (group, pipeline, x_batch, dataset_ids), y_batch
         raise StopIteration()
 
     def __len__(self):

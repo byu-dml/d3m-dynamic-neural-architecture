@@ -70,9 +70,9 @@ class RegressionModel(nn.Module):
         activation = ACTIVATIONS[ACTIVATION]
         self.net = create_model(input_layer_size=input_size,
                                 output_size=1,
-                                n_layers=5,
-                                n_hidden_nodes=44,
-                                batch_norms=[False, False, False, False, False],
+                                n_layers=3,
+                                n_hidden_nodes=64,
+                                batch_norms=[False, False, False],
                                 activation=activation)
 
     def forward(self, x):
@@ -116,8 +116,7 @@ class DNAModel(nn.Module):
         self.f_activation = F_ACTIVATIONS[ACTIVATION]
 
     def forward(self, args):
-        pipeline_id, pipeline, x = args
-        x = x[0]
+        pipeline_id, pipeline, x, datasets = args
         self.h1 = self.f_activation(self.input_model(x))
         h2 = self.f_activation(self.recursive_get_output(pipeline, len(pipeline) - 1))
         return torch.squeeze(self.output_model(h2))
@@ -197,7 +196,6 @@ class SiameseModel(nn.Module):
 
     def forward(self, args):
         pipeline_id, (left_pipeline, right_pipeline), x = args
-        x = x[0]
         self.h1 = self.input_model(x)
 
         left_h2 = self.recursive_get_output(left_pipeline, len(left_pipeline) - 1)

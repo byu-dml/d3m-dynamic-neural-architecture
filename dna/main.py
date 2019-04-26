@@ -29,7 +29,7 @@ def main():
 
     if loading_model:
         # Set the name to a model that already exists
-        id_ = '219c3a37-1d44-42bb-9849-fdc413e5f8c6'
+        id_ = '8c18d0e5-364d-4f9a-a61f-c9c0aeffdddf'
     else:
         # Create a new name for a new model to train
         id_ = uuid.uuid4()
@@ -133,7 +133,7 @@ def main():
 
     # Rank the pipelines using the model and compare to the true ranking using the spearmann correlation coefficient
     # RANK TRAINING AND VALIDATION DATA
-    spearmann_cc = problem.rank()
+    spearmann_cc = problem.get_correlation_coefficient()
     print('Spearmann Correlation Coefficient:', spearmann_cc)
 
 if __name__ == "__main__":
