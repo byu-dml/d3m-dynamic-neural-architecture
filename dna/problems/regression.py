@@ -92,6 +92,50 @@ class Regression(BaseProblem):
         pass
 
     def _compute_baselines(self):
+        primitive_scores = {}
+
+        # For each pipeline
+        for item in self.train_data:
+            f1 = item[self._target_key]
+            pipeline = item['pipeline']
+            for primitive in pipeline:
+                # Append the f1 value to the list of f1 values of this pipeline dataset pair for this primitive
+                primitive = primitive['name']
+                if primitive in primitive_scores:
+                    score_list = primitive_scores[primitive]
+                    score_list.append(f1)
+                else:
+                    primitive_scores[primitive] = [f1]
+
+        # Compute the average f1 value of the f1 list for each primitive
+        for primitive in primitive_scores:
+            score_list = primitive_scores[primitive]
+            primitive_score = np.mean(score_list)
+            primitive_scores[primitive] = primitive_score.item()
+
+        # Compute training and validation RMSE using this naive model
+        training_RMSE = self.evaluate_baseline(primitive_scores, self.train_data)
+        validation_RMSE = self.evaluate_baseline(primitive_scores, self.validation_data)
+        print('Baseline Training RMSE:', training_RMSE)
+        print('Baseline Validation RMSE:', validation_RMSE)
+
+    def evaluate_baseline(self, primitive_scores, dataset):
+        SE = 0.0
+        for item in dataset:
+            pipeline = item['pipeline']
+            f1_sum = 0.0
+            for primitive in pipeline:
+                primitive = primitive['name']
+                f1 = primitive_scores[primitive]
+                f1_sum += f1
+            f1_predict = f1_sum / len(pipeline)
+            f1_actual = item[self._target_key]
+            SE += (f1_actual - f1_predict) ** 2
+        MSE = SE / len(dataset)
+        RMSE = np.sqrt(MSE)
+        return RMSE
+
+    def _compute_mean_baseline(self):
         train_accuracies = []
         for x_batch, y_batch in self._train_data_loader:
             train_accuracies.extend(y_batch.tolist())

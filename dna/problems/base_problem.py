@@ -55,15 +55,15 @@ class BaseProblem(object):
         raise NotImplementedError()
 
     def _init_fold(self, fold):
-        train_data = [
+        self.train_data = [
             self._train_data[i] for i in self._cv_folds[fold][0]
         ]
-        validation_data = [
+        self.validation_data = [
             self._train_data[i] for i in self._cv_folds[fold][1]
         ]
-        self._train_data_loader = self._get_data_loader(train_data)
-        self._validation_data_loader = self._get_data_loader(validation_data)
-        # self._compute_baselines()
+        self._train_data_loader = self._get_data_loader(self.train_data)
+        self._validation_data_loader = self._get_data_loader(self.validation_data)
+        self._compute_baselines()
 
     def _compute_baselines(self):
         self._baselines = {
