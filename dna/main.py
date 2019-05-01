@@ -1,12 +1,11 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.optim as optim
 import uuid
 
-from data import write_json
-from problems import Regression, Siamese
-from pytorch_model_trainer import PyTorchModelTrainer
+from dna.problems.regression import Regression
+from dna.problems.siamese import Siamese
+from dna.pytorch_model_trainer import PyTorchModelTrainer
 
 
 def save_weights():
@@ -80,9 +79,11 @@ def main():
 
     if loading_model:
         # Load the model
+        print('Loading previous model')
         problem.model.load(config["weights_dir"])
     else:
         # Train a new model
+        print('Training new model')
         learning_rate = 5e-5
         print('Learning Rate:', learning_rate)
         optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)  # Adam, SGD, Adagrad
@@ -132,9 +133,10 @@ def main():
         print("baselines", problem.baselines)
 
     # Rank the pipelines using the model and compare to the true ranking using the spearmann correlation coefficient
-    # RANK TRAINING AND VALIDATION DATA
-    spearmann_cc = problem.get_correlation_coefficient()
-    print('Spearmann Correlation Coefficient:', spearmann_cc)
+    training_SCC = problem.get_correlation_coefficient(problem.train_data_loader)
+    validation_SCC = problem.get_correlation_coefficient(problem.validation_data_loader)
+    print('Training Spearmann Correlation Coefficient:', training_SCC)
+    print('Validation Spearmann Correlation Coefficient:', validation_SCC)
 
 if __name__ == "__main__":
     main()

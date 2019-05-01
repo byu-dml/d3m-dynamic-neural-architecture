@@ -163,14 +163,13 @@ class Regression(BaseProblem):
             }
         }
 
-    def get_correlation_coefficient(self):
+    def get_correlation_coefficient(self, dataloader):
         # TODO: Handle ties
         dataset_performances = {}
         pipeline_key = 'pipeline_ids'
         actual_key = 'f1_actuals'
         predict_key = 'f1_predictions'
-        # self.test_data_loader.shuffle = False
-        for x_batch, y_batch in self.test_data_loader:
+        for x_batch, y_batch in dataloader:
             y_hat_batch = self.model(x_batch)
 
             # Get the pipeline id and the data set ids that correspond to it
