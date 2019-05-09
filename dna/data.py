@@ -41,9 +41,6 @@ def write_json(data, path, pretty=False):
     else:
         json.dump(data, open(path, "w"))
 
-def extract_data():
-    with tarfile.open(COMPRESSED_RAW_DATA_PATH, "r:xz") as tar:
-        tar.extract(RAW_DATA_NAME + ".json", DATA_DIR)
 
 def reformat_data():
     data = read_json(RAW_DATA_PATH)
@@ -163,6 +160,28 @@ def make_cv_folds(
         folds.append((train_indices, test_indices))
 
     return folds
+
+
+def _extract_tarfile(path):
+    assert tarfile.is_tarfile(path)
+
+    dirname = os.path.dirname(path)
+    with tarfile.open(path, 'r:*') as tar:
+        members = tar.getmembers()
+        if len(members) != 1:
+            raise ValueError('Expected tar file with 1 member, but got {}'.format(len(members)))
+        tar.extractall(os.path.dirname(path))
+        extracted_path = os.path.join(dirname, tar.getmembers()[0].name)
+
+    return extracted_path
+
+
+def get_data(path):
+    if tarfile.is_tarfile(path):
+        path = _extract_tarfile(path)
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return data
 
 
 def main():
