@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from data import group_json_objects, TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
-from models import PrimitiveModel, ClassificationModel, SiameseModel
+from models import Submodule, SiameseModel
 
 lookup_input_size = {
     "d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
