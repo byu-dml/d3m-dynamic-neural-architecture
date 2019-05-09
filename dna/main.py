@@ -20,7 +20,10 @@ def accuracy(y_hat, y):
 
 
 def rmse(y_hat, y):
-    return np.average((np.array(y_hat) - np.array(y))**2)**.5
+    """
+    Calculates the unbiased standard deviation of the residuals.
+    """
+    return np.std(np.array(y_hat) - np.array(y), ddof=1)
 
 
 def main():
