@@ -130,13 +130,13 @@ def main():
             config["plot"]["ylabel"],
             path = config["plot"]["path"]
         )
-        # print("baselines", problem.baselines)
 
     # Rank the pipelines using the model and compare to the true ranking using the spearman correlation coefficient
     training_SCC = problem.get_correlation_coefficient(problem.train_data_loader)
     validation_SCC = problem.get_correlation_coefficient(problem.validation_data_loader)
     print('Training Spearmann Correlation Coefficient:', training_SCC)
     print('Validation Spearmann Correlation Coefficient:', validation_SCC)
+    # print("baselines", problem.baselines)
 
 if __name__ == "__main__":
     main()

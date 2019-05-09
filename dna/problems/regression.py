@@ -3,8 +3,8 @@ import numpy as np
 
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
-from models import PrimitiveModel, RegressionModel, DNAModel
 from scipy.stats import spearmanr
+from models import Submodule, DNAModel
 
 # TODO: make this dynamic
 lookup_input_size = {
@@ -63,7 +63,7 @@ class Regression(BaseProblem):
 
         torch.manual_seed(self._randint())
         torch.cuda.manual_seed_all(self._randint())
-        input_model = PrimitiveModel("input", self._shape[0], self._shape[0])
+        input_model = Submodule("input", self._shape[0], self._shape[0])
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
@@ -74,11 +74,11 @@ class Regression(BaseProblem):
                         n_inputs = lookup_input_size[primitive_name]
                     except KeyError as e:
                         n_inputs = 1
-                    submodels[primitive_name] = PrimitiveModel(
+                    submodels[primitive_name] = Submodule(
                         primitive_name, n_inputs * self._shape[0], self._shape[0]
                     )
                     submodels[primitive_name].cuda()
-        output_model = RegressionModel(self._shape[0])
+        output_model = Submodule('task', self._shape[0], 1, use_skip=False)
         output_model.cuda()
         self._model = DNAModel(input_model, submodels, output_model)
         if "cuda" in self.device:
