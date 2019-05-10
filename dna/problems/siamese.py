@@ -3,8 +3,8 @@ import torch
 
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
-from models import PrimitiveModel, ClassificationModel, SiameseModel
 from .siamese_data_loader import SiameseDataLoader
+from models import Submodule, SiameseModel
 
 lookup_input_size = {
     "d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
@@ -56,7 +56,7 @@ class Siamese(BaseProblem):
 
         torch.manual_seed(self._randint())
         torch.cuda.manual_seed_all(self._randint())
-        input_model = PrimitiveModel("input", self._shape[0], self._shape[0])
+        input_model = Submodule("input", self._shape[0], self._shape[0])
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
@@ -67,11 +67,11 @@ class Siamese(BaseProblem):
                         n_inputs = lookup_input_size[primitive_name]
                     except KeyError as e:
                         n_inputs = 1
-                    submodels[primitive_name] = PrimitiveModel(
+                    submodels[primitive_name] = Submodule(
                         primitive_name, n_inputs * self._shape[0], self._shape[0]
                     )
                     submodels[primitive_name].cuda()
-        output_model = ClassificationModel(2 * self._shape[0], self._shape[1])
+        output_model = Submodule(2 * self._shape[0], self._shape[1])
         output_model.cuda()
         self._model = SiameseModel(input_model, submodels, output_model)
         if "cuda" in self.device:

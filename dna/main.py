@@ -37,7 +37,6 @@ def main():
 
     seed = 1022357373
     n_epochs = 50000
-    print('Number Of Epochs:', n_epochs)
     batch_size = 32
     drop_last = True
 
@@ -85,6 +84,7 @@ def main():
         # Train a new model
         print('Training new model')
         learning_rate = 1e-4
+        print('Number Of Epochs:', n_epochs)
         print('Learning Rate:', learning_rate)
         optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)  # Adam, SGD, Adagrad
 
@@ -130,14 +130,14 @@ def main():
             config["plot"]["ylabel"],
             path = config["plot"]["path"]
         )
-        # print("baselines", problem.baselines)
-
-    # Rank the pipelines using the model and compare to the true ranking using the spearmann correlation coefficient
     print('Computing the Spearmann Correlation Coefficient...')
+
+    # Rank the pipelines using the model and compare to the true ranking using the spearman correlation coefficient
     training_SCC = problem.get_correlation_coefficient(problem.train_data_loader)
     validation_SCC = problem.get_correlation_coefficient(problem.validation_data_loader)
     print('Training Spearmann Correlation Coefficient:', training_SCC)
     print('Validation Spearmann Correlation Coefficient:', validation_SCC)
+    # print("baselines", problem.baselines)
 
 if __name__ == "__main__":
     main()
