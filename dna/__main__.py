@@ -1,21 +1,61 @@
 import argparse
+import json
+import os
 import sys
 import typing
 
-from data import get_data
+from data import get_data, split_data
 
 
 def configure_split_parser(parser):
     parser.add_argument(
-        '--data-path', type=str, action='store',
-        required=True, help='path of train data'
+        '--data-path', type=str, action='store', required=True,
+        help='path of data to split'
     )
-
+    parser.add_argument(
+        '--train-path', type=str, action='store', default=None,
+        help='path to write train data'
+    )
+    parser.add_argument(
+        '--test-path', type=str, action='store', default=None,
+        help='path to write test data'
+    )
+    parser.add_argument(
+        '--test-size', type=int, action='store', default=40,
+        help='the number of datasets in the test split'
+    )
+    parser.add_argument(
+        '--seed', type=int, action='store', default=3746673648,
+        help='seed used to split the data into train and test sets'
+    )
 
 def split_handler(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data
 ):
-    data = data_resolver(getattr(arguments, 'data_path'))
+    data_path = getattr(arguments, 'data_path')
+    data = data_resolver(data_path)
+    train_data, test_data = split_data(
+        data, 'dataset_id', getattr(arguments, 'test_size'),
+        getattr(arguments, 'seed')
+    )
+
+    train_path = getattr(arguments, 'train_path')
+    if train_path is None:
+        dirname, data_filename = data_path.rsplit(os.path.sep, 1)
+        data_filename, ext = data_filename.split('.', 1)
+        train_path = os.path.join(dirname, 'train_' + data_filename + '.json')
+
+    test_path = getattr(arguments, 'test_path')
+    if test_path is None:
+        dirname, data_filename = data_path.rsplit(os.path.sep, 1)
+        data_filename, ext = data_filename.split('.', 1)
+        test_path = os.path.join(dirname, 'test_' + data_filename + '.json')
+
+    with open(train_path, 'w') as f:
+        json.dump(train_data, f)
+
+    with open(test_path, 'w') as f:
+        json.dump(test_data, f)
 
 
 def configure_train_parser(parser):
