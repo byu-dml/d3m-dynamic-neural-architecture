@@ -1,10 +1,10 @@
 import random
-from typing import Type, List, Dict
+from typing import List, Dict
 
 from torch.utils.data import Sampler, DataLoader
 
+from .regression_dataset import RegressionDataset
 from data import group_json_objects
-from problems import Dataset
 
 
 class RandomSampler(Sampler):
@@ -33,7 +33,7 @@ class RandomSampler(Sampler):
         return self.n
 
 
-class GroupDataLoader(object):
+class RegressionDataLoader(object):
     """
     Batches a dataset for PyTorch Neural Network training. Partitions the
     dataset so that batches belong to the same group.
@@ -55,13 +55,13 @@ class GroupDataLoader(object):
     """
 
     def __init__(
-        self, data: List[Dict], group_key: str, dataset_class: Type[Dataset],
-        dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
+        self, data: List[Dict], group_key: str, pipeline_key: str, dataset_params: dict,
+            batch_size: int, drop_last: bool, shuffle: bool,
         seed: int
     ):
         self.data = data
         self.group_key = group_key
-        self.dataset_class = dataset_class
+        self.pipeline_key = pipeline_key
         self.dataset_params = dataset_params
         self.batch_size = batch_size
         self.drop_last = drop_last
@@ -86,7 +86,7 @@ class GroupDataLoader(object):
         self._group_dataloaders = {}
         for group, group_indices in grouped_data.items():
             group_data = [self.data[i] for i in group_indices]
-            group_dataset = self.dataset_class(group_data, **self.dataset_params)
+            group_dataset = RegressionDataset(group_data, **self.dataset_params)
             new_dataloader = self._get_data_loader(
                 group_dataset
             )
@@ -135,7 +135,7 @@ class GroupDataLoader(object):
             (dataset_ids, x_batch), y_batch = next(group_dataloader_iters[group])
 
             # Since all pipeline are the same in this group, just grab one of them
-            pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]
+            pipeline = self._group_dataloaders[group].dataset.data[0][self.pipeline_key]
             yield (group, pipeline, x_batch, dataset_ids), y_batch
         raise StopIteration()
 

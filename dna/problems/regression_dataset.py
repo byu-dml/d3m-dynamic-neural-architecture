@@ -1,10 +1,9 @@
 from typing import List, Dict
-
-import torch
 from torch.utils.data import Dataset
+import torch
 
 
-class Dataset(Dataset):
+class RegressionDataset(Dataset):
     """
     A subclass of torch.utils.data.Dataset for handling simple JSON structed
     data.
@@ -20,19 +19,14 @@ class Dataset(Dataset):
     """
 
     def __init__(
-        self, data: List[Dict], features_key: str, target_key: str,
-        task_type: str, device: str
+        self, data: List[Dict], data_set_key, features_key: str, target_key: str, device: str
     ):
         self.data = data
         self.features_key = features_key
         self.target_key = target_key
-        self.dataset_key = 'dataset'
-        self.task_type = task_type
-        if self.task_type == "CLASSIFICATION":
-            self._y_dtype = torch.int64
-        elif self.task_type == "REGRESSION":
-            self._y_dtype = torch.float32
+        self.dataset_key = data_set_key
         self.device = device
+        self._y_dtype = torch.float32
 
     def __getitem__(self, index: int):
         item = self.data[index]
@@ -52,3 +46,4 @@ class Dataset(Dataset):
 
     def __len__(self):
         return len(self.data)
+

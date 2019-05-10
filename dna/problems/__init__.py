@@ -1,4 +1,3 @@
-from .dataset import Dataset
-from .group_data_loader import GroupDataLoader
+from .regression_dataset import RegressionDataset
 from .regression import Regression
 from .siamese import Siamese

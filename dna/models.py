@@ -195,7 +195,7 @@ class SiameseModel(nn.Module):
         self.f_activation = F_ACTIVATIONS[ACTIVATION]
 
     def forward(self, args):
-        pipeline_id, (left_pipeline, right_pipeline), x = args
+        _, (left_pipeline, right_pipeline), x, _ = args
         self.h1 = self.input_model(x)
 
         left_h2 = self.recursive_get_output(left_pipeline, len(left_pipeline) - 1)
@@ -261,7 +261,7 @@ class SiameseModel(nn.Module):
 
             return new_output
         except Exception as e:
-            print("There was an error in the foward pass.  It was ", e)
+            print("There was an error in the forward pass.  It was ", e)
             print(pipeline[current_index])
             quit(1)
 

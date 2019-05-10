@@ -3,6 +3,7 @@ import numpy as np
 
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
+from .regression_data_loader import RegressionDataLoader
 from models import PrimitiveModel, RegressionModel, DNAModel
 from scipy.stats import spearmanr
 
@@ -19,7 +20,6 @@ lookup_input_size = {
     "d3m.primitives.classification.k_neighbors.SKlearn": 2,
     "d3m.primitives.classification.linear_discriminant_analysis.SKlearn": 2,
     "d3m.primitives.classification.logistic_regression.SKlearn": 2,
-    "d3m.primitives.classification.linear_svc.SKlearn": 2,
     "d3m.primitives.classification.sgd.SKlearn": 2,
     "d3m.primitives.classification.svc.SKlearn": 2,
     "d3m.primitives.classification.extra_trees.SKlearn": 2,
@@ -40,22 +40,18 @@ class Regression(BaseProblem):
         test_data_path: str = TEST_DATA_PATH, n_folds: int = 5,
         batch_size = 32, drop_last = False, device = "cuda:0", seed = 0
     ):
-        self._target_key = "test_accuracy"
         objective = torch.nn.MSELoss(reduction="mean")
         self._loss_function = lambda y, y_hat: torch.sqrt(objective(y, y_hat))
         super(Regression, self).__init__(
             train_data_path = train_data_path,
             test_data_path = test_data_path,
-            batch_group_key = "pipeline_id",
-            target_key = self._target_key,
-            task_type = "REGRESSION",
             n_folds = n_folds,
             batch_size = batch_size,
             drop_last = drop_last,
             device = device,
-            seed = seed
+            seed = seed,
         )
-        self._shape = (len(self._train_data[0]["metafeatures"]), 1)
+        self._shape = (len(self._train_data[0][self.features_key]), 1)
         self._init_model()
 
     def _init_model(self):
@@ -67,7 +63,7 @@ class Regression(BaseProblem):
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
-            primitive_names = [dict_obj["name"] for dict_obj in item["pipeline"]]
+            primitive_names = [dict_obj["name"] for dict_obj in item[self.pipeline_key]]
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
                     try:
@@ -85,19 +81,30 @@ class Regression(BaseProblem):
             self._model.cuda()
         torch.random.set_rng_state(torch_state)
 
-    def _process_train_data(self):
-        pass
-
-    def _process_test_data(self):
-        pass
+    def _get_data_loader(self, data):
+        return RegressionDataLoader(
+            data = data,
+            group_key = self.batch_group_key,
+            pipeline_key = self.pipeline_key,
+            dataset_params = {
+                'data_set_key': self.data_set_key,
+                "features_key": self.features_key,
+                "target_key": self.target_key,
+                "device": self.device
+            },
+            batch_size = self.batch_size,
+            drop_last = self.drop_last,
+            shuffle = True,
+            seed = self._randint()
+        )
 
     def _compute_baselines(self):
         primitive_scores = {}
 
         # For each pipeline
         for item in self.train_data:
-            f1 = item[self._target_key]
-            pipeline = item['pipeline']
+            f1 = item[self.target_key]
+            pipeline = item[self.pipeline_key]
             for primitive in pipeline:
                 # Append the f1 value to the list of f1 values of this pipeline dataset pair for this primitive
                 primitive = primitive['name']
@@ -122,14 +129,14 @@ class Regression(BaseProblem):
     def evaluate_baseline(self, primitive_scores, dataset):
         SE = 0.0
         for item in dataset:
-            pipeline = item['pipeline']
+            pipeline = item[self.pipeline_key]
             f1_sum = 0.0
             for primitive in pipeline:
                 primitive = primitive['name']
                 f1 = primitive_scores[primitive]
                 f1_sum += f1
             f1_predict = f1_sum / len(pipeline)
-            f1_actual = item[self._target_key]
+            f1_actual = item[self.target_key]
             SE += (f1_actual - f1_predict) ** 2
         MSE = SE / len(dataset)
         RMSE = np.sqrt(MSE)

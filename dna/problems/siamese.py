@@ -1,12 +1,10 @@
 from collections import Counter
-
-import numpy as np
 import torch
-from tqdm import tqdm
 
-from data import group_json_objects, TRAIN_DATA_PATH, TEST_DATA_PATH
+from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
 from models import PrimitiveModel, ClassificationModel, SiameseModel
+from .siamese_data_loader import SiameseDataLoader
 
 lookup_input_size = {
     "d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
@@ -20,7 +18,6 @@ lookup_input_size = {
     "d3m.primitives.classification.k_neighbors.SKlearn": 2,
     "d3m.primitives.classification.linear_discriminant_analysis.SKlearn": 2,
     "d3m.primitives.classification.logistic_regression.SKlearn": 2,
-    "d3m.primitives.classification.linear_svc.SKlearn": 2,
     "d3m.primitives.classification.sgd.SKlearn": 2,
     "d3m.primitives.classification.svc.SKlearn": 2,
     "d3m.primitives.classification.extra_trees.SKlearn": 2,
@@ -40,62 +37,19 @@ class Siamese(BaseProblem):
         test_data_path: str = TEST_DATA_PATH, n_folds: int = 5,
         batch_size = 32, drop_last = False, device = "cuda:0", seed = 0
     ):
-        self._target_key = "target"
         super(Siamese, self).__init__(
             train_data_path = train_data_path,
             test_data_path = test_data_path,
-            batch_group_key = "pipeline_ids",
-            target_key = self._target_key,
-            task_type = "CLASSIFICATION",
             n_folds = n_folds,
             batch_size = batch_size,
             drop_last = drop_last,
             device = device,
             seed = seed
         )
-        self._shape = (len(self._train_data[0]["metafeatures"]), 2)
+
+        self._shape = (len(self._train_data[0][self.features_key]), 2)
         self._loss_function = torch.nn.CrossEntropyLoss()
         self._build_models()
-
-    def _process_train_data(self):
-        self._train_data = self._process_data(self._train_data)
-
-    def _process_test_data(self):
-        self._test_data = self._process_data(self._test_data)
-
-    def _process_data(self, data):
-        data_grouped_by_dataset = group_json_objects(data, "dataset")
-        processed_data = []
-        for group, grouped_data_indices in data_grouped_by_dataset.items():
-            grouped_data = np.array(data)[grouped_data_indices] # todo optimize
-            for i, data_point_i in enumerate(grouped_data):
-                dataset = data_point_i["dataset"]
-                mfs = data_point_i["metafeatures"]
-                for j, data_point_j in enumerate(grouped_data):
-
-                    # dev testing
-                    if dataset != data_point_j["dataset"] or mfs != data_point_j["metafeatures"]:
-                        raise ValueError("metafeatures are not equal")
-
-                    if data_point_i["test_accuracy"] > data_point_j["test_accuracy"]:
-                        target = 0
-                    elif data_point_i["test_accuracy"] < data_point_j["test_accuracy"]:
-                        target = 1
-                    else:
-                        continue
-
-                    processed_data.append({
-                        "dataset": dataset,
-                        "metafeatures": mfs,
-                        "pipeline": (
-                            data_point_i["pipeline"], data_point_j["pipeline"]
-                        ),
-                        'pipeline_ids': (
-                            data_point_i["pipeline_id"], data_point_j["pipeline_id"]
-                        ),
-                        self._target_key: target
-                    })
-        return processed_data
 
     def _build_models(self):
         torch_state = torch.random.get_rng_state()
@@ -106,7 +60,7 @@ class Siamese(BaseProblem):
         input_model.cuda()
         submodels = {}
         for item in self._train_data:
-            primitive_names = [dict_obj["name"] for dict_obj in item["pipeline"][0]]
+            primitive_names = [dict_obj["name"] for dict_obj in item[self.pipeline_key]]
             for primitive_name in primitive_names:
                 if not primitive_name in submodels:
                     try:
@@ -123,6 +77,15 @@ class Siamese(BaseProblem):
         if "cuda" in self.device:
             self._model.cuda()
         torch.random.set_rng_state(torch_state)
+
+    def _get_data_loader(self, data):
+        return SiameseDataLoader(data,
+                                 self.batch_group_key,
+                                 self.pipeline_key,
+                                 self.data_set_key,
+                                 self.features_key,
+                                 self.target_key,
+                                 self.device)
 
     def _compute_baselines(self):
         self._baselines = self._default_baseline()
@@ -173,6 +136,10 @@ class Siamese(BaseProblem):
             correct += counts.get(guess, 0)
             total += y_batch.shape[0]
         return correct / total
+
+    def get_correlation_coefficient(self, dataloader):
+        pass
+
 
 
 def main():

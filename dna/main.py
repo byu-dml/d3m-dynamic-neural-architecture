@@ -3,9 +3,9 @@ import torch
 import torch.optim as optim
 import uuid
 
-from dna.problems.regression import Regression
-from dna.problems.siamese import Siamese
-from dna.pytorch_model_trainer import PyTorchModelTrainer
+from problems import Regression
+from problems import Siamese
+from pytorch_model_trainer import PyTorchModelTrainer
 
 
 def save_weights():
@@ -23,8 +23,8 @@ def rmse(y_hat, y):
 
 
 def main():
-    loading_model = True
-    task = "regression"
+    loading_model = False
+    task = "siamese"
 
     if loading_model:
         # Set the name to a model that already exists
@@ -36,7 +36,7 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 300
+    n_epochs = 50000
     print('Number Of Epochs:', n_epochs)
     batch_size = 32
     drop_last = True
@@ -84,7 +84,7 @@ def main():
     else:
         # Train a new model
         print('Training new model')
-        learning_rate = 5e-5
+        learning_rate = 1e-4
         print('Learning Rate:', learning_rate)
         optimizer = optim.Adam(problem.model.parameters(), lr=learning_rate)  # Adam, SGD, Adagrad
 
@@ -130,9 +130,10 @@ def main():
             config["plot"]["ylabel"],
             path = config["plot"]["path"]
         )
-        print("baselines", problem.baselines)
+        # print("baselines", problem.baselines)
 
     # Rank the pipelines using the model and compare to the true ranking using the spearmann correlation coefficient
+    print('Computing the Spearmann Correlation Coefficient...')
     training_SCC = problem.get_correlation_coefficient(problem.train_data_loader)
     validation_SCC = problem.get_correlation_coefficient(problem.validation_data_loader)
     print('Training Spearmann Correlation Coefficient:', training_SCC)
