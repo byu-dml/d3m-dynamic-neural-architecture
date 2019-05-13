@@ -1,3 +1,4 @@
+import pandas
 import torch
 import numpy as np
 
@@ -119,42 +120,24 @@ class Regression(BaseProblem):
             }
         }
 
-    def get_correlation_coefficient(self, dataloader):
-        # TODO: Handle ties
-        dataset_performances = {}
+    def get_correlation_coefficient(self, dataset_performances, k=25):
         pipeline_key = 'pipeline_ids'
         actual_key = 'f1_actuals'
         predict_key = 'f1_predictions'
-        for x_batch, y_batch in dataloader:
-            y_hat_batch = self.model(x_batch)
-
-            # Get the pipeline id and the data set ids that correspond to it
-            pipeline_id, pipeline, x, dataset_ids = x_batch
-
-            # Create a list of tuples containing the pipeline id and its f1 values for each data set in this batch
-            for i in range(len(dataset_ids)):
-                dataset_id = dataset_ids[i]
-                f1_actual = y_batch[i].item()
-                f1_predict = y_hat_batch[i].item()
-                if dataset_id in dataset_performances:
-                    dataset_performance = dataset_performances[dataset_id]
-                    pipeline_ids = dataset_performance[pipeline_key]
-                    f1_actuals = dataset_performance[actual_key]
-                    f1_predictions = dataset_performance[predict_key]
-                    pipeline_ids.append(pipeline_id)
-                    f1_actuals.append(f1_actual)
-                    f1_predictions.append(f1_predict)
-                else:
-                    dataset_performance = {pipeline_key: [pipeline_id], actual_key: [f1_actual], predict_key: [f1_predict]}
-                    dataset_performances[dataset_id] = dataset_performance
-
         dataset_cc_sum = 0.0
         dataset_performances = dataset_performances.values()
+        top_k_out_of_total = []
         for dataset_performance in dataset_performances:
             f1_actuals = dataset_performance[actual_key]
             f1_predictions = dataset_performance[predict_key]
             actual_ranks = self.rank(f1_actuals)
             predicted_ranks = self.rank(f1_predictions)
+
+            # get top k out of the total k: => do this by putting the data into a series, getting the n_largest and
+            # then getting the index, which is the id
+            top_k_predicted = list(pandas.Series(dataset_performance[predict_key], dataset_performance[pipeline_key]).nlargest(k).index)
+            top_k_actual = list(pandas.Series(dataset_performance[actual_key], dataset_performance[pipeline_key]).nlargest(k).index)
+            top_k_out_of_total.append(len(set(top_k_predicted).intersection(set(top_k_actual))))
 
             # Get the spearman correlation coefficient for this data set
             spearman_result = spearmanr(actual_ranks, predicted_ranks)
@@ -162,7 +145,8 @@ class Regression(BaseProblem):
             dataset_cc_sum += dataset_cc
         num_datasets = len(dataset_performances)
         mean_dataset_cc = dataset_cc_sum / num_datasets
-        return mean_dataset_cc
+        print(top_k_out_of_total)
+        return mean_dataset_cc, top_k_out_of_total
 
     @staticmethod
     def rank(performances):

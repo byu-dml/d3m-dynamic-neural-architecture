@@ -7,6 +7,8 @@ from problems.regression import Regression
 from problems.siamese import Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
 
+from problems.autosklearn_metalearner import AutoSklearnMetalearner
+
 
 def save_weights():
     for key, model in primitive_submodel_dict.items():
@@ -36,7 +38,7 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 300
+    n_epochs = 0
     batch_size = 32
     drop_last = True
 
@@ -132,11 +134,39 @@ def main():
         )
         # print("baselines", problem.baselines)
 
+    k = 50
+    use_test = False
+    dataset_performances_train = problem.dataloader_to_map(problem.train_data_loader)
+    # for brandon -> why is this test_data_loader.  Validation dataloader is the same as train for some reason
+    dataset_performances_validate = problem.dataloader_to_map(problem.test_data_loader)
+
     # Rank the pipelines using the model and compare to the true ranking using the spearman correlation coefficient
-    training_SCC = problem.get_correlation_coefficient(problem.train_data_loader)
-    validation_SCC = problem.get_correlation_coefficient(problem.validation_data_loader)
+    training_SCC, top_k = problem.get_correlation_coefficient(dataset_performances_train, k)
+    validation_SCC, top_k_valid = problem.get_correlation_coefficient(dataset_performances_validate, k)
     print('Training Spearmann Correlation Coefficient:', training_SCC)
     print('Validation Spearmann Correlation Coefficient:', validation_SCC)
+
+    if task == "regression":
+        # the metric stays test accuracy because this is the name of the metric in our metadata file, however if that is fixed this should change
+        metric = 'test_accuracy'
+        maximize_metric = False
+    else:
+        metric = 'test_accuracy'
+        maximize_metric = True
+
+    data_to_pass = list(dataset_performances_validate.keys()) if not use_test else None
+    metalearner = AutoSklearnMetalearner(data_to_pass, metric=metric, maximize_metric=maximize_metric,
+                                         use_test=data_to_pass is None)
+    metric_differences, top_pipeline_values, top_k_out_of_total, top_pipelines_per_dataset = metalearner.get_metric_difference_from_best(k)
+    mean_difference = np.mean(list(metric_differences.values()))
+    print(mean_difference)
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     main()
