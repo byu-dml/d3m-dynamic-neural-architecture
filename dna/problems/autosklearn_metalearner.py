@@ -83,6 +83,9 @@ class AutoSklearnMetalearner():
             self.test_metafeatures = self.metafeatures.copy(deep=True)
             self.test_metafeatures = self.test_metafeatures[validation_names]
             self.metafeatures = self.metafeatures.drop(validation_names, axis=1, inplace=False)
+            self.metafeatures.columns = np.arange(self.metafeatures.shape[1])
+            self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
+
 
     def get_k_best_pipelines(self, dataset_metafeatures, all_other_metafeatures, runs, k):
         mf_mask = np.arange(dataset_metafeatures.shape[0])[np.isfinite(dataset_metafeatures)]
@@ -90,10 +93,11 @@ class AutoSklearnMetalearner():
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
-        import pdb;pdb.set_trace()
+        all_other_metafeatures = all_other_metafeatures.transpose()
         kND = KNearestDatasets(metric='l1', random_state=3)
         kND.fit(all_other_metafeatures, runs, self.maximize_metric)
         # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
+        import pdb; pdb.set_trace()
         best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines
@@ -101,11 +105,11 @@ class AutoSklearnMetalearner():
     def get_k_best_pipelines_per_dataset(self, k):
         k_best_pipelines_per_dataset = {}
         for dataset_index, dataset_name in enumerate(self.testset):
-            import pdb; pdb.set_trace()
             dataset_metafeatures = self.test_metafeatures.iloc[dataset_index]
             # we want to drop the metafeatures from the group if we are given a dataset.  Otherwise we have seperate metafeatures
             all_other_metafeatures = self.metafeatures.drop(index=dataset_index) if not len(self.test_metafeatures) else self.metafeatures
             runs = self.runs.drop(columns=dataset_index) if not len(self.test_metafeatures) else self.runs
+            runs = runs.fillna(0)
             pipelines = self.get_k_best_pipelines(dataset_metafeatures, all_other_metafeatures, runs, k)
             k_best_pipelines_per_dataset[dataset_name] = pipelines
         return k_best_pipelines_per_dataset
@@ -115,7 +119,6 @@ class AutoSklearnMetalearner():
         top_pipeline_performance = []
         top_k_out_of_total = []
         top_pipelines_per_dataset = {}
-        import pdb; pdb.set_trace()
         k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(k)
         for dataset_index, dataset_name in enumerate(self.testset):
             k_best_pipelines = k_best_pipelines_per_dataset[dataset_name]

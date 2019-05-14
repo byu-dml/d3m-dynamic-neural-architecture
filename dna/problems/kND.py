@@ -94,6 +94,7 @@ class KNearestDatasets(object):
         list
             Sorted distances. Only returned if return_distances is set to True.
         """
+        import pdb; pdb.set_trace()
         assert type(x) == pd.Series
         if k < -1 or k == 0:
             raise ValueError('Number of neighbors k cannot be zero or negative.')
@@ -128,8 +129,7 @@ class KNearestDatasets(object):
 
         added_configurations = set()
         for dataset_name, distance in zip(nearest_datasets, distances):
-            best_configuration = self.best_configuration_per_dataset[
-                dataset_name]
+            best_configuration = self.best_configuration_per_dataset[dataset_name]
 
             if best_configuration is None:
                 continue
@@ -156,11 +156,13 @@ class KNearestDatasets(object):
 
         mins = scaled_metafeatures.min()
         maxs = scaled_metafeatures.max()
-        # I also need to scale the target dataset meta features...
+        # I also need to scale the target datasetself.mself. meta features...
         mins = pd.DataFrame(data=[mins, other]).min()
         maxs = pd.DataFrame(data=[maxs, other]).max()
         divisor = (maxs-mins)
         divisor[divisor == 0] = 1
         scaled_metafeatures = (scaled_metafeatures - mins) / divisor
         other = (other - mins) / divisor
+        scaled_metafeatures = scaled_metafeatures.fillna(0)
+        other = other.fillna(0)
         return scaled_metafeatures, other
