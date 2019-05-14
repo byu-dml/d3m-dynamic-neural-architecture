@@ -69,8 +69,8 @@ class AutoSklearnMetalearner():
                 self.test_runs = self.runs.copy(deep=True)
                 self.test_runs = self.test_runs[validation_names]
                 self.runs = self.runs.drop(validation_names, axis=1, inplace=False)
-                self.test_runs.columns = np.arange(len(validation_names))
-                self.runs.columns = np.arange(len(dataset_to_use) - len(validation_names))
+                # self.test_runs.columns = np.arange(len(validation_names))
+                # self.runs.columns = np.arange(len(dataset_to_use) - len(validation_names))
                 self.datasets = list(set(dataset_to_use).difference(set(validation_names)))
                 self.testset = validation_names
             else:
@@ -83,8 +83,8 @@ class AutoSklearnMetalearner():
             self.test_metafeatures = self.metafeatures.copy(deep=True)
             self.test_metafeatures = self.test_metafeatures[validation_names]
             self.metafeatures = self.metafeatures.drop(validation_names, axis=1, inplace=False)
-            self.metafeatures.columns = np.arange(self.metafeatures.shape[1])
-            self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
+            # self.metafeatures.columns = np.arange(self.metafeatures.shape[1])
+            # self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
 
 
     def get_k_best_pipelines(self, dataset_metafeatures, all_other_metafeatures, runs, k):
@@ -97,7 +97,6 @@ class AutoSklearnMetalearner():
         kND = KNearestDatasets(metric='l1', random_state=3)
         kND.fit(all_other_metafeatures, runs, self.maximize_metric)
         # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
-        import pdb; pdb.set_trace()
         best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines
@@ -105,11 +104,11 @@ class AutoSklearnMetalearner():
     def get_k_best_pipelines_per_dataset(self, k):
         k_best_pipelines_per_dataset = {}
         for dataset_index, dataset_name in enumerate(self.testset):
-            dataset_metafeatures = self.test_metafeatures.iloc[dataset_index]
+            # each column is a metafeature for the column which is a dataset name
+            dataset_metafeatures = self.test_metafeatures.iloc[:, dataset_index]
             # we want to drop the metafeatures from the group if we are given a dataset.  Otherwise we have seperate metafeatures
             all_other_metafeatures = self.metafeatures.drop(index=dataset_index) if not len(self.test_metafeatures) else self.metafeatures
             runs = self.runs.drop(columns=dataset_index) if not len(self.test_metafeatures) else self.runs
-            runs = runs.fillna(0)
             pipelines = self.get_k_best_pipelines(dataset_metafeatures, all_other_metafeatures, runs, k)
             k_best_pipelines_per_dataset[dataset_name] = pipelines
         return k_best_pipelines_per_dataset
@@ -123,7 +122,6 @@ class AutoSklearnMetalearner():
         for dataset_index, dataset_name in enumerate(self.testset):
             k_best_pipelines = k_best_pipelines_per_dataset[dataset_name]
             metric_value = self.opt([self.runs.loc[pipeline].iloc[dataset_index] for pipeline in k_best_pipelines if np.isfinite(self.runs.loc[pipeline].iloc[dataset_index])])
-            print(self.test_runs.iloc[:, dataset_index])
             best_metric_value = self.opt(self.test_runs.iloc[:, dataset_index])
             # gather the actual top pipelines for each test dataset
             top_pipelines_per_dataset[dataset_name] = list(self.test_runs.iloc[:, dataset_index].nlargest(k).index)
@@ -132,10 +130,10 @@ class AutoSklearnMetalearner():
             top_k_out_of_total.append(len(set(top_ids_actual).intersection(set(k_best_pipelines))))
             # get the actual values for predicted top pipeline
             top_pipeline_performance.append(best_metric_value)
-            print(metric_value)
-            print(best_metric_value)
             metric_differences[dataset_name] = np.abs(best_metric_value - metric_value)
-        print("The top k of k is", top_k_out_of_total)
+
+        print("The top k of k is, on average:", np.mean(top_k_out_of_total))
+        print("The difference in predicted metric vs actual is", np.mean(list(metric_differences.values())))
         return metric_differences, top_pipeline_performance, top_k_out_of_total, top_pipelines_per_dataset
 
 

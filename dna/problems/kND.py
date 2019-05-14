@@ -94,14 +94,15 @@ class KNearestDatasets(object):
         list
             Sorted distances. Only returned if return_distances is set to True.
         """
-        import pdb; pdb.set_trace()
         assert type(x) == pd.Series
         if k < -1 or k == 0:
             raise ValueError('Number of neighbors k cannot be zero or negative.')
         elif k == -1:
             k = self.num_datasets
 
-        X_train, x = self._scale(self.metafeatures, x)
+        # no need to scale, it was done earlier
+        # X_train, x = self._scale(self.metafeatures, x)
+        X_train = self.metafeatures
         x = x.values.reshape((1, -1))
         self._nearest_neighbors.fit(X_train)
         distances, neighbor_indices = self._nearest_neighbors.kneighbors(

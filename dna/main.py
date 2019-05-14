@@ -38,7 +38,7 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 0
+    n_epochs = 5
     batch_size = 32
     drop_last = True
 
@@ -140,10 +140,14 @@ def main():
     # for brandon -> why is this test_data_loader.  Validation dataloader is the same as train for some reason
     dataset_performances_validate = problem.dataloader_to_map(problem.test_data_loader)
 
+    print("\n##########  DNA Model ##################")
     # Rank the pipelines using the model and compare to the true ranking using the spearman correlation coefficient
+    print("On training set:")
     training_SCC, top_k = problem.get_correlation_coefficient(dataset_performances_train, k)
+    print("\nOn test/validation set:")
     validation_SCC, top_k_valid = problem.get_correlation_coefficient(dataset_performances_validate, k)
-    print('Training Spearmann Correlation Coefficient:', training_SCC)
+
+    print('\nTraining Spearmann Correlation Coefficient:', training_SCC)
     print('Validation Spearmann Correlation Coefficient:', validation_SCC)
 
     if task == "regression":
@@ -154,12 +158,12 @@ def main():
         metric = 'test_accuracy'
         maximize_metric = True
 
+    print("\n##########  AutoSklearn/KnD Model ##################")
     data_to_pass = list(dataset_performances_validate.keys()) if not use_test else None
     metalearner = AutoSklearnMetalearner(data_to_pass, metric=metric, maximize_metric=maximize_metric,
                                          use_test=data_to_pass is None)
     metric_differences, top_pipeline_values, top_k_out_of_total, top_pipelines_per_dataset = metalearner.get_metric_difference_from_best(k)
     mean_difference = np.mean(list(metric_differences.values()))
-    print(mean_difference)
 
 
 
