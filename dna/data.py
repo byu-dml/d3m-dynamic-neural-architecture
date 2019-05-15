@@ -10,12 +10,12 @@ import pandas as pd
 
 DATA_DIR = "./data"
 # use this for a dataset of ~2k, this comes with the repo
-# RAW_DATA_NAME = "small_classification"  # 14 datasets
-# N_TEST_DATASETS = 2
+RAW_DATA_NAME = "small_classification"  # 14 datasets
+N_TEST_DATASETS = 2
 
 # use this for a dataset of ~550k and comment out the above
-RAW_DATA_NAME = "complete_classification"  # 199 datasets
-N_TEST_DATASETS = 40
+# RAW_DATA_NAME = "complete_classification"  # 199 datasets
+# N_TEST_DATASETS = 40
 
 COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
 RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
