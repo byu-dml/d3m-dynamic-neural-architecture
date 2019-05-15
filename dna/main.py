@@ -28,7 +28,7 @@ def main():
 
     seed = 1022357373
     n_epochs = 2
-    batch_size = 2
+    batch_size = 12
     drop_last = True
 
     if task == "regression":
