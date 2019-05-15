@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 import uuid
 
+from metrics import accuracy, rmse
 from problems.regression import Regression
 from problems.siamese import Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
@@ -11,15 +12,6 @@ from pytorch_model_trainer import PyTorchModelTrainer
 def save_weights():
     for key, model in primitive_submodel_dict.items():
         torch.save(model, "%s.pt" % key)
-
-
-def accuracy(y_hat, y):
-    y_hat = np.argmax(y_hat, axis=1)
-    return np.sum(y_hat == y, dtype=np.float32) / len(y)
-
-
-def rmse(y_hat, y):
-    return np.average((np.array(y_hat) - np.array(y))**2)**.5
 
 
 def main():
@@ -36,8 +28,8 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 300
-    batch_size = 32
+    n_epochs = 2
+    batch_size = 2
     drop_last = True
 
     if task == "regression":
@@ -81,6 +73,7 @@ def main():
         print('Loading previous model')
         problem.model.load(config["weights_dir"])
     else:
+        print("baselines", problem.baselines)
         # Train a new model
         print('Training new model')
         print('Number Of Epochs:', n_epochs)
@@ -136,7 +129,7 @@ def main():
     validation_SCC = problem.get_correlation_coefficient(problem.validation_data_loader)
     print('Training Spearmann Correlation Coefficient:', training_SCC)
     print('Validation Spearmann Correlation Coefficient:', validation_SCC)
-    # print("baselines", problem.baselines)
+
 
 if __name__ == "__main__":
     main()

@@ -1,10 +1,12 @@
-import torch
 import numpy as np
+import scipy.stats
+import torch
 
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
-from scipy.stats import spearmanr
+from metrics import rmse
 from models import Submodule, DNAModel
+
 
 # TODO: make this dynamic
 lookup_input_size = {
@@ -30,8 +32,83 @@ lookup_input_size = {
     'd3m.primitives.regression.extra_trees.SKlearn': 2,
     "d3m.primitives.regression.svr.SKlearn": 2,
     'd3m.primitives.data_transformation.horizontal_concat.DataFrameConcat': 2,
-
 }
+
+
+class ModelNotFitError(Exception):
+    pass
+
+
+class MeanBaseline:
+
+    def __init__(self):
+        self.mean = None
+
+    def fit(self, train_data, target_key):
+        total = 0
+        for instance in train_data:
+            total += instance[target_key]
+        self.mean = total / len(train_data)
+
+    def predict(self, data):
+        if self.mean is None:
+            raise ModelNotFitError('MeanBaseline not fit')
+        return [self.mean] * len(data)
+
+
+class MedianBaseline:
+
+    def __init__(self):
+        self.median = None
+
+    def fit(self, train_data, target_key):
+        self.median = np.median([instance[target_key] for instance in train_data])
+
+    def predict(self, data):
+        if self.median is None:
+            raise ModelNotFitError('MeanBaseline not fit')
+        return [self.median] * len(data)
+
+
+class PerPrimitiveBaseline:
+
+    def __init__(self):
+        self.primitive_scores = None
+
+    def fit(self, train_data, target_key):
+        # for each primitive, get the scores of all the pipelines that use the primitive
+        primitive_score_totals = {}
+        for instance in train_data:
+            for primitive in instance['pipeline']:
+                if primitive['name'] not in primitive_score_totals:
+                    primitive_score_totals[primitive['name']] = {
+                        'total': 0,
+                        'count': 0,
+                    }
+                primitive_score_totals[primitive['name']]['total'] += instance[target_key]
+                primitive_score_totals[primitive['name']]['count'] += 1
+
+        # compute the average pipeline score per primitive
+        self.primitive_scores = {}
+        for primitive_name in primitive_score_totals:
+            total = primitive_score_totals[primitive_name]['total']
+            count = primitive_score_totals[primitive_name]['count']
+            self.primitive_scores[primitive_name] = total / count
+
+    def predict(self, data):
+        if self.primitive_scores is None:
+            raise ModelNotFitError('PerPrimitiveBaseline not fit')
+
+        predictions = []
+        for instance in data:
+            prediction = 0
+            for primitive in instance['pipeline']:
+                prediction += self.primitive_scores[primitive['name']]
+            prediction /= len(instance['pipeline'])
+            predictions.append(prediction)
+
+        return predictions
+
 
 class Regression(BaseProblem):
 
@@ -92,75 +169,22 @@ class Regression(BaseProblem):
         pass
 
     def _compute_baselines(self):
-        primitive_scores = {}
-
-        # For each pipeline
-        for item in self.train_data:
-            f1 = item[self._target_key]
-            pipeline = item['pipeline']
-            for primitive in pipeline:
-                # Append the f1 value to the list of f1 values of this pipeline dataset pair for this primitive
-                primitive = primitive['name']
-                if primitive in primitive_scores:
-                    score_list = primitive_scores[primitive]
-                    score_list.append(f1)
-                else:
-                    primitive_scores[primitive] = [f1]
-
-        # Compute the average f1 value of the f1 list for each primitive
-        for primitive in primitive_scores:
-            score_list = primitive_scores[primitive]
-            primitive_score = np.mean(score_list)
-            primitive_scores[primitive] = primitive_score.item()
-
-        # Compute training and validation RMSE using this naive model
-        training_RMSE = self.evaluate_baseline(primitive_scores, self.train_data)
-        validation_RMSE = self.evaluate_baseline(primitive_scores, self.validation_data)
-        print('Baseline Training RMSE:', training_RMSE)
-        print('Baseline Validation RMSE:', validation_RMSE)
-
-    def evaluate_baseline(self, primitive_scores, dataset):
-        SE = 0.0
-        for item in dataset:
-            pipeline = item['pipeline']
-            f1_sum = 0.0
-            for primitive in pipeline:
-                primitive = primitive['name']
-                f1 = primitive_scores[primitive]
-                f1_sum += f1
-            f1_predict = f1_sum / len(pipeline)
-            f1_actual = item[self._target_key]
-            SE += (f1_actual - f1_predict) ** 2
-        MSE = SE / len(dataset)
-        RMSE = np.sqrt(MSE)
-        return RMSE
-
-    def _compute_mean_baseline(self):
-        train_accuracies = []
-        for x_batch, y_batch in self._train_data_loader:
-            train_accuracies.extend(y_batch.tolist())
-        train_accuracies = np.array(train_accuracies)
-        train_mean = np.mean(train_accuracies)
-        train_median = np.median(train_accuracies)
-        mean_rmse = np.sqrt(np.mean((train_accuracies - train_mean)**2))
-        median_rmse = np.sqrt(np.mean((train_accuracies - train_median)**2))
-        guess_accuracy = train_mean
-        train_rmse = mean_rmse
-        if median_rmse < mean_rmse:
-            guess_accuracy = train_median
-            train_rmse = median_rmse
-
-        validation_accuracies = []
-        for x_batch, y_batch in self._validation_data_loader:
-            validation_accuracies.extend(y_batch.tolist())
-        validation_accuracies = np.array(validation_accuracies)
-        validation_rmse = np.sqrt(np.mean((validation_accuracies - guess_accuracy)**2))
-
         self._baselines = {
-            "min_mean_med_rmse": {
-                "train": train_rmse,
-                "validation": validation_rmse
-            }
+            'MeanBaselineRMSE': self._compute_baseline(MeanBaseline),
+            'MedianBaselineRMSE': self._compute_baseline(MedianBaseline),
+            'PerPrimitiveBaselineRMSE': self._compute_baseline(PerPrimitiveBaseline),
+        }
+
+    def _compute_baseline(self, baseline_class):
+        baseline = baseline_class()
+        baseline.fit(self.train_data, self._target_key)
+        train_predictions = baseline.predict(self.train_data)
+        train_targets = [instance[self._target_key] for instance in self.train_data]
+        val_predictions = baseline.predict(self.validation_data)
+        val_targets = [instance[self._target_key] for instance in self.validation_data]
+        return {
+            'train': rmse(train_predictions, train_targets),
+            'validation': rmse(val_predictions, val_targets),
         }
 
     def get_correlation_coefficient(self, dataloader):
@@ -201,7 +225,7 @@ class Regression(BaseProblem):
             predicted_ranks = self.rank(f1_predictions)
 
             # Get the spearman correlation coefficient for this data set
-            spearman_result = spearmanr(actual_ranks, predicted_ranks)
+            spearman_result = scipy.stats.spearmanr(actual_ranks, predicted_ranks)
             dataset_cc = spearman_result.correlation
             dataset_cc_sum += dataset_cc
         num_datasets = len(dataset_performances)
