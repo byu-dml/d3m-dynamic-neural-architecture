@@ -100,14 +100,15 @@ class AutoSklearnMetalearner():
         all_other_metafeatures = all_other_metafeatures.transpose()
         kND = KNearestDatasets(metric='l1', random_state=3)
         kND.fit(all_other_metafeatures, runs, self.maximize_metric)
-        import pdb; pdb.set_trace()
         # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
 
         # get the ids for pipelines that we have real values for
         current_validation_ids = self.validation_set.loc[self.validation_set["index"] == current_dataset_name]["pipeline_ids"]
+        import pdb; pdb.set_trace()
         if type(current_validation_ids) == pd.Series:
-            current_validation_ids = current_validation_ids[0]
+            current_validation_ids = current_validation_ids.iloc[0]
         else:
+            # should never hit this but just in case I want to know
             print(type(current_validation_ids))
         best_suggestions = kND.kBestSuggestions(dataset_metafeatures, current_validation_ids, k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
@@ -151,7 +152,11 @@ class AutoSklearnMetalearner():
 
     def predict(self, k, validation_set):
         # self.validation_set
-        gs
+        self.get_metric_difference_from_best(k)
+
+    def fit(self):
+        pass
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
