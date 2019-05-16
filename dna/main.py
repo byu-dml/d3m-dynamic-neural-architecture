@@ -160,9 +160,9 @@ def main():
 
     print("\n##########  AutoSklearn/KnD Model ##################")
     data_to_pass = dataset_performances_validate if not use_test else None
-    metalearner = AutoSklearnMetalearner(data_to_pass, metric=metric, maximize_metric=maximize_metric,
-                                         use_test=data_to_pass is None)
-    metric_differences, top_pipeline_values, top_k_out_of_total, top_pipelines_per_dataset = metalearner.get_metric_difference_from_best(k)
+    metalearner = AutoSklearnMetalearner(metric=metric, maximize_metric=maximize_metric)
+    metalearner.fit(use_static_test=data_to_pass is None, validation_names=list(data_to_pass.keys()))
+    metric_differences, top_pipeline_values, top_k_out_of_total, top_pipelines_per_dataset = metalearner.predict(k, data_to_pass)
     mean_difference = np.mean(list(metric_differences.values()))
 
 

@@ -12,7 +12,7 @@ from .kND import KNearestDatasets
 
 class AutoSklearnMetalearner():
 
-    def __init__(self, validate_dataset, use_test=False, random_seed=42, metric='test_accuracy', maximize_metric=True):
+    def __init__(self, metric='test_accuracy', maximize_metric=True):
         # if metadata_path is None:
         self.runs = None
         self.test_runs = None
@@ -22,29 +22,18 @@ class AutoSklearnMetalearner():
         self.pipeline_descriptions = {}
         self.metric = metric
         self.maximize_metric = maximize_metric
-        self.validation_set = pd.DataFrame(validate_dataset).transpose()
-        # make indexes columns
-        self.validation_set.reset_index(level=0, inplace=True)
-        validate_dataset_names = list(validate_dataset.keys())
         if self.maximize_metric:
             self.opt = np.nanmax
         else:
             self.opt = np.nanmin
 
-        if use_test:
-            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
-            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="test")
-            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="train")
-        else:
-            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-                self.process_metadata(data_type="train", validation_names=validate_dataset_names)
-
     def process_metadata(self, data_type="train", validation_names=None):
+        """
+        Reads in a dataset from a static json file.  Loads lots of the information needed to process the KnD
+        :param data_type: "train" or "test"
+        :param validation_names:
+        :return:
+        """
         dataset_to_use = self.datasets if data_type == "train" else self.testset
         runs_by_pipeline = {}
         metafeatures = {}
@@ -98,19 +87,16 @@ class AutoSklearnMetalearner():
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
         all_other_metafeatures = all_other_metafeatures.transpose()
-        kND = KNearestDatasets(metric='l1', random_state=3)
-        kND.fit(all_other_metafeatures, runs, self.maximize_metric)
-        # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
 
         # get the ids for pipelines that we have real values for
-        current_validation_ids = self.validation_set.loc[self.validation_set["index"] == current_dataset_name]["pipeline_ids"]
-        import pdb; pdb.set_trace()
-        if type(current_validation_ids) == pd.Series:
-            current_validation_ids = current_validation_ids.iloc[0]
-        else:
-            # should never hit this but just in case I want to know
-            print(type(current_validation_ids))
-        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, current_validation_ids, k=k)
+        current_validation_ids = self.validation_set.loc[self.validation_set["index"] == current_dataset_name]["pipeline_ids"].iloc[0]
+
+        kND = KNearestDatasets(metric='l1', random_state=3)
+        kND.fit(all_other_metafeatures, runs, current_validation_ids, self.maximize_metric)
+        # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
+
+
+        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines
 
@@ -150,15 +136,44 @@ class AutoSklearnMetalearner():
         return metric_differences, top_pipeline_performance, top_k_out_of_total, top_pipelines_per_dataset
 
 
-    def predict(self, k, validation_set):
-        # self.validation_set
-        self.get_metric_difference_from_best(k)
+    def predict(self, k, validation_set: dict):
+        """
+        A wrapper for all the other functions so that this is organized
+        :param k: number of datasets
+        :param validation_set: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
+        from each dataset being passed in.  This is used for the rankings
+        :return:
+        """
+        self.validation_set = pd.DataFrame(validation_set).transpose()
+        # make indexes columns
+        self.validation_set.reset_index(level=0, inplace=True)
+        validate_dataset_names = list(validation_set.keys())
+        return self.get_metric_difference_from_best(k)
 
-    def fit(self):
-        pass
+    def fit(self, use_static_test=False, validation_names=None):
+        """
+        A basic KNN fit.  Loads in and processes the training data from a fixed split to avoid working with the dataloader
+        :param use_static_test:
+        :return:
+        """
+        if use_static_test:
+            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
+            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+            self.process_metadata(data_type="test")
+            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+            self.process_metadata(data_type="train")
+        else:
+            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+                self.process_metadata(data_type="train", validation_names=validation_names)
 
+
+"""
+This may or may not work..  It is not support currently from the command line
+"""
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--metadata', type=str)
     parser.add_argument('--seed', type=int, default=42)

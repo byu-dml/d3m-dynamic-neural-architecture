@@ -21,7 +21,7 @@ class KNearestDatasets(object):
         if self.metric_params is None:
             self.metric_params = {}
 
-    def fit(self, metafeatures, runs, maximize_metric=True):
+    def fit(self, metafeatures, runs, validation_set_pipelines, maximize_metric=True):
         """Fit the Nearest Neighbor model.
         Parameters
         ----------
@@ -39,7 +39,7 @@ class KNearestDatasets(object):
             (runs.shape[1], metafeatures.shape[0])
 
         self.metafeatures = metafeatures
-        self.runs = runs
+        self.runs = runs.copy(deep=True)
         self.num_datasets = runs.shape[1]
 
         # for each dataset, sort the runs according to their result
@@ -53,8 +53,12 @@ class KNearestDatasets(object):
             if not np.isfinite(runs[dataset_name]).any():
                 best_configuration_per_dataset[dataset_name] = None
             else:
-                configuration_idx = runs[dataset_name].index[
-                    opt(runs[dataset_name].values)]
+                configuration_idx = ""
+                while configuration_idx not in validation_set_pipelines:
+                    opt_index = opt(runs[dataset_name].values)
+                    configuration_idx = runs[dataset_name].index[opt_index]
+                    runs[dataset_name].iloc[opt_index] = np.nan
+
                 best_configuration_per_dataset[dataset_name] = configuration_idx
 
         self.best_configuration_per_dataset = best_configuration_per_dataset
@@ -120,7 +124,7 @@ class KNearestDatasets(object):
         else:
             return rval, distances[0]
 
-    def kBestSuggestions(self, x, validation_set_pipelines, k=1, exclude_double_configurations=True):
+    def kBestSuggestions(self, x, k=1, exclude_double_configurations=True):
         assert type(x) == pd.Series
 
         if k < -1 or k == 0:
@@ -139,7 +143,7 @@ class KNearestDatasets(object):
 
             if exclude_double_configurations:
                 # make sure the best pipelines we're returning have actual values and are not already part of our top 25
-                if best_configuration not in added_configurations and best_configuration in validation_set_pipelines:
+                if best_configuration not in added_configurations:
                     added_configurations.add(best_configuration)
                     kbest.append((dataset_name, distance, best_configuration))
             else:
