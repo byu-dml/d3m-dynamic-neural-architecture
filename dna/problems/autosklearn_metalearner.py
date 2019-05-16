@@ -95,7 +95,6 @@ class AutoSklearnMetalearner():
         kND.fit(all_other_metafeatures, runs, current_validation_ids, self.maximize_metric)
         # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
 
-
         best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines

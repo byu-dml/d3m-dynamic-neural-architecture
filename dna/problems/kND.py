@@ -21,7 +21,7 @@ class KNearestDatasets(object):
         if self.metric_params is None:
             self.metric_params = {}
 
-    def fit(self, metafeatures, runs, validation_set_pipelines, maximize_metric=True):
+    def fit(self, metafeatures, pipeline_runs, validation_set_pipelines, maximize_metric=True):
         """Fit the Nearest Neighbor model.
         Parameters
         ----------
@@ -34,11 +34,12 @@ class KNearestDatasets(object):
         assert isinstance(metafeatures, pd.DataFrame)
         assert metafeatures.values.dtype in (np.float32, np.float64)
         assert np.isfinite(metafeatures.values).all()
-        assert isinstance(runs, pd.DataFrame)
-        assert runs.shape[1] == metafeatures.shape[0], \
-            (runs.shape[1], metafeatures.shape[0])
+        assert isinstance(pipeline_runs, pd.DataFrame)
+        assert pipeline_runs.shape[1] == metafeatures.shape[0], \
+            (pipeline_runs.shape[1], metafeatures.shape[0])
 
         self.metafeatures = metafeatures
+        runs = pipeline_runs.copy(deep=True)
         self.runs = runs.copy(deep=True)
         self.num_datasets = runs.shape[1]
 

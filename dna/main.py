@@ -8,6 +8,7 @@ from problems.siamese import Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
 
 from problems.autosklearn_metalearner import AutoSklearnMetalearner
+from problems.dna_baselines import DNABaselines
 
 
 def save_weights():
@@ -136,6 +137,7 @@ def main():
 
     k = 50
     use_test = False
+
     dataset_performances_train = problem.dataloader_to_map(problem.train_data_loader)
     # for brandon -> why is this test_data_loader.  Validation dataloader is the same as train for some reason
     dataset_performances_validate = problem.dataloader_to_map(problem.test_data_loader)
@@ -143,9 +145,10 @@ def main():
     print("\n##########  DNA Model ##################")
     # Rank the pipelines using the model and compare to the true ranking using the spearman correlation coefficient
     print("On training set:")
-    training_SCC, top_k = problem.get_correlation_coefficient(dataset_performances_train, k)
+    dna_baselines = DNABaselines()
+    training_SCC, top_k = dna_baselines.predict(dataset_performances_train, k)
     print("\nOn test/validation set:")
-    validation_SCC, top_k_valid = problem.get_correlation_coefficient(dataset_performances_validate, k)
+    validation_SCC, top_k_valid = dna_baselines.predict(dataset_performances_validate, k)
 
     print('\nTraining Spearmann Correlation Coefficient:', training_SCC)
     print('Validation Spearmann Correlation Coefficient:', validation_SCC)
