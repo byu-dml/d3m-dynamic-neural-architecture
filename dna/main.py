@@ -38,7 +38,7 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 5
+    n_epochs = 0
     batch_size = 32
     drop_last = True
 
@@ -159,7 +159,7 @@ def main():
         maximize_metric = True
 
     print("\n##########  AutoSklearn/KnD Model ##################")
-    data_to_pass = list(dataset_performances_validate.keys()) if not use_test else None
+    data_to_pass = dataset_performances_validate if not use_test else None
     metalearner = AutoSklearnMetalearner(data_to_pass, metric=metric, maximize_metric=maximize_metric,
                                          use_test=data_to_pass is None)
     metric_differences, top_pipeline_values, top_k_out_of_total, top_pipelines_per_dataset = metalearner.get_metric_difference_from_best(k)

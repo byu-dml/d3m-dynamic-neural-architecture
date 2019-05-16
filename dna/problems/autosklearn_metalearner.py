@@ -12,7 +12,7 @@ from .kND import KNearestDatasets
 
 class AutoSklearnMetalearner():
 
-    def __init__(self, validate_dataset_names, use_test=False, random_seed=42, metric='test_accuracy', maximize_metric=True):
+    def __init__(self, validate_dataset, use_test=False, random_seed=42, metric='test_accuracy', maximize_metric=True):
         # if metadata_path is None:
         self.runs = None
         self.test_runs = None
@@ -22,6 +22,10 @@ class AutoSklearnMetalearner():
         self.pipeline_descriptions = {}
         self.metric = metric
         self.maximize_metric = maximize_metric
+        self.validation_set = pd.DataFrame(validate_dataset).transpose()
+        # make indexes columns
+        self.validation_set.reset_index(level=0, inplace=True)
+        validate_dataset_names = list(validate_dataset.keys())
         if self.maximize_metric:
             self.opt = np.nanmax
         else:
@@ -87,7 +91,7 @@ class AutoSklearnMetalearner():
             # self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
 
 
-    def get_k_best_pipelines(self, dataset_metafeatures, all_other_metafeatures, runs, k):
+    def get_k_best_pipelines(self, dataset_metafeatures, all_other_metafeatures, runs, k, current_dataset_name):
         mf_mask = np.arange(dataset_metafeatures.shape[0])[np.isfinite(dataset_metafeatures)]
         dataset_metafeatures = dataset_metafeatures.iloc[mf_mask]
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
@@ -96,8 +100,16 @@ class AutoSklearnMetalearner():
         all_other_metafeatures = all_other_metafeatures.transpose()
         kND = KNearestDatasets(metric='l1', random_state=3)
         kND.fit(all_other_metafeatures, runs, self.maximize_metric)
+        import pdb; pdb.set_trace()
         # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
-        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
+
+        # get the ids for pipelines that we have real values for
+        current_validation_ids = self.validation_set.loc[self.validation_set["index"] == current_dataset_name]["pipeline_ids"]
+        if type(current_validation_ids) == pd.Series:
+            current_validation_ids = current_validation_ids[0]
+        else:
+            print(type(current_validation_ids))
+        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, current_validation_ids, k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines
 
@@ -109,7 +121,7 @@ class AutoSklearnMetalearner():
             # we want to drop the metafeatures from the group if we are given a dataset.  Otherwise we have seperate metafeatures
             all_other_metafeatures = self.metafeatures.drop(index=dataset_index) if not len(self.test_metafeatures) else self.metafeatures
             runs = self.runs.drop(columns=dataset_index) if not len(self.test_metafeatures) else self.runs
-            pipelines = self.get_k_best_pipelines(dataset_metafeatures, all_other_metafeatures, runs, k)
+            pipelines = self.get_k_best_pipelines(dataset_metafeatures, all_other_metafeatures, runs, k, dataset_name)
             k_best_pipelines_per_dataset[dataset_name] = pipelines
         return k_best_pipelines_per_dataset
 
@@ -137,6 +149,9 @@ class AutoSklearnMetalearner():
         return metric_differences, top_pipeline_performance, top_k_out_of_total, top_pipelines_per_dataset
 
 
+    def predict(self, k, validation_set):
+        # self.validation_set
+        gs
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()

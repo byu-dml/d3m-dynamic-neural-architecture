@@ -120,8 +120,9 @@ class KNearestDatasets(object):
         else:
             return rval, distances[0]
 
-    def kBestSuggestions(self, x, k=1, exclude_double_configurations=True):
+    def kBestSuggestions(self, x, validation_set_pipelines, k=1, exclude_double_configurations=True):
         assert type(x) == pd.Series
+
         if k < -1 or k == 0:
             raise ValueError('Number of neighbors k cannot be zero or negative.')
         nearest_datasets, distances = self.kNearestDatasets(x, -1,
@@ -129,6 +130,7 @@ class KNearestDatasets(object):
         kbest = []
 
         added_configurations = set()
+        # get the top 25 best pipelines from each dataset
         for dataset_name, distance in zip(nearest_datasets, distances):
             best_configuration = self.best_configuration_per_dataset[dataset_name]
 
@@ -136,7 +138,8 @@ class KNearestDatasets(object):
                 continue
 
             if exclude_double_configurations:
-                if best_configuration not in added_configurations:
+                # make sure the best pipelines we're returning have actual values and are not already part of our top 25
+                if best_configuration not in added_configurations and best_configuration in validation_set_pipelines:
                     added_configurations.add(best_configuration)
                     kbest.append((dataset_name, distance, best_configuration))
             else:

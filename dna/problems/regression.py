@@ -120,15 +120,16 @@ class Regression(BaseProblem):
             }
         }
 
-    def get_correlation_coefficient(self, dataset_performances, k=25):
+    def get_correlation_coefficient(self, dataset_performances_map, k=25):
         pipeline_key = 'pipeline_ids'
         actual_key = 'f1_actuals'
         predict_key = 'f1_predictions'
         dataset_cc_sum = 0.0
-        dataset_performances = dataset_performances.values()
+        dataset_performances = dataset_performances_map.values()
         top_k_out_of_total = []
         metric_differences = []
         for dataset_performance in dataset_performances:
+            print("Number of pipelines for this dataset:", len(dataset_performance[actual_key]))
             f1_actuals = dataset_performance[actual_key]
             f1_predictions = dataset_performance[predict_key]
             actual_ranks = self.rank(f1_actuals)
@@ -148,6 +149,7 @@ class Regression(BaseProblem):
             spearman_result = spearmanr(actual_ranks, predicted_ranks)
             dataset_cc = spearman_result.correlation
             dataset_cc_sum += dataset_cc
+            
         num_datasets = len(dataset_performances)
         mean_dataset_cc = dataset_cc_sum / num_datasets
         print("On average, the top {} out of the real top {} is".format(k, k), np.mean(top_k_out_of_total))
