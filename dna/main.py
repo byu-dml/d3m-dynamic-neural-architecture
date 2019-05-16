@@ -5,6 +5,7 @@ import torch.optim as optim
 import uuid
 
 from data import write_json
+from metrics import accuracy, rmse
 from problems import Regression, Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
 
@@ -14,25 +15,13 @@ def save_weights():
         torch.save(model, "%s.pt" % key)
 
 
-def accuracy(y_hat, y):
-    y_hat = np.argmax(y_hat, axis=1)
-    return np.sum(y_hat == y, dtype=np.float32) / len(y)
-
-
-def rmse(y_hat, y):
-    """
-    Calculates the unbiased standard deviation of the residuals.
-    """
-    return np.std(np.array(y_hat) - np.array(y), ddof=1)
-
-
 def main():
     task = "regression"
     name = "{}_{}".format(task, uuid.uuid4())
     print('NAME:', name)
     seed = 1022357373
-    n_epochs = 100
-    batch_size = 32
+    n_epochs = 2
+    batch_size = 12
     drop_last = True
 
     if task == "regression":
