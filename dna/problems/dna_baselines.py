@@ -1,5 +1,7 @@
 import pandas
 import numpy as np
+from scipy.stats import spearmanr
+
 
 class DNABaselines:
     def predict(self, dataset_performances_map, k=25):
@@ -11,7 +13,6 @@ class DNABaselines:
         top_k_out_of_total = []
         metric_differences = []
         for dataset_performance in dataset_performances:
-            print("Number of pipelines for this dataset:", len(dataset_performance[actual_key]))
             f1_actuals = dataset_performance[actual_key]
             f1_predictions = dataset_performance[predict_key]
             actual_ranks = self.rank(f1_actuals)

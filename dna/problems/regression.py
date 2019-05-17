@@ -5,7 +5,6 @@ import numpy as np
 from data import TRAIN_DATA_PATH, TEST_DATA_PATH
 from .base_problem import BaseProblem
 from models import PrimitiveModel, RegressionModel, DNAModel
-from scipy.stats import spearmanr
 
 # TODO: make this dynamic
 lookup_input_size = {
