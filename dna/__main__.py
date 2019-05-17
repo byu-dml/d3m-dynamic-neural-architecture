@@ -4,7 +4,7 @@ import os
 import sys
 import typing
 
-from data import get_data, split_data
+from data import get_data, preprocess_data, split_data
 
 
 def configure_split_parser(parser):
@@ -25,9 +25,10 @@ def configure_split_parser(parser):
         help='the number of datasets in the test split'
     )
     parser.add_argument(
-        '--seed', type=int, action='store', default=3746673648,
+        '--split-seed', type=int, action='store', default=3746673648,
         help='seed used to split the data into train and test sets'
     )
+
 
 def split_handler(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data
@@ -36,7 +37,7 @@ def split_handler(
     data = data_resolver(data_path)
     train_data, test_data = split_data(
         data, 'dataset_id', getattr(arguments, 'test_size'),
-        getattr(arguments, 'seed')
+        getattr(arguments, 'split_seed')
     )
 
     train_path = getattr(arguments, 'train_path')
@@ -58,41 +59,64 @@ def split_handler(
         json.dump(test_data, f)
 
 
-def configure_train_parser(parser):
-    parser.add_argument(
-        '--train-data', type=argparse.FileType('r'), action='store',
-        required=True, help='path of train data'
-    )
-    parser.add_argument(
-        '--test-data', type=argparse.FileType('r'), action='store', default=None,
-        help='path of test data'
-    )
-    parser.add_argument(
-        '--data-seed', type=int, action='store',
-        help='Random number generator seed used to split train data into train and validation sets.'
-    )
-
-
-def train_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser
-):
-    print(getattr(arguments, 'train_data'))
-
-
 def configure_evaluate_parser(parser):
-    pass
+    parser.add_argument(
+        '--train-path', type=str, action='store', required=True,
+        help='path to read the train data'
+    )
+    parser.add_argument(
+        '--test-path', type=str, action='store', default=None,
+        help='path to read the test data; if not provided, train data will be split'
+    )
+    parser.add_argument(
+        '--test-size', type=int, action='store', default=1,
+        help='the number of datasets in the test split'
+    )
+    parser.add_argument(
+        '--split-seed', type=int, action='store', default=0,
+        help='seed used to split the data into train and test sets'
+    )
+    parser.add_argument(
+        '--problem', type=str, action='store', required=True,
+        choices=['regression', 'siamese'],
+        help='the type of problem'
+    )
+    parser.add_argument(
+        '--model', type=str, action='store', required=True,
+        help='the python path to the model class'
+    )
+    parser.add_argument(
+        '--model-config-path', type=str, default=None,
+        help='path to a json file containing the model configuration values'
+    )
+
+
+def evaluate_handler(
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *,
+    data_resolver=get_data
+):
+    train_path = getattr(arguments, 'train_path')
+    train_data = data_resolver(train_path)
+
+    if getattr(arguments, 'test_path') is None:
+        train_data, test_data = split_data(
+            train_data, 'dataset_id', getattr(arguments, 'test_size'),
+            getattr(arguments, 'split_seed')
+        )
+    else:
+        test_path = getattr(arguments, 'test_path')
+        test_data = data_resolver(test_path)
+
+    train_data, test_data = preprocess_data(train_data, test_data)
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
-    subparser = parser._subparsers._group_actions[0].choices[arguments.dna_command]
+    subparser = parser._subparsers._group_actions[0].choices[arguments.command]
 
-    if arguments.dna_command == 'split-data':
+    if arguments.command == 'split-data':
         split_handler(arguments, subparser)
 
-    elif arguments.dna_command == 'train':
-        train_handler(arguments, subparser)
-
-    elif arguments.dna_command == 'evaluate':
+    elif arguments.command == 'evaluate':
         evaluate_handler(arguments, subparser)
 
     else:
@@ -103,7 +127,7 @@ def main(argv: typing.Sequence):
 
     parser = argparse.ArgumentParser(prog='dna')
 
-    subparsers = parser.add_subparsers(dest='dna_command', title='commands')
+    subparsers = parser.add_subparsers(dest='command', title='command')
     subparsers.required = True
 
     split_parser = subparsers.add_parser(
@@ -111,13 +135,8 @@ def main(argv: typing.Sequence):
     )
     configure_split_parser(split_parser)
 
-    train_parser = subparsers.add_parser(
-        'train', help='trains and stores a model'
-    )
-    configure_train_parser(train_parser)
-
     evaluate_parser = subparsers.add_parser(
-        'evaluate', help='loads and evaluates a stored model'
+        'evaluate', help='train, score, and save a model'
     )
     configure_evaluate_parser(evaluate_parser)
 

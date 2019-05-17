@@ -4,32 +4,10 @@ import random
 import tarfile
 import typing
 
+import numpy as np
 
-DATA_DIR = "./data"
 
-
-def reformat_data():
-    data = read_json(RAW_DATA_PATH)
-    reformatted_data = []
-    for item in data:
-        dataset = item["raw_dataset_name"]
-        pipeline = item["pipeline"]
-        metafeatures = {
-            k: v for k, v in item["metafeatures"].items() if not "time" in k.lower()
-        }
-        metafeatures["TotalTime"] = item["metafeatures_time"]
-        train_time = item["train_time"]
-        reformatted_data.append({
-            "dataset": dataset,
-            "pipeline": pipeline,
-            "pipeline_id": item["pipeline_id"],
-            "metafeatures": metafeatures,
-            "train_accuracy": item["train_accuracy"],
-            "test_accuracy": item["test_accuracy"],
-            "train_time": train_time,
-            "test_time": item["test_time"]
-        })
-    write_json(reformatted_data, PROCESSED_DATA_PATH, pretty=True)
+DATA_DIR = './data'
 
 
 def group_json_objects(json_objects, group_key):
@@ -100,12 +78,73 @@ def get_data(path):
     return data
 
 
-def main():
-    extract_data()
-    reformat_data()
-    drop_nan_metafeatures()
-    split_data()
+class StandardScaler:
+    """
+    Transforms data by subtracting the mean and scaling by the standard
+    deviation. Drops columns that have 0 standard deviation. Clips values to
+    numpy resolution, min, and max.
+    """
+
+    def __init__(self):
+        self.means = None
+        self.stds = None
+
+    def fit(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        values_map = {}
+        for instance in data:
+            for key, value in instance.items():
+                if key not in values_map:
+                    values_map[key] = []
+                values_map[key].append(value)
+
+        self.means = {}
+        self.stds = {}
+        for key, values in values_map.items():
+            self.means[key] = np.mean(values)
+            self.stds[key] = np.std(values, ddof=1)
+
+    def predict(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        if self.means is None or self.stds is None:
+            raise Exception('StandardScaler not fit')
+
+        transformed_data = []
+        for instance in data:
+            transformed_instance = {}
+            for key, value in instance.items():
+                if self.stds[key] != 0:  # drop columns with 0 std dev
+                    transformed_instance[key] = (value - self.means[key]) / self.stds[key]
+
+            transformed_data.append(transformed_instance)
+
+        return transformed_data
 
 
-if __name__ == '__main__':
-    main()
+def preprocess_data(train_data, test_data):
+    scaler = StandardScaler()
+
+
+    train_metafeatures = []
+    for instance in train_data:
+        instance['metafeatures'].pop('pca_determinant_of_covariance', None)
+        train_metafeatures.append(instance['metafeatures'])
+
+    test_metafeatures = []
+    for instance in test_data:
+        instance['metafeatures'].pop('pca_determinant_of_covariance', None)
+        test_metafeatures.append(instance['metafeatures'])
+
+    scaler.fit(train_metafeatures)
+    train_metafeatures = scaler.predict(train_metafeatures)
+    test_metafeatures = scaler.predict(test_metafeatures)
+
+    for instance, mf_instance in zip(train_data, train_metafeatures):
+        instance['metafeatures'] = mf_instance
+
+    for instance, mf_instance in zip(test_data, test_metafeatures):
+        instance['metafeatures'] = mf_instance
+
+    return train_data, test_data
