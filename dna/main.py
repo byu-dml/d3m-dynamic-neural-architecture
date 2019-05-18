@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 import uuid
 
+from metrics import accuracy, rmse
 from problems.regression import Regression
 from problems.siamese import Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
@@ -39,8 +40,8 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 0
-    batch_size = 32
+    n_epochs = 2
+    batch_size = 2
     drop_last = True
 
     if task == "regression":
@@ -84,6 +85,7 @@ def main():
         print('Loading previous model')
         problem.model.load(config["weights_dir"])
     else:
+        print("baselines", problem.baselines)
         # Train a new model
         print('Training new model')
         print('Number Of Epochs:', n_epochs)

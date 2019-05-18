@@ -11,98 +11,63 @@ ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoi
 ACTIVATION = 'leaky_relu'
 
 
-def create_model(input_layer_size, output_size, n_layers, n_hidden_nodes, batch_norms, activation):
-    # The length of the batch norms list must be this size to account for the hidden layers and input layer
-    assert len(batch_norms) == n_layers
-    assert n_layers >= 1
-    assert n_hidden_nodes >= 1
+class Submodule(nn.Module):
 
-    layers = []
-    if n_layers == 1:
-        # Create a single without an activation function
-        if batch_norms[0]:
-            layers.append(nn.BatchNorm1d(input_layer_size))
-        layers.append(nn.Linear(input_layer_size, output_size))
-    else:
-        # Create the first layer
-        if batch_norms[0]:
-            layers.append(nn.BatchNorm1d(input_layer_size))
-        layers.append(nn.Linear(input_layer_size, n_hidden_nodes))
-        layers.append(activation())
+    def __init__(self, name, input_layer_size, output_size, *, use_skip=False):
+        super(Submodule, self).__init__()
 
-        # Create the hidden layers not including the output layer
-        last_index = n_layers - 1
-        for i in range(1, last_index):
-            if batch_norms[i]:
-                layers.append(nn.BatchNorm1d(n_hidden_nodes))
-            layers.append(nn.Linear(n_hidden_nodes, n_hidden_nodes))
+        # todo: make constructor arguments
+        activation = ACTIVATIONS[ACTIVATION]
+        n_layers=1
+        n_hidden_nodes=1
+        batch_norms=[True]
+
+        # The length of the batch norms list must be this size to account for the hidden layers and input layer
+        assert len(batch_norms) == n_layers
+        assert n_layers >= 1
+        assert n_hidden_nodes >= 1
+
+        layers = []
+        if n_layers == 1:
+            # Create a single without an activation function
+            if batch_norms[0]:
+                layers.append(nn.BatchNorm1d(input_layer_size))
+            layers.append(nn.Linear(input_layer_size, output_size))
+        else:
+            # Create the first layer
+            if batch_norms[0]:
+                layers.append(nn.BatchNorm1d(input_layer_size))
+            layers.append(nn.Linear(input_layer_size, n_hidden_nodes))
             layers.append(activation())
 
-        # Create the output layer without an activation function
-        if batch_norms[last_index]:
-            layers.append(nn.BatchNorm1d(n_hidden_nodes))
-        layers.append(nn.Linear(n_hidden_nodes, output_size))
+            # Create the hidden layers not including the output layer
+            last_index = n_layers - 1
+            for i in range(1, last_index):
+                if batch_norms[i]:
+                    layers.append(nn.BatchNorm1d(n_hidden_nodes))
+                layers.append(nn.Linear(n_hidden_nodes, n_hidden_nodes))
+                layers.append(activation())
 
-    return nn.Sequential(*layers)
+            # Create the output layer without an activation function
+            if batch_norms[last_index]:
+                layers.append(nn.BatchNorm1d(n_hidden_nodes))
+            layers.append(nn.Linear(n_hidden_nodes, output_size))
 
+        self.net = nn.Sequential(*layers)
 
-class PrimitiveModel(nn.Module):
-
-    def __init__(self, name, input_layer_size, output_size):
-        super(PrimitiveModel, self).__init__()
-
-        activation = ACTIVATIONS[ACTIVATION]
-        self.net = create_model(input_layer_size=input_layer_size,
-                                output_size=output_size,
-                                n_layers=1,
-                                n_hidden_nodes=1,
-                                batch_norms=[True],
-                                activation=activation)
-
-    def forward(self, x):
-        return self.net(x)
-
-
-class RegressionModel(nn.Module):
-
-    def __init__(self, input_size):
-        super(RegressionModel, self).__init__()
-        activation = ACTIVATIONS[ACTIVATION]
-        self.net = create_model(input_layer_size=input_size,
-                                output_size=1,
-                                n_layers=3,
-                                n_hidden_nodes=64,
-                                batch_norms=[False, False, False],
-                                activation=activation)
+        if use_skip:
+            if input_layer_size == output_size:
+                self.skip = nn.Sequential()
+            else:
+                self.skip = nn.Linear(input_layer_size, output_size)
+        else:
+            self.skip = None
 
     def forward(self, x):
-        return self.net(x) # torch.clamp(self.net(x), 0, 1) #
-
-
-class ClassificationModel(nn.Module):
-
-    def __init__(self, input_size, output_size):
-        super(ClassificationModel, self).__init__()
-
-        activation = ACTIVATIONS[ACTIVATION]
-
-        self.net = nn.Sequential(
-            # nn.BatchNorm1d(input_size),
-            nn.Linear(
-                input_size, input_size
-            ),
-            activation(),
-            nn.Linear(
-                input_size, input_size
-            ),
-            activation(),
-            nn.Linear(
-                input_size, output_size
-            )
-        )
-
-    def forward(self, x):
-        return self.net(x) # torch.clamp(self.net(x), 0, 1)
+        if self.skip:
+            return self.net(x) + self.skip(x)
+        else:
+            return self.net(x)
 
 
 class DNAModel(nn.Module):
@@ -264,4 +229,3 @@ class SiameseModel(nn.Module):
             print("There was an error in the foward pass.  It was ", e)
             print(pipeline[current_index])
             quit(1)
-
