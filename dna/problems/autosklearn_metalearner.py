@@ -119,21 +119,54 @@ class AutoSklearnMetalearner():
         k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(k)
         for dataset_index, dataset_name in enumerate(self.testset):
             k_best_pipelines = k_best_pipelines_per_dataset[dataset_name]
-            metric_value = self.opt([self.runs.loc[pipeline].iloc[dataset_index] for pipeline in k_best_pipelines if np.isfinite(self.runs.loc[pipeline].iloc[dataset_index])])
-            best_metric_value = self.opt(self.test_runs.iloc[:, dataset_index])
+
+            ranked_df = self.runs.loc[k_best_pipelines].iloc[:, dataset_index].to_frame("score")
+            ranked_df.reset_index(inplace=True)
+            ranked_df.columns = ["id", "score"]
+
+            actual_df = self.test_runs.iloc[:, dataset_index].to_frame("score")
+            actual_df.reset_index(inplace=True)
+            actual_df.columns = ["id", "score"]
+
+            regret_score = self.regret_value(ranked_df, actual_df)
+            top_k = self.top_k(ranked_df, actual_df, k)
+
             # gather the actual top pipelines for each test dataset
             top_pipelines_per_dataset[dataset_name] = list(self.test_runs.iloc[:, dataset_index].nlargest(k).index)
             # get the number of top k pipelines that are actually in the top k
             top_ids_actual = top_pipelines_per_dataset[dataset_name]
             top_k_out_of_total.append(len(set(top_ids_actual).intersection(set(k_best_pipelines))))
             # get the actual values for predicted top pipeline
-            top_pipeline_performance.append(best_metric_value)
-            metric_differences[dataset_name] = np.abs(best_metric_value - metric_value)
+            # metric_differences[dataset_name] = self.regret_value()
 
         print("The top k of k is, on average:", np.mean(top_k_out_of_total))
         print("The difference in predicted metric vs actual is", np.mean(list(metric_differences.values())))
         return metric_differences, top_pipeline_performance, top_k_out_of_total, top_pipelines_per_dataset
 
+    def regret_value(self, ranked_df, actual_df):
+        """
+
+        :param ranked_df:  a Pandas DF with columns id (for pipeline), score
+        :param actual_df:
+        :return:
+        """
+        opt = np.nanmax
+        best_metric_value = opt(actual_df["score"])
+        best_predicted_value = opt(ranked_df["score"])
+        return abs(best_metric_value - best_predicted_value)
+
+
+    def top_k(self, ranked_df, actual_df, k):
+        """
+        A metric for calculating how many of the predicted top K pipelines are actually in the real top k
+        :param ranked_df:
+        :param actual_df:
+        :param k: the number of top pipelines to compare with
+        :return:
+        """
+        top_actual = actual_df.nlargest(k, columns="score").id
+        top_predicted = ranked_df.nlargest(k, columns="score").id
+        return len(set(top_actual).intersection(set(top_predicted)))
 
     def predict(self, k, validation_set: dict):
         """
