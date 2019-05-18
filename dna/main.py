@@ -40,7 +40,7 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 2
+    n_epochs = 0
     batch_size = 2
     drop_last = True
 
