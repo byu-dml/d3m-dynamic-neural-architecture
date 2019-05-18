@@ -5,6 +5,9 @@ import tarfile
 import typing
 
 import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 
 DATA_DIR = './data'
@@ -19,7 +22,8 @@ def group_json_objects(json_objects, group_key):
     json_objects: List[Dict], JSON compatible list of objects.
     group_key: str, json_objects is grouped by group_key. group_key must be a
         key into each object in json_objects and the corresponding value must
-        be hashable.
+        be hashable. group_key can be a '.' delimited string to access deeply
+        nested fields.
 
     Returns:
     --------
@@ -28,7 +32,9 @@ def group_json_objects(json_objects, group_key):
     """
     grouped_objects = {}
     for i, obj in enumerate(json_objects):
-        group = obj[group_key]
+        group = obj
+        for key_part in group_key.split('.'):
+            group = group[key_part]
         if not group in grouped_objects:
             grouped_objects[group] = []
         grouped_objects[group].append(i)
@@ -78,6 +84,27 @@ def get_data(path):
     return data
 
 
+class DropMissingValues:
+
+    def __init__(self, values_to_drop=[]):
+        self.values_to_drop = values_to_drop
+
+    def fit(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        for key, is_missing in pd.DataFrame(data).isna().any().iteritems():
+            if is_missing:
+                self.values_to_drop.append(key)
+
+    def predict(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        for instance in data:
+            for key in self.values_to_drop:
+                instance.pop(key, None)
+        return data
+
+
 class StandardScaler:
     """
     Transforms data by subtracting the mean and scaling by the standard
@@ -124,27 +151,31 @@ class StandardScaler:
 
 
 def preprocess_data(train_data, test_data):
-    scaler = StandardScaler()
-
-
     train_metafeatures = []
     for instance in train_data:
-        instance['metafeatures'].pop('pca_determinant_of_covariance', None)
         train_metafeatures.append(instance['metafeatures'])
 
     test_metafeatures = []
     for instance in test_data:
-        instance['metafeatures'].pop('pca_determinant_of_covariance', None)
         test_metafeatures.append(instance['metafeatures'])
 
+    # drop metafeature if missing for any instance
+    dropper = DropMissingValues(['pca_determinant_of_covariance'])
+    dropper.fit(train_metafeatures)
+    train_metafeatures = dropper.predict(train_metafeatures)
+    test_metafeatures = dropper.predict(test_metafeatures)
+
+    # scale data to unit mean and unit standard deviation
+    scaler = StandardScaler()
     scaler.fit(train_metafeatures)
     train_metafeatures = scaler.predict(train_metafeatures)
     test_metafeatures = scaler.predict(test_metafeatures)
 
+    # convert from dict to list
     for instance, mf_instance in zip(train_data, train_metafeatures):
-        instance['metafeatures'] = mf_instance
+        instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
 
     for instance, mf_instance in zip(test_data, test_metafeatures):
-        instance['metafeatures'] = mf_instance
+        instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
 
     return train_data, test_data

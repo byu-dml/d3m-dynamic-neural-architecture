@@ -5,6 +5,8 @@ import sys
 import typing
 
 from data import get_data, preprocess_data, split_data
+from models import get_model
+from problems import get_problem
 
 
 def configure_split_parser(parser):
@@ -77,8 +79,8 @@ def configure_evaluate_parser(parser):
         help='seed used to split the data into train and test sets'
     )
     parser.add_argument(
-        '--problem', type=str, action='store', required=True,
-        choices=['regression', 'siamese'],
+        '--problem', nargs='+', required=True,
+        choices=['regression', 'rank', 'top-k', 'pairwise-compare'],
         help='the type of problem'
     )
     parser.add_argument(
@@ -89,11 +91,19 @@ def configure_evaluate_parser(parser):
         '--model-config-path', type=str, default=None,
         help='path to a json file containing the model configuration values'
     )
+    parser.add_argument(
+        '--model-seed', type=int, default=0,
+        help='seed used to control the random state of the model'
+    )
+    parser.add_argument(
+        '--verbose', default=False, action='store_true'
+    )
 
 
 def evaluate_handler(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser, *,
-    data_resolver=get_data
+    data_resolver=get_data, model_resolver=get_model,
+    problem_resolver=get_problem,
 ):
     train_path = getattr(arguments, 'train_path')
     train_data = data_resolver(train_path)
@@ -108,6 +118,22 @@ def evaluate_handler(
         test_data = data_resolver(test_path)
 
     train_data, test_data = preprocess_data(train_data, test_data)
+
+    model_name = getattr(arguments, 'model')
+    model_config_path = getattr(arguments, 'model_config_path')
+    with open(model_config_path) as f:
+        model_config = json.load(f)
+    model_seed = getattr(arguments, 'model_seed')
+    model = model_resolver(model_name, seed=model_seed)
+
+    verbose = getattr(arguments, 'verbose')
+
+    for problem_name in getattr(arguments, 'problem'):
+        problem = problem_resolver(problem_name)
+        problem.run(
+            train_data, test_data, model, model_config=model_config,
+            re_fit_model=False, verbose=verbose
+        )
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
