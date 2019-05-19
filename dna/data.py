@@ -154,10 +154,14 @@ def preprocess_data(train_data, test_data):
     train_metafeatures = []
     for instance in train_data:
         train_metafeatures.append(instance['metafeatures'])
+        for step in instance['pipeline']['steps']:
+            step['name'] = step['name'].replace('.', '_')
 
     test_metafeatures = []
     for instance in test_data:
         test_metafeatures.append(instance['metafeatures'])
+        for step in instance['pipeline']['steps']:
+            step['name'] = step['name'].replace('.', '_')
 
     # drop metafeature if missing for any instance
     dropper = DropMissingValues(['pca_determinant_of_covariance'])
@@ -179,3 +183,181 @@ def preprocess_data(train_data, test_data):
         instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
 
     return train_data, test_data
+
+
+class Dataset(Dataset):
+    """
+    A subclass of torch.utils.data.Dataset for handling simple JSON structed
+    data.
+
+    Parameters:
+    -----------
+    data: List[Dict], JSON structed data.
+    features_key: str, the key into each element of data whose value is a list
+        of features used for input to a PyTorch network.
+    target_key: str, the key into each element of data whose value is the
+        target used for a PyTorch network.
+    device": str, the device onto which the data will be loaded
+    """
+
+    def __init__(
+        self, data: typing.List[typing.Dict], features_key: str,
+        target_key: str, task_type: str, device: str
+    ):
+        self.data = data
+        self.features_key = features_key
+        self.target_key = target_key
+        self.task_type = task_type
+        if self.task_type == "CLASSIFICATION":
+            self._y_dtype = torch.int64
+        elif self.task_type == "REGRESSION":
+            self._y_dtype = torch.float32
+        self.device = device
+
+    def __getitem__(self, item: int):
+        x = torch.tensor(
+            self.data[item][self.features_key], dtype=torch.float32, device=self.device
+        )
+        y = torch.tensor(
+            self.data[item][self.target_key],
+            dtype=self._y_dtype,
+            device=self.device
+        )
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+
+class RandomSampler(Sampler):
+    """
+    Samples indices uniformly without replacement.
+
+    Parameters
+    ----------
+    n: int
+        the number of indices to sample
+    seed: int
+        used to reproduce randomization
+    """
+
+    def __init__(self, n, seed):
+        self.n = n
+        self._indices = list(range(n))
+        self._random = random.Random()
+        self._random.seed(seed)
+
+    def __iter__(self):
+        self._random.shuffle(self._indices)
+        return iter(self._indices)
+
+    def __len__(self):
+        return self.n
+
+
+class GroupDataLoader(object):
+    """
+    Batches a dataset for PyTorch Neural Network training. Partitions the
+    dataset so that batches belong to the same group.
+
+    Parameters:
+    -----------
+    data: List[Dict], JSON compatible list of objects representing a dataset.
+        dataset_class must know how to parse the data given dataset_params.
+    group_key: str, pipeline run data is grouped by group_key and each
+        batch of data comes from only one group. group_key must be a key into
+        each element of the pipeline run data. the value of group_key must be
+        hashable.
+    dataset_class: Type[torch.utils.data.Dataset], the class used to make
+        dataset instances after the dataset is partitioned.
+    dataset_params: dict, extra parameters needed to instantiate dataset_class
+    batch_size: int, the number of data points in each batch
+    drop_last: bool, default False. whether to drop the last incomplete batch.
+    shuffle: bool, default True. whether to randomize the batches.
+    """
+
+    def __init__(
+        self, data: typing.List[typing.Dict], group_key: str,
+        dataset_class: typing.Type[Dataset], dataset_params: dict,
+        batch_size: int, drop_last: bool, shuffle: bool, seed: int
+    ):
+        self.data = data
+        self.group_key = group_key
+        self.dataset_class = dataset_class
+        self.dataset_params = dataset_params
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.shuffle = shuffle
+        self.seed = seed
+
+        self._random = random.Random()
+        self._random.seed(seed)
+
+        self._init_dataloaders()
+        self._init_group_metadataloader()
+
+    def _init_dataloaders(self):
+        """
+        Groups self.data based on group_key. Creates a
+        torch.utils.data.DataLoader for each group, using self.dataset_class.
+        """
+        # group the data
+        grouped_data = group_json_objects(self.data, self.group_key)
+
+        # create dataloaders
+        self._group_dataloaders = {}
+        for group, group_indices in grouped_data.items():
+            group_data = [self.data[i] for i in group_indices]
+            group_dataset = self.dataset_class(group_data, **self.dataset_params)
+            new_dataloader = self._get_data_loader(
+                group_dataset
+            )
+            # assert(len(new_dataloader) != 0)
+            self._group_dataloaders[group] = new_dataloader
+
+    def _get_data_loader(self, data):
+        if self.shuffle:
+            sampler = RandomSampler(len(data), self._randint())
+        else:
+            sampler = None
+        dataloader = DataLoader(
+            dataset = data,
+            sampler =  sampler,
+            batch_size = self.batch_size,
+            drop_last = self.drop_last
+        )
+        # assert(len(dataloader) != 0)
+        return dataloader
+
+    def _randint(self):
+        return self._random.randint(0,2**32-1)
+
+    def _init_group_metadataloader(self):
+        """
+        Creates a dataloader which randomizes the batches over the groups. This
+        allows the order of the batches to be independent of the groups.
+        """
+        self._group_batches = []
+        for group, group_dataloader in self._group_dataloaders.items():
+            # assert(len(group_dataloader) != 0)
+            self._group_batches += [group] * len(group_dataloader)
+        self._random.shuffle(self._group_batches)
+
+    def __iter__(self):
+        return iter(self._iter())
+
+    def _iter(self):
+        group_dataloader_iters = {}
+        for group in self._group_batches:
+            if not group in group_dataloader_iters:
+                group_dataloader_iters[group] = iter(
+                    self._group_dataloaders[group]
+                )
+            x_batch, y_batch = next(group_dataloader_iters[group])
+            # since all pipeline are the same in this group, just grab one of them
+            pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]
+            yield (group, pipeline, x_batch), y_batch
+        raise StopIteration()
+
+    def __len__(self):
+        return len(self._group_batches)

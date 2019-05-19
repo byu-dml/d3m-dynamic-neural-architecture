@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import typing
+import uuid
 
 from data import get_data, preprocess_data, split_data
 from models import get_model
@@ -98,6 +99,10 @@ def configure_evaluate_parser(parser):
     parser.add_argument(
         '--verbose', default=False, action='store_true'
     )
+    parser.add_argument(
+        '--output-dir', type=str, default=None,
+        help='directory path to write outputs for this model run'
+    )
 
 
 def evaluate_handler(
@@ -124,16 +129,23 @@ def evaluate_handler(
     with open(model_config_path) as f:
         model_config = json.load(f)
     model_seed = getattr(arguments, 'model_seed')
-    model = model_resolver(model_name, seed=model_seed)
+    model = model_resolver(model_name, model_config, seed=model_seed)
 
     verbose = getattr(arguments, 'verbose')
+    output_dir = getattr(arguments, 'output_dir')
+    run_id = str(uuid.uuid4())
+    print(run_id)
+    output_dir = os.path.join(output_dir, run_id)
 
     for problem_name in getattr(arguments, 'problem'):
         problem = problem_resolver(problem_name)
-        problem.run(
+        train_predictions, test_predictions, train_score, test_score = problem.run(
             train_data, test_data, model, model_config=model_config,
-            re_fit_model=False, verbose=verbose
+            re_fit_model=False, verbose=verbose, output_dir=output_dir
         )
+        if verbose:
+            print('train score: {}'.format(train_score))
+            print('test score: {}'.format(test_score))
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
