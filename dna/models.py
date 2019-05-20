@@ -12,7 +12,7 @@ ACTIVATION = 'relu'
 
 class Submodule(nn.Module):
 
-    def __init__(self, name, input_layer_size, output_size, *, use_skip=False):
+    def __init__(self, input_layer_size, output_size, *, use_skip=False):
         super(Submodule, self).__init__()
 
         n_layers = 1

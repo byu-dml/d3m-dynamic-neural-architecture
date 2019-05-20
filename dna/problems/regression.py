@@ -36,7 +36,7 @@ class Regression(BaseProblem):
 
         torch.manual_seed(self._randint())
         torch.cuda.manual_seed_all(self._randint())
-        input_model = Submodule("input", self._shape[0], self._shape[0])
+        input_model = Submodule(self._shape[0], self._shape[0])
         input_model.cuda()
 
         submodules = {}
@@ -45,11 +45,11 @@ class Regression(BaseProblem):
                 if not step['name'] in submodules:
                     n_inputs = len(step['inputs'])
                     submodules[step['name']] = Submodule(
-                        step['name'], n_inputs * self._shape[0], self._shape[0]
+                        n_inputs * self._shape[0], self._shape[0]
                     )
                     submodules[step['name']].cuda()  # todo: put on self.device
 
-        output_model = Submodule('task', self._shape[0], 1, use_skip=False)
+        output_model = Submodule(self._shape[0], 1, use_skip=False)
         output_model.cuda()
         self._model = DNAModel(input_model, submodules, output_model)
         if "cuda" in self.device:
