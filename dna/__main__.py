@@ -85,6 +85,10 @@ def configure_evaluate_parser(parser):
         help='the type of problem'
     )
     parser.add_argument(
+        '--k', type=int, action='store', default=10,
+        help='the number of pipelines to rank'
+    )
+    parser.add_argument(
         '--model', type=str, action='store', required=True,
         help='the python path to the model class'
     )
@@ -110,6 +114,8 @@ def evaluate_handler(
     data_resolver=get_data, model_resolver=get_model,
     problem_resolver=get_problem,
 ):
+    run_id = str(uuid.uuid4())
+
     train_path = getattr(arguments, 'train_path')
     train_data = data_resolver(train_path)
 
@@ -133,17 +139,28 @@ def evaluate_handler(
 
     verbose = getattr(arguments, 'verbose')
     output_dir = getattr(arguments, 'output_dir')
-    run_id = str(uuid.uuid4())
-    print(run_id)
     output_dir = os.path.join(output_dir, run_id)
 
+    if verbose:
+        print(run_id)
+
     for problem_name in getattr(arguments, 'problem'):
-        problem = problem_resolver(problem_name)
-        train_predictions, test_predictions, train_score, test_score = problem.run(
-            train_data, test_data, model, model_config=model_config,
-            re_fit_model=False, verbose=verbose, output_dir=output_dir
-        )
         if verbose:
+            print('\n' + problem_name + '\n')
+        problem = problem_resolver(problem_name)
+        if problem_name == 'top-k':  # todo fix this hack to allow problem args
+            k = getattr(arguments, 'k')
+            train_predictions, test_predictions, train_score, test_score = problem.run(
+                train_data, test_data, model, k, model_config=model_config,
+                re_fit_model=False, verbose=verbose, output_dir=output_dir
+            )
+        else:
+            train_predictions, test_predictions, train_score, test_score = problem.run(
+                train_data, test_data, model, model_config=model_config,
+                re_fit_model=False, verbose=verbose, output_dir=output_dir
+            )
+        if verbose:
+            print()
             print('train score: {}'.format(train_score))
             print('test score: {}'.format(test_score))
 
