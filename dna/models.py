@@ -2,12 +2,14 @@ import json
 import os
 import typing
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
 from data import Dataset, GroupDataLoader
+import utils
 
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
@@ -152,15 +154,25 @@ class DNAModule(nn.Module):
         return new_output
 
 
-class RegressionModelBase:
+class ModelBase:
 
     def __init__(self, *, seed):
         self.seed = seed
+        self.fitted = False
 
     def fit(self, data, *, verbose=False):
         raise NotImplementedError()
 
-    def prediction_regression(self, data, *, verbose=False):
+
+class RegressionModelBase(ModelBase):
+
+    def predict_regression(self, data, *, verbose=False):
+        raise NotImplementedError()
+
+
+class RankModelBase(ModelBase):
+
+    def predict_rank(self, data, *, verbose=False):
         raise NotImplementedError()
 
 
@@ -208,6 +220,8 @@ class PyTorchModelBase:
                 self._save_outputs(output_dir, 'validation', e, validation_predictions, validation_targets, validation_loss_score)
                 if verbose:
                     print('validation loss: {}'.format(validation_loss_score))
+
+        self.fitted = True
 
     def _get_model(self, train_data):
         raise NotImplementedError()
@@ -292,11 +306,13 @@ class PyTorchModelBase:
             json.dump(outputs, f)
 
 
-class DNARegressionModel(PyTorchModelBase, RegressionModelBase):
+class DNAModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
     def __init__(self, latent_size=50, *, seed, device='cuda:0'):
         self._task_type = 'REGRESSION'
         PyTorchModelBase.__init__(self, task_type=self._task_type, seed=seed, device=device)
+        RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
 
         self.latent_size = latent_size
 
@@ -358,6 +374,15 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase):
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
 
         return predictions
+
+    def predict_rank(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+
+        return utils.rank(np.array(predictions))
 
 
 class SiameseModel(nn.Module):
@@ -444,7 +469,7 @@ class SiameseModel(nn.Module):
 
 def get_model(model_name: str, model_config: typing.Dict, seed: int):
     model_class = {
-        'dna_regression': DNARegressionModel,
+        'dna_regression': DNAModel,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(seed=seed)
