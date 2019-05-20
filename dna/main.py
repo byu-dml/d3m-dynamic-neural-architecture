@@ -3,23 +3,15 @@ import torch
 import torch.optim as optim
 import uuid
 
-from problems import Regression
-from problems import Siamese
+from data import write_json
+from metrics import accuracy, rmse
+from problems import Regression, Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
 
 
 def save_weights():
     for key, model in primitive_submodel_dict.items():
         torch.save(model, "%s.pt" % key)
-
-
-def accuracy(y_hat, y):
-    y_hat = np.argmax(y_hat, axis=1)
-    return np.sum(y_hat == y, dtype=np.float32) / len(y)
-
-
-def rmse(y_hat, y):
-    return np.average((np.array(y_hat) - np.array(y))**2)**.5
 
 
 def main():
@@ -36,8 +28,8 @@ def main():
     print('NAME:', name)
 
     seed = 1022357373
-    n_epochs = 50000
-    batch_size = 32
+    n_epochs = 2
+    batch_size = 12
     drop_last = True
 
     if task == "regression":
