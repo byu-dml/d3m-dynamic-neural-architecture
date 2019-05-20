@@ -12,7 +12,72 @@ from .kND import KNearestDatasets
 
 class AutoSklearnMetalearner():
 
-    def __init__(self, metric='test_accuracy', maximize_metric=True):
+    def __init__(self, ):
+        pass
+
+
+    def get_k_best_pipelines(self, dataset_metafeatures, all_other_metafeatures, runs, k, current_dataset_name):
+        # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
+        all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
+        # this should aready be done by the time it gets here
+        all_other_metafeatures = all_other_metafeatures.transpose()
+        # get the metafeatures out of their list
+        all_other_metafeatures = pd.DataFrame(all_other_metafeatures.iloc[1].tolist(), index=all_other_metafeatures.iloc[0])
+        all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
+
+        import pdb; pdb.set_trace()
+
+        new_header = runs.transpose().iloc[0]  # grab the first row for the header
+        new_runs = runs.transpose()[1:]  # take the data less the header row
+        new_runs.columns = new_header
+
+        # get the ids for pipelines that we have real values for
+        current_validation_ids = self.validation_set.pipeline_id.unique()
+
+        kND = KNearestDatasets(metric='l1', random_state=3)
+        kND.fit(all_other_metafeatures, new_runs, current_validation_ids, self.maximize_metric)
+
+        # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
+        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
+        k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
+        return k_best_pipelines
+
+    def get_k_best_pipelines_per_dataset(self, k):
+        # they all should have the same dataset and metafeatures so take it from the first row
+        dataset_metafeatures = self.validation_set["metafeatures"].iloc[0]
+        dataset_name = self.validation_set["dataset"].iloc[0]
+        all_other_metafeatures = self.metafeatures
+        pipelines = self.get_k_best_pipelines(dataset_metafeatures, all_other_metafeatures, self.runs, k, dataset_name)
+        return pipelines
+
+
+    def predict_rank(self, metadata_for_one_dataset, k):
+        """
+        A wrapper for all the other functions so that this is organized
+        :param k: number of datasets
+        :param validation_set: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
+        from each dataset being passed in.  This is used for the rankings
+        :return:
+        """
+        self.validation_set = metadata_for_one_dataset
+        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(k)
+        ranked_df = self.runs.loc[k_best_pipelines_per_dataset].to_frame("score")
+        ranked_df.reset_index(inplace=True)
+        ranked_df.columns = ["id", "score"]
+
+        actual_df = self.test_runs.iloc[:, 0].to_frame("score")
+        actual_df.reset_index(inplace=True)
+        actual_df.columns = ["id", "score"]
+
+        return ranked_df, actual_df
+
+    def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True):
+        """
+        A basic KNN fit.  Loads in and processes the training data from a fixed split
+        :param training_dataset: the dataset to be processed.  If none given it will be pulled from the hardcoded file
+        :param metric: what kind of metric we're using in our metalearning
+        :param maximize_metric: whether to maximize or minimize that metric.  Defaults to Maximize
+        """
         # if metadata_path is None:
         self.runs = None
         self.test_runs = None
@@ -22,23 +87,34 @@ class AutoSklearnMetalearner():
         self.pipeline_descriptions = {}
         self.metric = metric
         self.maximize_metric = maximize_metric
-        if self.maximize_metric:
-            self.opt = np.nanmax
+        self.opt = np.nanmax
+        if training_dataset is None:
+            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
+            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+            self.process_metadata(data_type="test")
+            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+            self.process_metadata(data_type="train")
         else:
-            self.opt = np.nanmin
+            self.metadata = training_dataset
+            self.metafeatures = pd.DataFrame(self.metadata)[['dataset', 'metafeatures']]
+            self.runs = pd.DataFrame(self.metadata)[['dataset', 'pipeline_id', 'test_accuracy']]
 
+    """
+    Saving this in case we want to use it to pull the static test set
+    No good reason to keep it otherwise
+    """
     def process_metadata(self, data_type="train", validation_names=None):
         """
-        Reads in a dataset from a static json file.  Loads lots of the information needed to process the KnD
-        :param data_type: "train" or "test"
-        :param validation_names:
-        :return:
+        Creates the dataframes needed and stores them
         """
         dataset_to_use = self.datasets if data_type == "train" else self.testset
         runs_by_pipeline = {}
         metafeatures = {}
         test_metafeatures = {}
-        for row in self.metadata:
+        import pdb; pdb.set_trace()
+        for row in dataset_to_use:
             dataset_name = row['dataset']
             pipeline_id = row['pipeline_id']
             run = row[self.metric]
@@ -76,130 +152,8 @@ class AutoSklearnMetalearner():
             self.test_metafeatures = self.metafeatures.copy(deep=True)
             self.test_metafeatures = self.test_metafeatures[validation_names]
             self.metafeatures = self.metafeatures.drop(validation_names, axis=1, inplace=False)
-            # self.metafeatures.columns = np.arange(self.metafeatures.shape[1])
-            # self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
-
-
-    def get_k_best_pipelines(self, dataset_metafeatures, all_other_metafeatures, runs, k, current_dataset_name):
-        mf_mask = np.arange(dataset_metafeatures.shape[0])[np.isfinite(dataset_metafeatures)]
-        dataset_metafeatures = dataset_metafeatures.iloc[mf_mask]
-        # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
-        all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
-        all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
-        all_other_metafeatures = all_other_metafeatures.transpose()
-
-        # get the ids for pipelines that we have real values for
-        current_validation_ids = self.validation_set.loc[self.validation_set["index"] == current_dataset_name]["pipeline_ids"].iloc[0]
-
-        kND = KNearestDatasets(metric='l1', random_state=3)
-        kND.fit(all_other_metafeatures, runs, current_validation_ids, self.maximize_metric)
-        # best suggestions is a list of 3-tuples that contain the pipeline index, the distance value, and the pipeline_id
-
-        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
-        k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
-        return k_best_pipelines
-
-    def get_k_best_pipelines_per_dataset(self, k):
-        k_best_pipelines_per_dataset = {}
-        for dataset_index, dataset_name in enumerate(self.testset):
-            # each column is a metafeature for the column which is a dataset name
-            dataset_metafeatures = self.test_metafeatures.iloc[:, dataset_index]
-            # we want to drop the metafeatures from the group if we are given a dataset.  Otherwise we have seperate metafeatures
-            all_other_metafeatures = self.metafeatures.drop(index=dataset_index) if not len(self.test_metafeatures) else self.metafeatures
-            runs = self.runs.drop(columns=dataset_index) if not len(self.test_metafeatures) else self.runs
-            pipelines = self.get_k_best_pipelines(dataset_metafeatures, all_other_metafeatures, runs, k, dataset_name)
-            k_best_pipelines_per_dataset[dataset_name] = pipelines
-        return k_best_pipelines_per_dataset
-
-    def get_metric_difference_from_best(self, k):
-        metric_differences = {}
-        top_pipeline_performance = []
-        top_k_out_of_total = []
-        top_pipelines_per_dataset = {}
-        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(k)
-        for dataset_index, dataset_name in enumerate(self.testset):
-            k_best_pipelines = k_best_pipelines_per_dataset[dataset_name]
-
-            ranked_df = self.runs.loc[k_best_pipelines].iloc[:, dataset_index].to_frame("score")
-            ranked_df.reset_index(inplace=True)
-            ranked_df.columns = ["id", "score"]
-
-            actual_df = self.test_runs.iloc[:, dataset_index].to_frame("score")
-            actual_df.reset_index(inplace=True)
-            actual_df.columns = ["id", "score"]
-
-            regret_score = self.regret_value(ranked_df, actual_df)
-            top_k = self.top_k(ranked_df, actual_df, k)
-
-            # gather the actual top pipelines for each test dataset
-            top_pipelines_per_dataset[dataset_name] = list(self.test_runs.iloc[:, dataset_index].nlargest(k).index)
-            # get the number of top k pipelines that are actually in the top k
-            top_ids_actual = top_pipelines_per_dataset[dataset_name]
-            top_k_out_of_total.append(len(set(top_ids_actual).intersection(set(k_best_pipelines))))
-            # get the actual values for predicted top pipeline
-            # metric_differences[dataset_name] = self.regret_value()
-
-        print("The top k of k is, on average:", np.mean(top_k_out_of_total))
-        print("The difference in predicted metric vs actual is", np.mean(list(metric_differences.values())))
-        return metric_differences, top_pipeline_performance, top_k_out_of_total, top_pipelines_per_dataset
-
-    def regret_value(self, ranked_df, actual_df):
-        """
-
-        :param ranked_df:  a Pandas DF with columns id (for pipeline), score
-        :param actual_df:
-        :return:
-        """
-        opt = np.nanmax
-        best_metric_value = opt(actual_df["score"])
-        best_predicted_value = opt(ranked_df["score"])
-        return abs(best_metric_value - best_predicted_value)
-
-
-    def top_k(self, ranked_df, actual_df, k):
-        """
-        A metric for calculating how many of the predicted top K pipelines are actually in the real top k
-        :param ranked_df:
-        :param actual_df:
-        :param k: the number of top pipelines to compare with
-        :return:
-        """
-        top_actual = actual_df.nlargest(k, columns="score").id
-        top_predicted = ranked_df.nlargest(k, columns="score").id
-        return len(set(top_actual).intersection(set(top_predicted)))
-
-    def predict(self, k, validation_set: dict):
-        """
-        A wrapper for all the other functions so that this is organized
-        :param k: number of datasets
-        :param validation_set: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
-        from each dataset being passed in.  This is used for the rankings
-        :return:
-        """
-        self.validation_set = pd.DataFrame(validation_set).transpose()
-        # make indexes columns
-        self.validation_set.reset_index(level=0, inplace=True)
-        validate_dataset_names = list(validation_set.keys())
-        return self.get_metric_difference_from_best(k)
-
-    def fit(self, use_static_test=False, validation_names=None):
-        """
-        A basic KNN fit.  Loads in and processes the training data from a fixed split to avoid working with the dataloader
-        :param use_static_test:
-        :return:
-        """
-        if use_static_test:
-            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
-            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="test")
-            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="train")
-        else:
-            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-                self.process_metadata(data_type="train", validation_names=validation_names)
+            self.metafeatures.columns = np.arange(self.metafeatures.shape[1])
+            self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
 
 
 """

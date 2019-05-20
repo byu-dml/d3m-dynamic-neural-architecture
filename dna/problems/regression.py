@@ -8,34 +8,9 @@ from .base_problem import BaseProblem
 from metrics import rmse
 from models import Submodule, DNAModel
 
-
-# TODO: make this dynamic
-lookup_input_size = {
-    "d3m.primitives.data_transformation.construct_predictions.DataFrameCommon": 2,
-    "d3m.primitives.classification.gaussian_naive_bayes.SKlearn": 2,
-    'd3m.primitives.classification.linear_svc.SKlearn': 2,
-    "d3m.primitives.classification.random_forest.SKlearn": 2,
-    "d3m.primitives.classification.gradient_boosting.SKlearn": 2,
-    "d3m.primitives.classification.bagging.SKlearn": 2,
-    "d3m.primitives.classification.bernoulli_naive_bayes.SKlearn": 2,
-    "d3m.primitives.classification.decision_tree.SKlearn": 2,
-    "d3m.primitives.classification.k_neighbors.SKlearn": 2,
-    "d3m.primitives.classification.linear_discriminant_analysis.SKlearn": 2,
-    "d3m.primitives.classification.logistic_regression.SKlearn": 2,
-    "d3m.primitives.classification.linear_svc.SKlearn": 2,
-    "d3m.primitives.classification.sgd.SKlearn": 2,
-    "d3m.primitives.classification.svc.SKlearn": 2,
-    "d3m.primitives.classification.extra_trees.SKlearn": 2,
-    "d3m.primitives.classification.passive_aggressive.SKlearn": 2,
-    "d3m.primitives.feature_selection.select_fwe.SKlearn": 2,
-    "d3m.primitives.feature_selection.select_percentile.SKlearn": 2,
-    "d3m.primitives.feature_selection.generic_univariate_select.SKlearn": 2,
-    'd3m.primitives.regression.extra_trees.SKlearn': 2,
-    "d3m.primitives.regression.svr.SKlearn": 2,
-    'd3m.primitives.data_transformation.horizontal_concat.DataFrameConcat': 2,
-
-}
-
+import pandas
+import numpy as np
+from scipy.stats import spearmanr
 
 class ModelNotFitError(Exception):
     pass
@@ -144,22 +119,20 @@ class Regression(BaseProblem):
         torch.cuda.manual_seed_all(self._randint())
         input_model = Submodule("input", self._shape[0], self._shape[0])
         input_model.cuda()
-        submodels = {}
-        for item in self._train_data:
-            primitive_names = [dict_obj["name"] for dict_obj in item["pipeline"]]
-            for primitive_name in primitive_names:
-                if not primitive_name in submodels:
-                    try:
-                        n_inputs = lookup_input_size[primitive_name]
-                    except KeyError as e:
-                        n_inputs = 1
-                    submodels[primitive_name] = Submodule(
-                        primitive_name, n_inputs * self._shape[0], self._shape[0]
+
+        submodules = {}
+        for instance in self._train_data:
+            for step in instance['pipeline']:
+                if not step['name'] in submodules:
+                    n_inputs = len(step['inputs'])
+                    submodules[step['name']] = Submodule(
+                        step['name'], n_inputs * self._shape[0], self._shape[0]
                     )
-                    submodels[primitive_name].cuda()
+                    submodules[step['name']].cuda()  # todo: put on self.device
+
         output_model = Submodule('task', self._shape[0], 1, use_skip=False)
         output_model.cuda()
-        self._model = DNAModel(input_model, submodels, output_model)
+        self._model = DNAModel(input_model, submodules, output_model)
         if "cuda" in self.device:
             self._model.cuda()
         torch.random.set_rng_state(torch_state)
@@ -258,6 +231,74 @@ class Regression(BaseProblem):
     def rank(performances):
         ranks = np.argsort(performances)[::-1]
         return ranks
+
+    # def notpredict(self, dataset, k=25):
+    #     dataset_performances = {}
+    #     pipeline_key = 'pipeline_ids'
+    #     actual_key = 'f1_actuals'
+    #     predict_key = 'f1_predictions'
+    #
+    #     dataloader = self._get_data_loader(self.validation_data)
+    #     for x_batch, y_batch in dataloader:
+    #         y_hat_batch = self.model(x_batch)
+    #
+    #         # Get the pipeline id and the data set ids that correspond to it
+    #         pipeline_id, pipeline, x, dataset_ids = x_batch
+    #
+    #         # Create a list of tuples containing the pipeline id and its f1 values for each data set in this batch
+    #         for i in range(len(dataset_ids)):
+    #             dataset_id = dataset_ids[i]
+    #             f1_actual = y_batch[i].item()
+    #             f1_predict = y_hat_batch[i].item()
+    #             if dataset_id in dataset_performances:
+    #                 dataset_performance = dataset_performances[dataset_id]
+    #                 pipeline_ids = dataset_performance[pipeline_key]
+    #                 f1_actuals = dataset_performance[actual_key]
+    #                 f1_predictions = dataset_performance[predict_key]
+    #                 pipeline_ids.append(pipeline_id)
+    #                 f1_actuals.append(f1_actual)
+    #                 f1_predictions.append(f1_predict)
+    #             else:
+    #                 dataset_performance = {pipeline_key: [pipeline_id], actual_key: [f1_actual],
+    #                                        predict_key: [f1_predict]}
+    #                 dataset_performances[dataset_id] = dataset_performance
+    #
+    #     dataset_cc_sum = 0.0
+    #     dataset_performances = dataset_performances_map.values()
+    #     top_k_out_of_total = []
+    #     metric_differences = []
+    #     for dataset_performance in dataset_performances:
+    #         print("Number of pipelines for this dataset:", len(dataset_performance[actual_key]))
+    #         f1_actuals = dataset_performance[actual_key]
+    #         f1_predictions = dataset_performance[predict_key]
+    #         actual_ranks = self.rank(f1_actuals)
+    #         predicted_ranks = self.rank(f1_predictions)
+    #         # get top k out of the total k: => do this by putting the data into a series, getting the n_largest and
+    #         # then getting the index, which is the id
+    #         top_k_predicted = list(
+    #             pandas.Series(dataset_performance[predict_key], dataset_performance[pipeline_key]).nlargest(k).index)
+    #         top_k_actual = list(
+    #             pandas.Series(dataset_performance[actual_key], dataset_performance[pipeline_key]).nlargest(k).index)
+    #         top_k_out_of_total.append(len(set(top_k_predicted).intersection(set(top_k_actual))))
+    #
+    #         # get the actual values for predicted top pipeline
+    #         best_metric_value_pred = np.nanmax(
+    #             pandas.DataFrame(dataset_performance[predict_key], dataset_performance[pipeline_key]))
+    #         best_metric_value = np.nanmax(
+    #             pandas.DataFrame(dataset_performance[actual_key], dataset_performance[pipeline_key]))
+    #         metric_differences.append(np.abs(best_metric_value_pred - best_metric_value))
+    #
+    #         # Get the spearman correlation coefficient for this data set
+    #         spearman_result = spearmanr(actual_ranks, predicted_ranks)
+    #         dataset_cc = spearman_result.correlation
+    #         dataset_cc_sum += dataset_cc
+    #
+    #     num_datasets = len(dataset_performances)
+    #     mean_dataset_cc = dataset_cc_sum / num_datasets
+    #     print("On average, the top {} out of the real top {} is".format(k, k), np.mean(top_k_out_of_total))
+    #     print("The difference in actual vs predicted is", np.mean(metric_differences))
+    #     return mean_dataset_cc, top_k_out_of_total
+
 
 
 def main():

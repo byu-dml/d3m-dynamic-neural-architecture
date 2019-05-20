@@ -31,12 +31,20 @@ class KNearestDatasets(object):
         runs : dict
             A pandas dataframe containing a list of runs for each dataset.
         """
+        import pdb; pdb.set_trace()
         assert isinstance(metafeatures, pd.DataFrame)
-        assert metafeatures.values.dtype in (np.float32, np.float64)
-        assert np.isfinite(metafeatures.values).all()
+        # assert metafeatures.values.dtype in (np.float32, np.float64)
+        # assert np.isfinite(metafeatures.values).all()
         assert isinstance(pipeline_runs, pd.DataFrame)
+        # this matching column should be dataset number
         assert pipeline_runs.shape[1] == metafeatures.shape[0], \
             (pipeline_runs.shape[1], metafeatures.shape[0])
+
+
+        """
+        Need for runs: pipeline X dataset
+        Need for metafeatures: dataset X metafeatures 
+        """
 
         self.metafeatures = metafeatures
         runs = pipeline_runs.copy(deep=True)
@@ -55,6 +63,7 @@ class KNearestDatasets(object):
                 best_configuration_per_dataset[dataset_name] = None
             else:
                 configuration_idx = ""
+                # TODO: I added this.  Should I take it out?
                 while configuration_idx not in validation_set_pipelines:
                     opt_index = opt(runs[dataset_name].values)
                     configuration_idx = runs[dataset_name].index[opt_index]
@@ -157,6 +166,9 @@ class KNearestDatasets(object):
             k = len(kbest)
         return kbest[:k]
 
+    """
+    Scaling should have already been done in the preprocessing part of DNA 
+    """
     def _scale(self, metafeatures, other):
         assert isinstance(other, pd.Series), type(other)
         assert other.values.dtype == np.float64

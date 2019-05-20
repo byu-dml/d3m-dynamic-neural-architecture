@@ -2,28 +2,17 @@ import numpy as np
 import torch
 import torch.optim as optim
 import uuid
-
-from metrics import accuracy, rmse
-from problems.regression import Regression
-from problems.siamese import Siamese
+import pandas
+from metrics import accuracy, rmse, top_k, regret_value
+from problems import Regression, Siamese
 from pytorch_model_trainer import PyTorchModelTrainer
 
 from problems.autosklearn_metalearner import AutoSklearnMetalearner
-from problems.dna_baselines import DNABaselines
 
 
 def save_weights():
     for key, model in primitive_submodel_dict.items():
         torch.save(model, "%s.pt" % key)
-
-
-def accuracy(y_hat, y):
-    y_hat = np.argmax(y_hat, axis=1)
-    return np.sum(y_hat == y, dtype=np.float32) / len(y)
-
-
-def rmse(y_hat, y):
-    return np.average((np.array(y_hat) - np.array(y))**2)**.5
 
 
 def main():
@@ -137,38 +126,27 @@ def main():
         )
         # print("baselines", problem.baselines)
 
+    print("################### Computing metrics #############################33")
     k = 50
     use_test = False
 
-    dataset_performances_train = problem.dataloader_to_map(problem.train_data_loader)
-    # for brandon -> why is this test_data_loader.  Validation dataloader is the same as train for some reason
-    dataset_performances_validate = problem.dataloader_to_map(problem.test_data_loader)
-
-    print("\n##########  DNA Model ##################")
-    # Rank the pipelines using the model and compare to the true ranking using the spearman correlation coefficient
-    print("On training set:")
-    dna_baselines = DNABaselines()
-    training_SCC, top_k = dna_baselines.predict(dataset_performances_train, k)
-    print("\nOn test/validation set:")
-    validation_SCC, top_k_valid = dna_baselines.predict(dataset_performances_validate, k)
-
-    print('\nTraining Spearmann Correlation Coefficient:', training_SCC)
-    print('Validation Spearmann Correlation Coefficient:', validation_SCC)
-
-    if task == "regression":
-        # the metric stays test accuracy because this is the name of the metric in our metadata file, however if that is fixed this should change
-        metric = 'test_accuracy'
-        maximize_metric = False
-    else:
-        metric = 'test_accuracy'
-        maximize_metric = True
-
     print("\n##########  AutoSklearn/KnD Model ##################")
-    data_to_pass = dataset_performances_validate if not use_test else None
-    metalearner = AutoSklearnMetalearner(metric=metric, maximize_metric=maximize_metric)
-    metalearner.fit(use_static_test=data_to_pass is None, validation_names=list(data_to_pass.keys()))
-    metric_differences, top_pipeline_values, top_k_out_of_total, top_pipelines_per_dataset = metalearner.predict(k, data_to_pass)
-    mean_difference = np.mean(list(metric_differences.values()))
+    data_to_pass = problem.test_data_loader if not use_test else None
+    metalearner = AutoSklearnMetalearner()
+    metalearner.fit(problem.train_data_loader.data)
+    list_of_regrets = []
+    list_of_k = []
+    test_set = pandas.DataFrame(problem.test_data_loader.data)
+    unique_dataset = test_set.dataset.unique()
+    for dataset in unique_dataset:
+        ranked_df, actual_df = metalearner.predict_rank(test_set[test_set["dataset"] == dataset], k)
+        regret_score = regret_value(ranked_df, actual_df)
+        top_k = top_k(ranked_df, actual_df, k)
+        list_of_k.append(top_k)
+        list_of_regrets.append(regret_score)
+
+    import pdb; pdb.set_trace()
+    print("Done!  Yay!")
 
 
 
