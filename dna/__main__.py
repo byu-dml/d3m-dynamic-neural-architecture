@@ -81,7 +81,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--problem', nargs='+', required=True,
-        choices=['regression', 'rank', 'top-k', 'pairwise-compare'],
+        choices=['regression', 'rank', 'top-k', 'binary-classification'],
         help='the type of problem'
     )
     parser.add_argument(

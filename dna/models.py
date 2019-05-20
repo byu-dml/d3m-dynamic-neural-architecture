@@ -68,7 +68,6 @@ class Submodule(nn.Module):
         else:
             self.skip = None
 
-
     def forward(self, x):
         if self.skip:
             return self.net(x) + self.skip(x)
@@ -79,12 +78,12 @@ class Submodule(nn.Module):
 class DNAModule(nn.Module):
 
     def __init__(
-        self, input_model=None, submodels=None, output_model=None, *, seed=0
+        self, input_model=None, submodules=None, output_model=None, *, seed=0
     ):
         # todo use seed
         super(DNAModule, self).__init__()
         self.input_model = input_model
-        self.submodels = submodels
+        self.submodules = submodules
         self.output_model = output_model
         self.h1 = None
         self.f_activation = F_ACTIVATIONS[ACTIVATION]
@@ -103,7 +102,7 @@ class DNAModule(nn.Module):
         path = os.path.join(save_dir, "input_model.pt")
         self._save(self.input_model, path)
 
-        for name, model in self.submodels.items():
+        for name, model in self.submodules.items():
             path = os.path.join(save_dir, f"{name}_model.pt")
             self._save(model, path)
 
@@ -120,7 +119,7 @@ class DNAModule(nn.Module):
         path = os.path.join(save_dir, "input_model.pt")
         self._load(self.input_model, path)
 
-        for name, model in self.submodels.items():
+        for name, model in self.submodules.items():
             path = os.path.join(save_dir, f"{name}_model.pt")
             self._load(model, path)
 
@@ -133,13 +132,13 @@ class DNAModule(nn.Module):
     def recursive_get_output(self, pipeline, current_index):
         """
         The recursive call to find the input
-        :param pipeline: the pipeline list containing the submodels
-        :param current_index: the index of the current submodel
+        :param pipeline: the pipeline list containing the submodules
+        :param current_index: the index of the current submodule
         :return:
         """
-        current_submodel = self.submodels[pipeline[current_index]["name"]]
+        current_submodule = self.submodules[pipeline[current_index]["name"]]
         if "inputs.0" in pipeline[current_index]["inputs"]:
-            return self.f_activation(current_submodel(self.h1))
+            return self.f_activation(current_submodule(self.h1))
 
         outputs = []
         for input in pipeline[current_index]["inputs"]:
@@ -147,9 +146,9 @@ class DNAModule(nn.Module):
             outputs.append(curr_output)
 
         if len(outputs) > 1:
-            new_output = self.f_activation(current_submodel(torch.cat(tuple(outputs), dim=1)))
+            new_output = self.f_activation(current_submodule(torch.cat(tuple(outputs), dim=1)))
         else:
-            new_output = self.f_activation(current_submodel(curr_output))
+            new_output = self.f_activation(current_submodule(curr_output))
 
         return new_output
 
@@ -306,7 +305,7 @@ class PyTorchModelBase:
             json.dump(outputs, f)
 
 
-class DNAModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
+class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
     def __init__(self, latent_size=50, *, seed, device='cuda:0'):
         self._task_type = 'REGRESSION'
@@ -388,24 +387,25 @@ class DNAModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         return utils.rank(np.array(predictions))[:k]
 
 
-class SiameseModel(nn.Module):
+class DNASiameseModule(nn.Module):
 
-    def __init__(self, input_model, submodels, output_model):
-        super(SiameseModel, self).__init__()
+    def __init__(self, input_model, submodules, output_model):
+        super(DNASiameseModule, self).__init__()
         self.input_model = input_model
-        self.submodels = submodels
+        self.submodules = submodules
         self.output_model = output_model
         self.h1 = None
         self.f_activation = F_ACTIVATIONS[ACTIVATION]
 
     def forward(self, args):
-        pipeline_id, (left_pipeline, right_pipeline), x = args
-        x = x[0]
+        pipeline_ids, (left_pipeline, right_pipeline), x = args
+
         self.h1 = self.input_model(x)
 
         left_h2 = self.recursive_get_output(left_pipeline, len(left_pipeline) - 1)
         right_h2 = self.recursive_get_output(right_pipeline, len(right_pipeline) - 1)
         h2 = torch.cat((left_h2, right_h2), 1)
+
         return self.output_model(h2)
 
     def save(self, save_dir):
@@ -415,7 +415,7 @@ class SiameseModel(nn.Module):
         path = os.path.join(save_dir, "input_model.pt")
         self._save(self.input_model, path)
 
-        for name, model in self.submodels.items():
+        for name, model in self.submodules.items():
             path = os.path.join(save_dir, f"{name}_model.pt")
             self._save(model, path)
 
@@ -432,7 +432,7 @@ class SiameseModel(nn.Module):
         path = os.path.join(save_dir, "input_model.pt")
         self._load(self.input_model, path)
 
-        for name, model in self.submodels.items():
+        for name, model in self.submodules.items():
             path = os.path.join(save_dir, f"{name}_model.pt")
             self._load(model, path)
 
@@ -445,14 +445,14 @@ class SiameseModel(nn.Module):
     def recursive_get_output(self, pipeline, current_index):
         """
         The recursive call to find the input
-        :param pipeline: the pipeline list containing the submodels
-        :param current_index: the index of the current submodel
+        :param pipeline: the pipeline list containing the submodules
+        :param current_index: the index of the current submodule
         :return:
         """
         try:
-            current_submodel = self.submodels[pipeline[current_index]["name"]]
-            if "inputs.0" in pipeline[current_index]["inputs"]:
-                return self.f_activation(current_submodel(self.h1))
+            current_submodule = self.submodules[pipeline[current_index]['name']]
+            if "inputs.0" in pipeline[current_index]['inputs']:
+                return self.f_activation(current_submodule(self.h1))
 
             outputs = []
             for input in pipeline[current_index]["inputs"]:
@@ -460,9 +460,9 @@ class SiameseModel(nn.Module):
                 outputs.append(curr_output)
 
             if len(outputs) > 1:
-                new_output = self.f_activation(current_submodel(torch.cat(tuple(outputs), dim=1)))
+                new_output = self.f_activation(current_submodule(torch.cat(tuple(outputs), dim=1)))
             else:
-                new_output = self.f_activation(current_submodel(curr_output))
+                new_output = self.f_activation(current_submodule(curr_output))
 
             return new_output
         except Exception as e:
@@ -472,7 +472,7 @@ class SiameseModel(nn.Module):
 
 def get_model(model_name: str, model_config: typing.Dict, seed: int):
     model_class = {
-        'dna_regression': DNAModel,
+        'dna_regression': DNARegressionModel,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(seed=seed)

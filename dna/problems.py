@@ -19,6 +19,9 @@ class ProblemBase:
         if not hasattr(model, self._predict_method_name):
             raise ValueError('The given model is not suited for this problem, it is missing a `predict_regression` method')
 
+        train_data = self._structure_data(train_data)
+        test_data = self._structure_data(test_data)
+
         fit_model_config = model_config.get('fit', {})
         predict_regression_model_config = model_config.get(self._predict_method_name, {})
 
@@ -39,6 +42,10 @@ class ProblemBase:
     @staticmethod
     def _score(predictions, data):
         raise NotImplementedError()
+
+    @staticmethod
+    def _structure_data(data):
+        return data
 
 
 class RegressionProblem(ProblemBase):
