@@ -24,11 +24,11 @@ def configure_split_parser(parser):
         help='path to write test data'
     )
     parser.add_argument(
-        '--test-size', type=int, action='store', default=40,
+        '--test-size', type=int, action='store', default=1,
         help='the number of datasets in the test split'
     )
     parser.add_argument(
-        '--split-seed', type=int, action='store', default=3746673648,
+        '--split-seed', type=int, action='store', default=0,
         help='seed used to split the data into train and test sets'
     )
 
