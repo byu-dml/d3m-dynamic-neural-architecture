@@ -65,7 +65,7 @@ class RegressionProblem(ProblemBase):
 class RankProblem(ProblemBase):
 
     def run(
-        self, train_data, test_data, model, k, *, model_config=None, re_fit_model=False, verbose=False, output_dir=None
+        self, train_data, test_data, model, k, scores, *, model_config=None, re_fit_model=False, verbose=False, output_dir=None
     ):
         # todo multiple k_s
         if not hasattr(model, 'fit'):
@@ -90,8 +90,8 @@ class RankProblem(ProblemBase):
         train_predicted_ranks = self._predict_rank(train_data_by_dataset, model, verbose, predict_rank_model_config)
         test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
 
-        train_scores = self._score(train_predicted_ranks, train_data_by_dataset, k)
-        test_scores = self._score(test_predicted_ranks, test_data_by_dataset, k)
+        train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k)
+        test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k)
 
         return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores
 
@@ -114,32 +114,41 @@ class RankProblem(ProblemBase):
         return predictions_by_dataset
 
     @staticmethod
-    def _score(predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k):
+    def _score(scores, predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k):
+        if not scores:
+            return {}
+
         top_k_counts = []
         spearmans = []
         regrets = []
 
         for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
             actual_ranks = actual_ranks_by_dataset[dataset_id]
-            top_k_counts.append(top_k(predicted_ranks, actual_ranks, k))
-            spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
-            regrets.append(regret_value(predicted_ranks, actual_ranks))
+            if 'top-k-count' in scores:
+                top_k_counts.append(top_k(predicted_ranks, actual_ranks, k))
+            if 'spearman' in scores:
+                spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
+            if 'top-1-regret' in scores:
+                regrets.append(regret_value(predicted_ranks, actual_ranks))
 
-        return {
-            'top_k_count': {
+        results = {}
+        if 'top-k-count' in scores:
+            results['top_k_count'] = {
                 'k': k,
                 'mean': np.mean(top_k_counts),
                 'std_dev': np.std(top_k_counts, ddof=1),
-            },
-            'spearman_correlation': {
+            }
+        if 'spearman' in scores:
+            results['spearman_correlation'] = {
                 'mean': np.mean(spearmans),
                 'std_dev': np.std(spearmans, ddof=1),
-            },
-            'top_1_regret': {
+            }
+        if 'top-1-regret' in scores:
+            results['top_1_regret'] = {
                 'mean': np.mean(regrets),
                 'std_dev': np.std(regrets, ddof=1),
-            },
-        }
+            }
+        return results
 
 
 def get_problem(problem_name):

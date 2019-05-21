@@ -134,7 +134,7 @@ class KNearestDatasets(object):
 
     def kBestSuggestions(self, x, k=1, exclude_double_configurations=True):
         assert type(x) == pd.Series
-        import pdb; pdb.set_trace()
+
         if k < -1 or k == 0:
             raise ValueError('Number of neighbors k cannot be zero or negative.')
         nearest_datasets, distances = self.kNearestDatasets(x, -1, return_distance=True)

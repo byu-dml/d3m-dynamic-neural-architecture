@@ -107,6 +107,11 @@ def configure_evaluate_parser(parser):
         '--output-dir', type=str, default=None,
         help='directory path to write outputs for this model run'
     )
+    parser.add_argument(
+        '--scores', nargs='+',
+        choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret'],
+        help='the type of problem'
+    )
 
 
 def evaluate_handler(
@@ -144,6 +149,8 @@ def evaluate_handler(
     output_dir = getattr(arguments, 'output_dir')
     output_dir = os.path.join(output_dir, run_id)
 
+    scores = getattr(arguments, 'scores')
+
     if verbose:
         print(run_id)
 
@@ -154,7 +161,7 @@ def evaluate_handler(
         if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
             train_predictions, test_predictions, train_score, test_score = problem.run(
-                train_data, test_data, model, k, model_config=model_config,
+                train_data, test_data, model, k, scores, model_config=model_config,
                 re_fit_model=False, verbose=verbose, output_dir=output_dir
             )
         else:
