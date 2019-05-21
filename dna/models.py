@@ -3,18 +3,24 @@ import os
 import typing
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
 from data import Dataset, GroupDataLoader
+from kND import KNearestDatasets
 import utils
 
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
-ACTIVATION = 'relu'
+ACTIVATION = 'leaky_relu'
+
+
+class ModelNotFitError(Exception):
+    pass
 
 
 class Submodule(nn.Module):
@@ -22,10 +28,11 @@ class Submodule(nn.Module):
     def __init__(self, input_layer_size, output_size, *, use_skip=False):
         super(Submodule, self).__init__()
 
-        n_layers = 1
-        n_hidden_nodes = 1
-        batch_norms = [True]
+        # todo: make constructor arguments
         activation = ACTIVATIONS[ACTIVATION]
+        n_layers=1
+        n_hidden_nodes=1
+        batch_norms=[True]
 
         # The length of the batch norms list must be this size to account for the hidden layers and input layer
         assert len(batch_norms) == n_layers
@@ -89,8 +96,8 @@ class DNAModule(nn.Module):
         self.f_activation = F_ACTIVATIONS[ACTIVATION]
 
     def forward(self, args):
+        # pipeline_id, pipeline, x, datasets = args
         pipeline_id, pipeline, x = args
-        x = x
         self.h1 = self.f_activation(self.input_model(x))
         h2 = self.f_activation(self.recursive_get_output(pipeline['steps'], len(pipeline['steps']) - 1))
         return torch.squeeze(self.output_model(h2))
@@ -374,17 +381,17 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
         return predictions
 
-    def predict_rank(self, data, k=None, *, batch_size, verbose):
+    def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
 
-        if k is None:
-            k = len(data)
-
         data_loader = self._get_data_loader(data, batch_size, False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-
-        return utils.rank(np.array(predictions))[:k]
+        ranks = utils.rank(np.array(predictions))
+        return {
+            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'rank': ranks,
+        }
 
 
 class DNASiameseModule(nn.Module):
@@ -399,13 +406,10 @@ class DNASiameseModule(nn.Module):
 
     def forward(self, args):
         pipeline_ids, (left_pipeline, right_pipeline), x = args
-
         self.h1 = self.input_model(x)
-
         left_h2 = self.recursive_get_output(left_pipeline, len(left_pipeline) - 1)
         right_h2 = self.recursive_get_output(right_pipeline, len(right_pipeline) - 1)
         h2 = torch.cat((left_h2, right_h2), 1)
-
         return self.output_model(h2)
 
     def save(self, save_dir):
@@ -470,9 +474,188 @@ class DNASiameseModule(nn.Module):
             print(pipeline[current_index])
             quit(1)
 
+
+class MeanBaseline(RegressionModelBase):
+
+    def __init__(self, seed=0):
+        RegressionModelBase.__init__(self, seed=seed)
+        self.mean = None
+
+    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+        total = 0
+        for instance in data:
+            total += instance['test_f1_macro']
+        self.mean = total / len(data)
+        self.fitted = True
+
+    def predict_regression(self, data, *, verbose=False):
+        if self.mean is None:
+            raise ModelNotFitError('MeanBaseline not fit')
+        return [self.mean] * len(data)
+
+
+class MedianBaseline(RegressionModelBase):
+
+    def __init__(self, seed=0):
+        RegressionModelBase.__init__(self, seed=seed)
+        self.median = None
+
+    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+        self.median = np.median([instance['test_f1_macro'] for instance in data])
+        self.fitted = True
+
+    def predict_regression(self, data, *, verbose=False):
+        if self.median is None:
+            raise ModelNotFitError('MeanBaseline not fit')
+        return [self.median] * len(data)
+
+
+class PerPrimitiveBaseline(RegressionModelBase):
+
+    def __init__(self, seed=0):
+        RegressionModelBase.__init__(self, seed=seed)
+        self.primitive_scores = None
+
+    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+        # for each primitive, get the scores of all the pipelines that use the primitive
+        primitive_score_totals = {}
+        for instance in data:
+            for primitive in instance['pipeline']['steps']:
+                if primitive['name'] not in primitive_score_totals:
+                    primitive_score_totals[primitive['name']] = {
+                        'total': 0,
+                        'count': 0,
+                    }
+                primitive_score_totals[primitive['name']]['total'] += instance['test_f1_macro']
+                primitive_score_totals[primitive['name']]['count'] += 1
+
+        # compute the average pipeline score per primitive
+        self.primitive_scores = {}
+        for primitive_name in primitive_score_totals:
+            total = primitive_score_totals[primitive_name]['total']
+            count = primitive_score_totals[primitive_name]['count']
+            self.primitive_scores[primitive_name] = total / count
+
+        self.fitted = True
+
+    def predict_regression(self, data, *, verbose=False):
+        if self.primitive_scores is None:
+            raise ModelNotFitError('PerPrimitiveBaseline not fit')
+
+        predictions = []
+        for instance in data:
+            prediction = 0
+            for primitive in instance['pipeline']['steps']:
+                prediction += self.primitive_scores[primitive['name']]
+            prediction /= len(instance['pipeline'])
+            predictions.append(prediction)
+
+        return predictions
+
+
+class AutoSklearnMetalearner(RankModelBase):
+
+    def __init__(self, seed=0):
+        RankModelBase.__init__(self, seed=seed)
+
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, runs, current_dataset_name):
+        # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
+        all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
+        # this should aready be done by the time it gets here
+        all_other_metafeatures = all_other_metafeatures.transpose()
+        # get the metafeatures out of their list
+        all_other_metafeatures = pd.DataFrame(all_other_metafeatures.iloc[1].tolist(), index=all_other_metafeatures.iloc[0])
+        all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
+        all_other_metafeatures = all_other_metafeatures.reset_index().drop_duplicates()
+        all_other_metafeatures = all_other_metafeatures.set_index('dataset_id')
+        # get the ids for pipelines that we have real values for
+        current_validation_ids = set(pipeline['id'] for pipeline in data.pipeline)
+
+        kND = KNearestDatasets(metric='l1', random_state=3)
+        kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
+        # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
+        best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=all_other_metafeatures.shape[0])
+        k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
+        return k_best_pipelines
+
+    def get_k_best_pipelines_per_dataset(self, data):
+        # they all should have the same dataset and metafeatures so take it from the first row
+        dataset_metafeatures = data["metafeatures"].iloc[0]
+        dataset_name = data["dataset_id"].iloc[0]
+        all_other_metafeatures = self.metafeatures
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, all_other_metafeatures, self.runs, dataset_name)
+        return pipelines
+
+
+    def predict_rank(self, data, *, verbose=False):
+        """
+        A wrapper for all the other functions so that this is organized
+        :data: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
+        from each dataset being passed in.  This is used for the rankings
+        :return:
+        """
+        data = pd.DataFrame(data)
+        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(data)
+        return {
+            'pipeline_id': k_best_pipelines_per_dataset,
+            'rank': list(range(len(k_best_pipelines_per_dataset))),
+        }
+
+    def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True, *, validation_data=None, output_dir=None, verbose=False):
+        """
+        A basic KNN fit.  Loads in and processes the training data from a fixed split
+        :param training_dataset: the dataset to be processed.  If none given it will be pulled from the hardcoded file
+        :param metric: what kind of metric we're using in our metalearning
+        :param maximize_metric: whether to maximize or minimize that metric.  Defaults to Maximize
+        """
+        # if metadata_path is None:
+        self.runs = None
+        self.test_runs = None
+        self.metafeatures = None
+        self.datasets = []
+        self.testset = []
+        self.pipeline_descriptions = {}
+        self.metric = metric
+        self.maximize_metric = maximize_metric
+        self.opt = np.nanmax
+        if training_dataset is None:
+            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
+            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+            self.process_metadata(data_type="test")
+            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
+                self.metadata = json.load(f)
+            self.process_metadata(data_type="train")
+        else:
+            self.metadata = training_dataset
+            self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
+            self.runs = pd.DataFrame(self.metadata)[['dataset_id', 'pipeline', 'test_f1_macro']]
+            self.run_lookup = self.process_runs()
+
+    def process_runs(self):
+        """
+        This function is used to transform the dataframe into a workable object fot the KNN, with rows of pipeline_ids
+        and columns of datasets, with the inside being filled with the scores
+        :return:
+        """
+        new_runs = {}
+        for index, row in self.runs.iterrows():
+            dataset_name = row["dataset_id"]
+            if dataset_name not in new_runs:
+                new_runs[dataset_name] = {}
+            else:
+                new_runs[dataset_name][row["pipeline"]['id']] = row['test_f1_macro']
+        final_new = pd.DataFrame(new_runs)
+        return final_new
+
+
 def get_model(model_name: str, model_config: typing.Dict, seed: int):
     model_class = {
         'dna_regression': DNARegressionModel,
+        'mean_regression': MeanBaseline,
+        'median_regression': MedianBaseline,
+        'per_primitive_regression': PerPrimitiveBaseline,
+        'autosklearn': AutoSklearnMetalearner,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(seed=seed)

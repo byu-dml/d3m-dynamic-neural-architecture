@@ -24,11 +24,11 @@ def configure_split_parser(parser):
         help='path to write test data'
     )
     parser.add_argument(
-        '--test-size', type=int, action='store', default=40,
+        '--test-size', type=int, action='store', default=1,
         help='the number of datasets in the test split'
     )
     parser.add_argument(
-        '--split-seed', type=int, action='store', default=3746673648,
+        '--split-seed', type=int, action='store', default=0,
         help='seed used to split the data into train and test sets'
     )
 
@@ -81,7 +81,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--problem', nargs='+', required=True,
-        choices=['regression', 'rank', 'top-k', 'binary-classification'],
+        choices=['regression', 'rank', 'binary-classification'],
         help='the type of problem'
     )
     parser.add_argument(
@@ -107,6 +107,11 @@ def configure_evaluate_parser(parser):
         '--output-dir', type=str, default=None,
         help='directory path to write outputs for this model run'
     )
+    parser.add_argument(
+        '--scores', nargs='+',
+        choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret'],
+        help='the type of problem'
+    )
 
 
 def evaluate_handler(
@@ -131,15 +136,20 @@ def evaluate_handler(
     train_data, test_data = preprocess_data(train_data, test_data)
 
     model_name = getattr(arguments, 'model')
-    model_config_path = getattr(arguments, 'model_config_path')
-    with open(model_config_path) as f:
-        model_config = json.load(f)
+    model_config_path = getattr(arguments, 'model_config_path', None)
+    if model_config_path is None:
+        model_config = {}
+    else:
+        with open(model_config_path) as f:
+            model_config = json.load(f)
     model_seed = getattr(arguments, 'model_seed')
     model = model_resolver(model_name, model_config, seed=model_seed)
 
     verbose = getattr(arguments, 'verbose')
     output_dir = getattr(arguments, 'output_dir')
     output_dir = os.path.join(output_dir, run_id)
+
+    scores = getattr(arguments, 'scores')
 
     if verbose:
         print(run_id)
@@ -148,10 +158,10 @@ def evaluate_handler(
         if verbose:
             print('\n' + problem_name + '\n')
         problem = problem_resolver(problem_name)
-        if problem_name == 'top-k':  # todo fix this hack to allow problem args
+        if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
             train_predictions, test_predictions, train_score, test_score = problem.run(
-                train_data, test_data, model, k, model_config=model_config,
+                train_data, test_data, model, k, scores, model_config=model_config,
                 re_fit_model=False, verbose=verbose, output_dir=output_dir
             )
         else:
