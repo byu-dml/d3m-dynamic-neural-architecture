@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # actual train test split - DO NOT CHANGE
-raw_data_path=./data/complete_classification.tar.xz  # ./data/small_classification.tar.xz
-test_size=40  # 2
-test_split_seed=3746673648  # 9232859745
+raw_data_path=./data/small_classification.tar.xz  #  ./data/complete_classification.tar.xz
+test_size=2  # 40
+test_split_seed=9232859745  # 3746673648
 
 
-train_path=./data/train_complete_classification.json
-validation_size=25  # 2
+train_path=./data/train_small_classification.json
+validation_size=2  # 25
 validation_split_seed=5460650386
-k=25
+k=5
 results_dir=./results
 
 
