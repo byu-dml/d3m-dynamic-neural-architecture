@@ -115,14 +115,14 @@ class RankProblem(ProblemBase):
 
     @staticmethod
     def _score(predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k):
-        regrets = []
         top_k_counts = []
         spearmans = []
+        regrets = []
 
         for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
             actual_ranks = actual_ranks_by_dataset[dataset_id]
             top_k_counts.append(top_k(predicted_ranks, actual_ranks, k))
-            # spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
+            spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
             # regrets.append(regret_value(predicted_ranks, actual_ranks))
 
         return {
@@ -135,10 +135,10 @@ class RankProblem(ProblemBase):
                 'mean': np.mean(top_k_counts),
                 'std_dev': np.std(top_k_counts, ddof=1),
             },
-            # 'spearman_correlation': {
-            #     'mean': np.mean(spearmans),
-            #     'std_dev': np.std(spearmans, ddof=1),
-            # }
+            'spearman_correlation': {
+                'mean': np.mean(spearmans),
+                'std_dev': np.std(spearmans, ddof=1),
+            }
         }
 
 

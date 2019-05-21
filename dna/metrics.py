@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 
+import utils
+
 
 def accuracy(y_hat, y):
     y_hat = np.argmax(y_hat, axis=1)
@@ -39,3 +41,8 @@ def regret_value(ranked_df, actual_df):
     best_metric_value = opt(actual_df["score"])
     best_predicted_value = opt(ranked_df["score"])
     return abs(best_metric_value - best_predicted_value)
+
+def spearman_correlation(ranked_data, actual_data):
+    actual_data = pd.DataFrame(actual_data)
+    score = scipy.stats.spearmanr(ranked_data['rank'], utils.rank(actual_data.test_f1_macro))
+    return score.correlation
