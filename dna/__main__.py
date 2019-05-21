@@ -148,31 +148,55 @@ def evaluate_handler(
     verbose = getattr(arguments, 'verbose')
     output_dir = getattr(arguments, 'output_dir')
     output_dir = os.path.join(output_dir, run_id)
+    model_output_dir = os.path.join(output_dir, 'model')
 
     scores = getattr(arguments, 'scores')
 
-    if verbose:
-        print(run_id)
-
+    result_scores = []
     for problem_name in getattr(arguments, 'problem'):
         if verbose:
-            print('\n' + problem_name + '\n')
+            print('{} {} {}'.format(model_name, problem_name, run_id))
         problem = problem_resolver(problem_name)
         if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
-            train_predictions, test_predictions, train_score, test_score = problem.run(
+            train_predictions, test_predictions, train_scores, test_scores = problem.run(
                 train_data, test_data, model, k, scores, model_config=model_config,
-                re_fit_model=False, verbose=verbose, output_dir=output_dir
+                re_fit_model=False, verbose=verbose, output_dir=model_output_dir
             )
         else:
-            train_predictions, test_predictions, train_score, test_score = problem.run(
+            train_predictions, test_predictions, train_scores, test_scores = problem.run(
                 train_data, test_data, model, model_config=model_config,
-                re_fit_model=False, verbose=verbose, output_dir=output_dir
+                re_fit_model=False, verbose=verbose, output_dir=model_output_dir
             )
+        result_scores.append({
+            'problem_name': problem_name,
+            'model_name': model_name,
+            'train_scores': train_scores,
+            'test_scores': test_scores
+        })
         if verbose:
+            print('train scores: {}'.format(train_scores))
+            print('test scores: {}'.format(test_scores))
             print()
-            print('train score: {}'.format(train_score))
-            print('test score: {}'.format(test_score))
+
+    evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
+
+
+def evaluate_serializer(
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser, scores: typing.Dict, output_dir: str,
+    model_config: typing.Dict
+):
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+    path = os.path.join(output_dir, 'run_results.json')
+    with open(path, 'w') as f:
+        json.dump(
+            {
+                'arguments': arguments.__dict__,
+                'scores': scores,
+                'model_config': model_config
+            }, f, indent=4, sort_keys=True
+        )
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
