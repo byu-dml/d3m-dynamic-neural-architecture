@@ -123,13 +123,9 @@ class RankProblem(ProblemBase):
             actual_ranks = actual_ranks_by_dataset[dataset_id]
             top_k_counts.append(top_k(predicted_ranks, actual_ranks, k))
             spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
-            # regrets.append(regret_value(predicted_ranks, actual_ranks))
+            regrets.append(regret_value(predicted_ranks, actual_ranks))
 
         return {
-            # 'top_1_regret': {
-            #     'mean': np.mean(regrets),
-            #     'std_dev': np.std(regrets, ddof=1),
-            # },
             'top_k_count': {
                 'k': k,
                 'mean': np.mean(top_k_counts),
@@ -138,7 +134,11 @@ class RankProblem(ProblemBase):
             'spearman_correlation': {
                 'mean': np.mean(spearmans),
                 'std_dev': np.std(spearmans, ddof=1),
-            }
+            },
+            'top_1_regret': {
+                'mean': np.mean(regrets),
+                'std_dev': np.std(regrets, ddof=1),
+            },
         }
 
 

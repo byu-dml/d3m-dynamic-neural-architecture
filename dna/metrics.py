@@ -17,30 +17,21 @@ def rmse(y_hat, y):
     return np.std(np.array(y_hat) - np.array(y), ddof=1)
 
 def top_k(ranked_data: dict, actual_data: dict, k):
-    """
-    A metric for calculating how many of the predicted top K pipelines are actually in the real top k
-    :param ranked_df:
-    :param actual_df:
-    :param k: the number of top pipelines to compare with
-    :return:
-    """
     ranked_df = pd.DataFrame(ranked_data)
     actual_df = pd.DataFrame(actual_data)
     top_actual = [pipeline["id"] for pipeline in actual_df.nlargest(k, columns='test_f1_macro').pipeline]
     top_predicted = ranked_df.nsmallest(k, columns="rank").pipeline_id
     return len(set(top_actual).intersection(set(top_predicted)))
 
-def regret_value(ranked_df, actual_df):
-    """
+def regret_value(ranked_data, actual_data):
+    actual_df = pd.DataFrame(actual_data)
+    actual_best_metric_value = actual_df['test_f1_macro'].max()  # np.nanmax
 
-    :param ranked_df:  a Pandas DF with columns id (for pipeline), score
-    :param actual_df:
-    :return:
-    """
-    opt = np.nanmax
-    best_metric_value = opt(actual_df["score"])
-    best_predicted_value = opt(ranked_df["score"])
-    return abs(best_metric_value - best_predicted_value)
+    best_ranked_index = np.argmin(ranked_data['rank'])
+    best_ranked_pipeline_id = ranked_data['pipeline_id'][best_ranked_index]
+    for instance in actual_data:
+        if instance['pipeline']['id'] == best_ranked_pipeline_id:
+            return actual_best_metric_value - instance['test_f1_macro']
 
 def spearman_correlation(ranked_data, actual_data):
     actual_data = pd.DataFrame(actual_data)
