@@ -24,21 +24,15 @@ class AutoSklearnMetalearner():
         # get the metafeatures out of their list
         all_other_metafeatures = pd.DataFrame(all_other_metafeatures.iloc[1].tolist(), index=all_other_metafeatures.iloc[0])
         all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
-
-        import pdb; pdb.set_trace()
-
-        new_header = runs.transpose().iloc[0]  # grab the first row for the header
-        new_runs = runs.transpose()[1:]  # take the data less the header row
-        new_runs.columns = new_header
-
+        all_other_metafeatures = all_other_metafeatures.reset_index().drop_duplicates()
+        all_other_metafeatures = all_other_metafeatures.set_index('dataset')
         # get the ids for pipelines that we have real values for
         current_validation_ids = self.validation_set.pipeline_id.unique()
 
         kND = KNearestDatasets(metric='l1', random_state=3)
-        kND.fit(all_other_metafeatures, new_runs, current_validation_ids, self.maximize_metric)
-
+        kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
         # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-        best_suggestions = kND.kBestSuggestions(dataset_metafeatures, k=k)
+        best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines
 
@@ -51,7 +45,7 @@ class AutoSklearnMetalearner():
         return pipelines
 
 
-    def predict_rank(self, metadata_for_one_dataset, k):
+    def predict_rank(self, metadata_for_one_dataset, k, dataset_name):
         """
         A wrapper for all the other functions so that this is organized
         :param k: number of datasets
@@ -61,7 +55,8 @@ class AutoSklearnMetalearner():
         """
         self.validation_set = metadata_for_one_dataset
         k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(k)
-        ranked_df = self.runs.loc[k_best_pipelines_per_dataset].to_frame("score")
+        import pdb; pdb.set_trace()
+        ranked_df = self.run_lookup.loc[k_best_pipelines_per_dataset][dataset_name]
         ranked_df.reset_index(inplace=True)
         ranked_df.columns = ["id", "score"]
 
@@ -100,6 +95,23 @@ class AutoSklearnMetalearner():
             self.metadata = training_dataset
             self.metafeatures = pd.DataFrame(self.metadata)[['dataset', 'metafeatures']]
             self.runs = pd.DataFrame(self.metadata)[['dataset', 'pipeline_id', 'test_accuracy']]
+            self.run_lookup = self.process_runs()
+
+    def process_runs(self):
+        """
+        This function is used to transform the dataframe into a workable object fot the KNN, with rows of pipeline_ids
+        and columns of datasets, with the inside being filled with the scores
+        :return:
+        """
+        new_runs = {}
+        for index, row in self.runs.iterrows():
+            dataset_name = row["dataset"]
+            if dataset_name not in new_runs:
+                new_runs[dataset_name] = {}
+            else:
+                new_runs[dataset_name][row["pipeline_id"]] = row["test_accuracy"]
+        final_new = pd.DataFrame(new_runs)
+        return final_new
 
     """
     Saving this in case we want to use it to pull the static test set
@@ -154,6 +166,8 @@ class AutoSklearnMetalearner():
             self.metafeatures = self.metafeatures.drop(validation_names, axis=1, inplace=False)
             self.metafeatures.columns = np.arange(self.metafeatures.shape[1])
             self.test_metafeatures.columns = np.arange(self.test_metafeatures.shape[1])
+
+
 
 
 """

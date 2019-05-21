@@ -31,7 +31,6 @@ class KNearestDatasets(object):
         runs : dict
             A pandas dataframe containing a list of runs for each dataset.
         """
-        import pdb; pdb.set_trace()
         assert isinstance(metafeatures, pd.DataFrame)
         # assert metafeatures.values.dtype in (np.float32, np.float64)
         # assert np.isfinite(metafeatures.values).all()
@@ -113,7 +112,6 @@ class KNearestDatasets(object):
             raise ValueError('Number of neighbors k cannot be zero or negative.')
         elif k == -1:
             k = self.num_datasets
-
         # no need to scale, it was done earlier
         # X_train, x = self._scale(self.metafeatures, x)
         X_train = self.metafeatures
@@ -136,11 +134,10 @@ class KNearestDatasets(object):
 
     def kBestSuggestions(self, x, k=1, exclude_double_configurations=True):
         assert type(x) == pd.Series
-
+        import pdb; pdb.set_trace()
         if k < -1 or k == 0:
             raise ValueError('Number of neighbors k cannot be zero or negative.')
-        nearest_datasets, distances = self.kNearestDatasets(x, -1,
-                                                            return_distance=True)
+        nearest_datasets, distances = self.kNearestDatasets(x, -1, return_distance=True)
         kbest = []
 
         added_configurations = set()

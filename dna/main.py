@@ -139,13 +139,12 @@ def main():
     test_set = pandas.DataFrame(problem.test_data_loader.data)
     unique_dataset = test_set.dataset.unique()
     for dataset in unique_dataset:
-        ranked_df, actual_df = metalearner.predict_rank(test_set[test_set["dataset"] == dataset], k)
+        ranked_df, actual_df = metalearner.predict_rank(test_set[test_set["dataset"] == dataset], k, dataset)
         regret_score = regret_value(ranked_df, actual_df)
         top_k = top_k(ranked_df, actual_df, k)
         list_of_k.append(top_k)
         list_of_regrets.append(regret_score)
 
-    import pdb; pdb.set_trace()
     print("Done!  Yay!")
 
 
