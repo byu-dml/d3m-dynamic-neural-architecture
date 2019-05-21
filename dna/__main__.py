@@ -81,7 +81,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--problem', nargs='+', required=True,
-        choices=['regression', 'rank', 'top-k', 'binary-classification'],
+        choices=['regression', 'rank', 'binary-classification'],
         help='the type of problem'
     )
     parser.add_argument(
@@ -151,7 +151,7 @@ def evaluate_handler(
         if verbose:
             print('\n' + problem_name + '\n')
         problem = problem_resolver(problem_name)
-        if problem_name == 'top-k':  # todo fix this hack to allow problem args
+        if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
             train_predictions, test_predictions, train_score, test_score = problem.run(
                 train_data, test_data, model, k, model_config=model_config,

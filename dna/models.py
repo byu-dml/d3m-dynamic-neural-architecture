@@ -379,18 +379,17 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
         return predictions
 
-    def predict_rank(self, data, k=None, *, batch_size, verbose):
-        raise NotImplementedError('Rank by dataset')
+    def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
 
-        if k is None:
-            k = len(data)
-
         data_loader = self._get_data_loader(data, batch_size, False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-
-        return utils.rank(np.array(predictions))[:k]
+        ranks = utils.rank(np.array(predictions))
+        return {
+            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'rank': ranks,
+        }
 
 
 class DNASiameseModule(nn.Module):

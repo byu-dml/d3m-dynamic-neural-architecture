@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import scipy.stats
 
 
 def accuracy(y_hat, y):
@@ -12,7 +14,7 @@ def rmse(y_hat, y):
     """
     return np.std(np.array(y_hat) - np.array(y), ddof=1)
 
-def top_k(ranked_df, actual_df, k):
+def top_k(ranked_data: dict, actual_data: dict, k):
     """
     A metric for calculating how many of the predicted top K pipelines are actually in the real top k
     :param ranked_df:
@@ -20,8 +22,10 @@ def top_k(ranked_df, actual_df, k):
     :param k: the number of top pipelines to compare with
     :return:
     """
-    top_actual = actual_df.nlargest(k, columns="score").id
-    top_predicted = ranked_df.nlargest(k, columns="score").id
+    ranked_df = pd.DataFrame(ranked_data)
+    actual_df = pd.DataFrame(actual_data)
+    top_actual = [pipeline["id"] for pipeline in actual_df.nlargest(k, columns='test_f1_macro').pipeline]
+    top_predicted = ranked_df.nsmallest(k, columns="rank").pipeline_id
     return len(set(top_actual).intersection(set(top_predicted)))
 
 def regret_value(ranked_df, actual_df):
