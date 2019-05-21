@@ -1,72 +1,17 @@
-import os
 import json
-import tarfile
+import os
 import random
-from typing import List, Dict
-import pprint
+import tarfile
+import typing
+
 import numpy as np
 import pandas as pd
+import torch
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 
-DATA_DIR = "./data"
-# use this for a dataset of ~2k, this comes with the repo
-# RAW_DATA_NAME = "small_classification"  # 14 datasets
-# N_TEST_DATASETS = 2
-#
-# use this for a dataset of ~550k and comment out the above
-RAW_DATA_NAME = "complete_classification"  # 199 datasets
-N_TEST_DATASETS = 40
+DATA_DIR = './data'
 
-COMPRESSED_RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".tar.xz")
-RAW_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + ".json")
-PROCESSED_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + '_processed' + '.json')
-TRAIN_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + '_train' + '.json')
-TEST_DATA_PATH = os.path.join(DATA_DIR, RAW_DATA_NAME + '_test' + '.json')
-
-TRAIN_TEST_SPLIT_SEED = 3746673648
-
-
-def read_json(path):
-    """
-    Reads JSON formatted data.
-    """
-    return json.load(open(path, "r"))
-
-def write_json(data, path, pretty=False):
-    """
-    Writes JSON structured data. Indents 4 spaces when pretty is True.
-    """
-    if pretty:
-        json.dump(data, open(path, "w"), indent=4, sort_keys=True)
-    else:
-        json.dump(data, open(path, "w"))
-
-def extract_data():
-    with tarfile.open(COMPRESSED_RAW_DATA_PATH, "r:xz") as tar:
-        tar.extract(RAW_DATA_NAME + ".json", DATA_DIR)
-
-def reformat_data():
-    data = read_json(RAW_DATA_PATH)
-    reformatted_data = []
-    for item in data:
-        dataset = item["raw_dataset_name"]
-        pipeline = item["pipeline"]
-        metafeatures = {
-            k: v for k, v in item["metafeatures"].items() if not "time" in k.lower()
-        }
-        metafeatures["TotalTime"] = item["metafeatures_time"]
-        train_time = item["train_time"]
-        reformatted_data.append({
-            "dataset": dataset,
-            "pipeline": pipeline,
-            "pipeline_id": item["pipeline_id"],
-            "metafeatures": metafeatures,
-            "train_accuracy": item["train_accuracy"],
-            "test_accuracy": item["test_accuracy"],
-            "train_time": train_time,
-            "test_time": item["test_time"]
-        })
-    write_json(reformatted_data, PROCESSED_DATA_PATH, pretty=True)
 
 def group_json_objects(json_objects, group_key):
     """
@@ -77,7 +22,8 @@ def group_json_objects(json_objects, group_key):
     json_objects: List[Dict], JSON compatible list of objects.
     group_key: str, json_objects is grouped by group_key. group_key must be a
         key into each object in json_objects and the corresponding value must
-        be hashable.
+        be hashable. group_key can be a '.' delimited string to access deeply
+        nested fields.
 
     Returns:
     --------
@@ -86,90 +32,332 @@ def group_json_objects(json_objects, group_key):
     """
     grouped_objects = {}
     for i, obj in enumerate(json_objects):
-        group = obj[group_key]
+        group = obj
+        for key_part in group_key.split('.'):
+            group = group[key_part]
         if not group in grouped_objects:
             grouped_objects[group] = []
         grouped_objects[group].append(i)
     return grouped_objects
 
-def drop_nan_metafeatures():
-    processed_data = read_json(PROCESSED_DATA_PATH)
-    mfs = pd.DataFrame([item["metafeatures"] for item in processed_data])
-    mfs.replace(
-        to_replace=[np.inf, - np.inf], value=np.nan, inplace=True
-    )
 
-    drop_cols = list(mfs.columns[mfs.isnull().any()])
-    mfs.drop(labels=drop_cols, axis=1, inplace=True)
-
-    for item, mfs in zip(processed_data, mfs.values.tolist()):
-        item["metafeatures"] = mfs
-
-    write_json(processed_data, PROCESSED_DATA_PATH, pretty=True)
-
-def split_data():
-    processed_data = read_json(PROCESSED_DATA_PATH)
-    grouped_data_indices = group_json_objects(processed_data, "dataset")
+def split_data(data: typing.List[typing.Dict], group_by_key: str, test_size: int, seed: int):
+    grouped_data_indices = group_json_objects(data, group_by_key)
     groups = list(grouped_data_indices.keys())
 
-    rnd = random.Random()
-    rnd.seed(TRAIN_TEST_SPLIT_SEED)
-    rnd.shuffle(groups)
-
-    train_data = []
-    for group in groups[N_TEST_DATASETS:]:
-        for i in grouped_data_indices[group]:
-            train_data.append(processed_data[i])
-
-    test_data = []
-    for group in groups[:N_TEST_DATASETS]:
-        for i in grouped_data_indices[group]:
-            test_data.append(processed_data[i])
-
-    write_json(train_data, TRAIN_DATA_PATH, pretty=True)
-    write_json(test_data, TEST_DATA_PATH, pretty=True)
-
-def make_cv_folds(
-    data: List[Dict], group_key: str, n_folds: int = -1, seed: int = 0
-):
-    """
-    Generates cross validation folds with indices into data. Places data points
-    belonging to the same group into the same train/test portion of each fold.
-    """
-    grouped_data_indices = group_json_objects(data, group_key)
-    if n_folds < 0:
-        n_folds = len(grouped_data_indices)
-
-    groups = list(grouped_data_indices.keys())
-    group_type = type(groups[0])
     rnd = random.Random()
     rnd.seed(seed)
     rnd.shuffle(groups)
 
-    split_groups = np.array_split(groups, n_folds)
+    train_data = []
+    for group in groups[test_size:]:
+        for i in grouped_data_indices[group]:
+            train_data.append(data[i])
 
-    folds = []
-    for i in range(n_folds):
-        train_indices = []
-        test_indices = []
-        for j, split_group in enumerate(split_groups):
-            for group in split_group:
-                group = group_type(group)
-                indices = grouped_data_indices[group]
-                if i == j:
-                    test_indices += indices
-                else:
-                    train_indices += indices
-        folds.append((train_indices, test_indices))
+    test_data = []
+    for group in groups[:test_size]:
+        for i in grouped_data_indices[group]:
+            test_data.append(data[i])
 
-    return folds
+    return train_data, test_data
 
 
-def main():
-    extract_data()
-    reformat_data()
-    drop_nan_metafeatures()
-    split_data()
+def _extract_tarfile(path):
+    assert tarfile.is_tarfile(path)
 
-if __name__ == '__main__':
-    main()
+    dirname = os.path.dirname(path)
+    with tarfile.open(path, 'r:*') as tar:
+        members = tar.getmembers()
+        if len(members) != 1:
+            raise ValueError('Expected tar file with 1 member, but got {}'.format(len(members)))
+        tar.extractall(os.path.dirname(path))
+        extracted_path = os.path.join(dirname, tar.getmembers()[0].name)
+
+    return extracted_path
+
+
+def get_data(path):
+    if tarfile.is_tarfile(path):
+        path = _extract_tarfile(path)
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return data
+
+
+class DropMissingValues:
+
+    def __init__(self, values_to_drop=[]):
+        self.values_to_drop = values_to_drop
+
+    def fit(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        for key, is_missing in pd.DataFrame(data).isna().any().iteritems():
+            if is_missing:
+                self.values_to_drop.append(key)
+
+    def predict(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        for instance in data:
+            for key in self.values_to_drop:
+                instance.pop(key, None)
+        return data
+
+
+class StandardScaler:
+    """
+    Transforms data by subtracting the mean and scaling by the standard
+    deviation. Drops columns that have 0 standard deviation. Clips values to
+    numpy resolution, min, and max.
+    """
+
+    def __init__(self):
+        self.means = None
+        self.stds = None
+
+    def fit(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        values_map = {}
+        for instance in data:
+            for key, value in instance.items():
+                if key not in values_map:
+                    values_map[key] = []
+                values_map[key].append(value)
+
+        self.means = {}
+        self.stds = {}
+        for key, values in values_map.items():
+            self.means[key] = np.mean(values)
+            self.stds[key] = np.std(values, ddof=1)
+
+    def predict(
+        self, data: typing.List[typing.Dict[str, typing.Union[int, float]]]
+    ):
+        if self.means is None or self.stds is None:
+            raise Exception('StandardScaler not fit')
+
+        transformed_data = []
+        for instance in data:
+            transformed_instance = {}
+            for key, value in instance.items():
+                if self.stds[key] != 0:  # drop columns with 0 std dev
+                    transformed_instance[key] = (value - self.means[key]) / self.stds[key]
+
+            transformed_data.append(transformed_instance)
+
+        return transformed_data
+
+
+def preprocess_data(train_data, test_data):
+    train_metafeatures = []
+    for instance in train_data:
+        train_metafeatures.append(instance['metafeatures'])
+        for step in instance['pipeline']['steps']:
+            step['name'] = step['name'].replace('.', '_')
+
+    test_metafeatures = []
+    for instance in test_data:
+        test_metafeatures.append(instance['metafeatures'])
+        for step in instance['pipeline']['steps']:
+            step['name'] = step['name'].replace('.', '_')
+
+    # drop metafeature if missing for any instance
+    dropper = DropMissingValues(['pca_determinant_of_covariance'])
+    dropper.fit(train_metafeatures)
+    train_metafeatures = dropper.predict(train_metafeatures)
+    test_metafeatures = dropper.predict(test_metafeatures)
+
+    # scale data to unit mean and unit standard deviation
+    scaler = StandardScaler()
+    scaler.fit(train_metafeatures)
+    train_metafeatures = scaler.predict(train_metafeatures)
+    test_metafeatures = scaler.predict(test_metafeatures)
+
+    # convert from dict to list
+    for instance, mf_instance in zip(train_data, train_metafeatures):
+        instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
+
+    for instance, mf_instance in zip(test_data, test_metafeatures):
+        instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
+
+    return train_data, test_data
+
+
+class Dataset(Dataset):
+    """
+    A subclass of torch.utils.data.Dataset for handling simple JSON structed
+    data.
+
+    Parameters:
+    -----------
+    data: List[Dict], JSON structed data.
+    features_key: str, the key into each element of data whose value is a list
+        of features used for input to a PyTorch network.
+    target_key: str, the key into each element of data whose value is the
+        target used for a PyTorch network.
+    device": str, the device onto which the data will be loaded
+    """
+
+    def __init__(
+        self, data: typing.List[typing.Dict], features_key: str,
+        target_key: str, task_type: str, device: str
+    ):
+        self.data = data
+        self.features_key = features_key
+        self.target_key = target_key
+        self.task_type = task_type
+        if self.task_type == "CLASSIFICATION":
+            self._y_dtype = torch.int64
+        elif self.task_type == "REGRESSION":
+            self._y_dtype = torch.float32
+        self.device = device
+
+    def __getitem__(self, item: int):
+        x = torch.tensor(
+            self.data[item][self.features_key], dtype=torch.float32, device=self.device
+        )
+        y = torch.tensor(
+            self.data[item][self.target_key],
+            dtype=self._y_dtype,
+            device=self.device
+        )
+        return x, y
+
+    def __len__(self):
+        return len(self.data)
+
+
+class RandomSampler(Sampler):
+    """
+    Samples indices uniformly without replacement.
+
+    Parameters
+    ----------
+    n: int
+        the number of indices to sample
+    seed: int
+        used to reproduce randomization
+    """
+
+    def __init__(self, n, seed):
+        self.n = n
+        self._indices = list(range(n))
+        self._random = random.Random()
+        self._random.seed(seed)
+
+    def __iter__(self):
+        self._random.shuffle(self._indices)
+        return iter(self._indices)
+
+    def __len__(self):
+        return self.n
+
+
+class GroupDataLoader(object):
+    """
+    Batches a dataset for PyTorch Neural Network training. Partitions the
+    dataset so that batches belong to the same group.
+
+    Parameters:
+    -----------
+    data: List[Dict], JSON compatible list of objects representing a dataset.
+        dataset_class must know how to parse the data given dataset_params.
+    group_key: str, pipeline run data is grouped by group_key and each
+        batch of data comes from only one group. group_key must be a key into
+        each element of the pipeline run data. the value of group_key must be
+        hashable.
+    dataset_class: Type[torch.utils.data.Dataset], the class used to make
+        dataset instances after the dataset is partitioned.
+    dataset_params: dict, extra parameters needed to instantiate dataset_class
+    batch_size: int, the number of data points in each batch
+    drop_last: bool, default False. whether to drop the last incomplete batch.
+    shuffle: bool, default True. whether to randomize the batches.
+    """
+
+    def __init__(
+        self, data: typing.List[typing.Dict], group_key: str,
+        dataset_class: typing.Type[Dataset], dataset_params: dict,
+        batch_size: int, drop_last: bool, shuffle: bool, seed: int
+    ):
+        self.data = data
+        self.group_key = group_key
+        self.dataset_class = dataset_class
+        self.dataset_params = dataset_params
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.shuffle = shuffle
+        self.seed = seed
+
+        self._random = random.Random()
+        self._random.seed(seed)
+
+        self._init_dataloaders()
+        self._init_group_metadataloader()
+
+    def _init_dataloaders(self):
+        """
+        Groups self.data based on group_key. Creates a
+        torch.utils.data.DataLoader for each group, using self.dataset_class.
+        """
+        # group the data
+        grouped_data = group_json_objects(self.data, self.group_key)
+
+        # create dataloaders
+        self._group_dataloaders = {}
+        for group, group_indices in grouped_data.items():
+            group_data = [self.data[i] for i in group_indices]
+            group_dataset = self.dataset_class(group_data, **self.dataset_params)
+            new_dataloader = self._get_data_loader(
+                group_dataset
+            )
+            # assert(len(new_dataloader) != 0)
+            self._group_dataloaders[group] = new_dataloader
+
+    def _get_data_loader(self, data):
+        if self.shuffle:
+            sampler = RandomSampler(len(data), self._randint())
+        else:
+            sampler = None
+        dataloader = DataLoader(
+            dataset = data,
+            sampler =  sampler,
+            batch_size = self.batch_size,
+            drop_last = self.drop_last
+        )
+        # assert(len(dataloader) != 0)
+        return dataloader
+
+    def _randint(self):
+        return self._random.randint(0,2**32-1)
+
+    def _init_group_metadataloader(self):
+        """
+        Creates a dataloader which randomizes the batches over the groups. This
+        allows the order of the batches to be independent of the groups.
+        """
+        self._group_batches = []
+        for group, group_dataloader in self._group_dataloaders.items():
+            # assert(len(group_dataloader) != 0)
+            self._group_batches += [group] * len(group_dataloader)
+        self._random.shuffle(self._group_batches)
+
+    def __iter__(self):
+        return iter(self._iter())
+
+    def _iter(self):
+        group_dataloader_iters = {}
+        for group in self._group_batches:
+            if not group in group_dataloader_iters:
+                group_dataloader_iters[group] = iter(
+                    self._group_dataloaders[group]
+                )
+            x_batch, y_batch = next(group_dataloader_iters[group])
+            # since all pipeline are the same in this group, just grab one of them
+            pipeline = self._group_dataloaders[group].dataset.data[0]["pipeline"]
+            yield (group, pipeline, x_batch), y_batch
+        raise StopIteration()
+
+    def __len__(self):
+        return len(self._group_batches)
