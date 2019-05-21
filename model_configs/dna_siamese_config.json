@@ -1,0 +1,11 @@
+{
+    "fit": {
+        "n_epochs": 1,
+        "learning_rate": 0.0001,
+        "batch_size": 2,
+        "drop_last": true
+    },
+    "predict_binary_classification": {
+        "bastch_size": 10
+    }
+}

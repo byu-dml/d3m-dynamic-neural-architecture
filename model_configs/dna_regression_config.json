@@ -1,0 +1,14 @@
+{
+    "fit": {
+        "n_epochs": 1,
+        "learning_rate": 0.0001,
+        "batch_size": 10,
+        "drop_last": true
+    },
+    "predict_regression": {
+        "batch_size": 10
+    },
+    "predict_rank": {
+        "batch_size": 10
+    }
+}
