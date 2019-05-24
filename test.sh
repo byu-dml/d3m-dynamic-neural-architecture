@@ -1,13 +1,18 @@
 #!/bin/bash
 
-# actual train test split - DO NOT CHANGE
-# complete has 194 datasets; small has 11 datasets
-raw_data_path=./data/small_classification.tar.xz  #  ./data/complete_classification.tar.xz
-test_size=2  # 44
-test_split_seed=9232859745  # 3746673648
+# # complete has 194 datasets
+# raw_data_path=./data/complete_classification.tar.xz
+# train_path=./data/complete_classification_train.json
+# test_size=44
+# test_split_seed=3746673648
 
-
+# small has 11 datasets
+raw_data_path=./data/small_classification.tar.xz
 train_path=./data/small_classification_train.json
+test_size=2
+test_split_seed=9232859745
+
+
 validation_size=2  # 25
 validation_split_seed=5460650386
 k=2
