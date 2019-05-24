@@ -33,11 +33,11 @@ class ProblemBase:
             )
 
         model_predict_method = getattr(model, self._predict_method_name)
-        train_predictions = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
-        test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
+        train_predictions, train_targets = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
+        test_predictions, test_targets = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
 
-        train_scores = self._score(train_predictions, train_data)
-        test_scores = self._score(test_predictions, test_data)
+        train_scores = self._score(train_predictions, train_targets)
+        test_scores = self._score(test_predictions, test_targets)
 
         return train_predictions, test_predictions, train_scores, test_scores
 
@@ -56,10 +56,11 @@ class RegressionProblem(ProblemBase):
 
     @staticmethod
     def _score(predictions, data):
-        targets = []
-        for instance in data:
-            targets.append(instance['test_f1_macro'])
-        return {'RMSE': rmse(predictions, targets)}
+        # targets = []
+        # for instance in data:
+        #     targets.append(instance['test_f1_macro'])
+        return {'RMSE': rmse(predictions, data)}
+
 
 
 class RankProblem(ProblemBase):

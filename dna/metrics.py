@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import scipy.stats
-
+from sklearn.metrics import mean_squared_error
 import utils
 
 
@@ -14,7 +14,7 @@ def rmse(y_hat, y):
     """
     Calculates the unbiased standard deviation of the residuals.
     """
-    return np.std(np.array(y_hat) - np.array(y), ddof=1)
+    return mean_squared_error(np.array(y_hat), np.array(y))**.5
 
 def top_k(ranked_data: dict, actual_data: dict, k):
     ranked_df = pd.DataFrame(ranked_data)

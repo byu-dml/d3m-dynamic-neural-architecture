@@ -265,7 +265,6 @@ class PyTorchModelBase:
         model.eval()
         predictions = []
         targets = []
-
         if verbose:
             progress = tqdm(total=len(data_loader), position=0)
 
@@ -379,7 +378,7 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         data_loader = self._get_data_loader(data, batch_size, False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
 
-        return predictions
+        return predictions, targets
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
