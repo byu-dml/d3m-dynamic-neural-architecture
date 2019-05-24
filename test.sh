@@ -1,16 +1,17 @@
 #!/bin/bash
 
 # actual train test split - DO NOT CHANGE
+# complete has 194 datasets; small has 11 datasets
 raw_data_path=./data/small_classification.tar.xz  #  ./data/complete_classification.tar.xz
-test_size=2  # 40
+test_size=2  # 44
 test_split_seed=9232859745  # 3746673648
 
 
-train_path=./data/train_small_classification.json
+train_path=./data/small_classification_train.json
 validation_size=2  # 25
 validation_split_seed=5460650386
-k=5
-results_dir=./results
+k=2
+results_dir=./dev_results
 
 
 python3 dna split-data \
