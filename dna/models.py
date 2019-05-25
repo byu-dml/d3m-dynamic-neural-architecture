@@ -310,7 +310,7 @@ class PyTorchModelBase:
             'targets': targets.tolist(),
         }
         with open(save_path, 'w') as f:
-            json.dump(outputs, f)
+            json.dump(outputs, f, separators=(',',':'))
 
 
 class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):

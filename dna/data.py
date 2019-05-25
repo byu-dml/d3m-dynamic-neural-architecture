@@ -164,7 +164,7 @@ def preprocess_data(train_data, test_data):
             step['name'] = step['name'].replace('.', '_')
 
     # drop metafeature if missing for any instance
-    dropper = DropMissingValues(['pca_determinant_of_covariance'])
+    dropper = DropMissingValues()
     dropper.fit(train_metafeatures)
     train_metafeatures = dropper.predict(train_metafeatures)
     test_metafeatures = dropper.predict(test_metafeatures)

@@ -6,9 +6,9 @@
         "drop_last": true
     },
     "predict_regression": {
-        "batch_size": 10
+        "batch_size": 2
     },
     "predict_rank": {
-        "batch_size": 10
+        "batch_size": 2
     }
 }

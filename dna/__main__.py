@@ -47,19 +47,19 @@ def split_handler(
     if train_path is None:
         dirname, data_filename = data_path.rsplit(os.path.sep, 1)
         data_filename, ext = data_filename.split('.', 1)
-        train_path = os.path.join(dirname, 'train_' + data_filename + '.json')
+        train_path = os.path.join(dirname, data_filename + '_train.json')
 
     test_path = getattr(arguments, 'test_path')
     if test_path is None:
         dirname, data_filename = data_path.rsplit(os.path.sep, 1)
         data_filename, ext = data_filename.split('.', 1)
-        test_path = os.path.join(dirname, 'test_' + data_filename + '.json')
+        test_path = os.path.join(dirname, data_filename + '_test.json')
 
     with open(train_path, 'w') as f:
-        json.dump(train_data, f)
+        json.dump(train_data, f, separators=(',',':'))
 
     with open(test_path, 'w') as f:
-        json.dump(test_data, f)
+        json.dump(test_data, f, separators=(',',':'))
 
 
 def configure_evaluate_parser(parser):
