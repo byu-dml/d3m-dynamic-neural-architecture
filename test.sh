@@ -5,17 +5,20 @@
 # train_path=./data/complete_classification_train.json
 # test_size=44
 # test_split_seed=3746673648
+# validation_size=25
+# validation_split_seed=3101978347
+# k=25
 
 # small has 11 datasets
 raw_data_path=./data/small_classification.tar.xz
 train_path=./data/small_classification_train.json
 test_size=2
 test_split_seed=9232859745
-
-
-validation_size=2  # 25
+validation_size=2
 validation_split_seed=5460650386
 k=2
+
+
 results_dir=./dev_results
 
 
