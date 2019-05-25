@@ -361,3 +361,63 @@ class GroupDataLoader(object):
 
     def __len__(self):
         return len(self._group_batches)
+
+class RNNDataset(Dataset):
+    def __init__(self, data: dict, features_key: str, target_key: str, task_type: str, device: str,
+                 prim_to_enc: dict):
+        super(RNNDataset, self).__init__(data, features_key, target_key, task_type, device)
+        self.pipeline_key = 'pipeline'
+        self.primitive_to_enc = prim_to_enc
+
+    def __getitem__(self, index):
+        (x, y) = super().__getitem__(index)
+        item = self.data[index]
+        pipeline = item[self.pipeline_key]
+        encoded_pipeline = self.encode_pipeline(pipeline)
+        return (encoded_pipeline, x, y)
+
+    def encode_pipeline(self, pipeline):
+        # Create a tensor of encoded primitives and a list of the indices of each primitive's inputs
+        encoding = []
+        for primitive in pipeline['steps']:
+            primitive_name = primitive['name']
+            encoded_primitive = self.primitive_to_enc[primitive_name]
+            encoding.append(encoded_primitive)
+
+        encoding = torch.tensor(encoding, dtype=torch.float32)
+
+        if "cuda" in self.device:
+            encoding = encoding.cuda()
+
+        return encoding
+
+class RNNDataLoader(GroupDataLoader):
+    # TODO: Maybe the data loaders shouldn't have a group key passed in but should be instantiated as a local var
+    def __init__(self, data: dict, group_key: str, dataset_params: dict,
+                 batch_size: int, drop_last: bool, shuffle: bool, seed: int):
+        dataset_class = RNNDataset
+        super().__init__(data, group_key, dataset_class, dataset_params, batch_size, drop_last, shuffle, seed)
+
+        self.pipeline_structures = {}
+        grouped_by_structure = group_json_objects(data, group_key)
+        for (group, group_indices) in grouped_by_structure.items():
+            index = group_indices[0]
+            item = data[index]
+            pipeline = item['pipeline']['steps']
+            group_structure = [primitive['inputs'] for primitive in pipeline]
+            self.pipeline_structures[group] = group_structure
+
+    def _iter(self):
+        group_dataloader_iters = {}
+        for group in self._group_batches:
+            if not group in group_dataloader_iters:
+                group_dataloader_iters[group] = iter(self._group_dataloaders[group])
+
+            # Get a batch of encoded pipelines, metafeatures, and targets
+            (pipeline_batch, x_batch, y_batch) = next(group_dataloader_iters[group])
+
+            # Get the structure of the pipelines in this group so the RNN can parse the pipeline
+            group_structure = self.pipeline_structures[group]
+
+            yield ((group_structure, pipeline_batch, x_batch), y_batch)
+        raise StopIteration()

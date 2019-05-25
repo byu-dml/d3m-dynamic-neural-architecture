@@ -8,8 +8,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
+from sklearn.preprocessing import OneHotEncoder
 
-from data import Dataset, GroupDataLoader
+from data import Dataset, GroupDataLoader, RNNDataLoader
 from kND import KNearestDatasets
 import utils
 
@@ -232,7 +233,7 @@ class PyTorchModelBase:
     def _get_model(self, train_data):
         raise NotImplementedError()
 
-    def _get_optimzer(self, learning_rate):
+    def _get_optimizer(self, learning_rate):
         raise NotImplementedError()
 
     def _get_data_loader(self, data, batch_size, drop_last):
@@ -392,6 +393,189 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             'pipeline_id': [instance['pipeline']['id'] for instance in data],
             'rank': ranks,
         }
+
+
+class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
+    def __init__(self, latent_size=50, *, seed, device='cuda:0'):
+        self._task_type = 'REGRESSION'
+        PyTorchModelBase.__init__(self, task_type=self._task_type, seed=seed, device=device)
+        RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
+
+        self.latent_size = latent_size
+
+        objective = torch.nn.MSELoss(reduction="mean")
+        self._loss_function = lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+
+        self.primitive_name_to_enc = None
+        self.target_key = 'test_f1_macro'
+        self.batch_group_key = 'pipeline_structure'
+
+    def _get_model(self, train_data):
+        primitives = []
+
+        # TODO: Verify this is what we want to do: Include all the primitives from both the training AND validation set
+        for instance in train_data:
+            primitives.extend(
+                [primitive['name'] for primitive in instance['pipeline']["steps"] if primitive['name'] not in primitives])
+
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
+        encoding = encoder.fit_transform(np.unique(np.reshape(primitives, (-1, 1)), axis=0))
+
+        self.primitive_name_to_enc = {primitive: enc for primitive, enc in zip(primitives, encoding)}
+        num_primitives = len(self.primitive_name_to_enc)
+
+        metafeatures_length = len(train_data[0]['metafeatures'])
+        model = DAGRNN(rnn_input_size=num_primitives, hidden_state_size=metafeatures_length, output_layer_size=1,
+                       n_layers=2, dropout=0.1, bidirectional=True)
+        model.cuda()
+        return model
+
+    def _get_optimizer(self, learning_rate):
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+
+    def _get_data_loader(self, data, batch_size, drop_last):
+        dataset_params = {
+            "features_key": "metafeatures",
+            "target_key": self.target_key,
+            "task_type": self._task_type,
+            "device": self.device,
+            'prim_to_enc': self.primitive_name_to_enc
+        }
+
+        return RNNDataLoader(data=data,
+                             group_key=self.batch_group_key,
+                             dataset_params=dataset_params,
+                             batch_size=batch_size,
+                             drop_last=drop_last,
+                             shuffle=True,
+                             seed=self.seed)
+
+    def predict_regression(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+
+        return predictions
+
+    def predict_rank(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+        ranks = utils.rank(np.array(predictions))
+        return {
+            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'rank': ranks,
+        }
+
+
+class DAGRNN(nn.Module):
+    def __init__(self, rnn_input_size, hidden_state_size, output_layer_size, n_layers, dropout, bidirectional):
+        super(DAGRNN, self).__init__()
+
+        n_directions = 2 if bidirectional else 1
+        self.hidden_state_dim0_size = n_layers * n_directions
+
+        self.lstm = nn.LSTM(input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=n_layers,
+                            dropout=dropout, bidirectional=bidirectional, batch_first=True)
+
+        lstm_output_size = hidden_state_size * n_directions
+        self.linear_out = Submodule(lstm_output_size, output_layer_size)
+
+        self.NULL_INPUTS = ['inputs.0']
+
+    def forward(self, args):
+        (pipeline_structure, pipelines, metafeatures) = args
+
+        batch_size = pipelines.shape[0]
+        seq_len = pipelines.shape[1]
+
+        assert len(metafeatures) == batch_size
+        assert len(pipeline_structure) == seq_len
+
+        # TODO: Consider passing the metafeatures through at least one dense layer so hidden size is not restricted
+        # Add a dimension to the metafeatures so they can be concatenated across that dimension
+        metafeatures = metafeatures.unsqueeze(dim=0)
+
+        # Initialize the hidden state and cell state using a concatenation of the metafeatures
+        hidden_state = []
+        for i in range(self.hidden_state_dim0_size):
+            hidden_state.append(metafeatures)
+        hidden_state = torch.cat(hidden_state, dim=0)
+        cell_state = hidden_state
+        lstm_start_state = (hidden_state, cell_state)
+
+        # Keep track of the previous hidden and cell states as we traverse the pipeline
+        prev_lstm_states = []
+
+        lstm_output = None
+
+        # For each batch of primitives coming from the batch of pipelines
+        for i in range(seq_len):
+            # Get the one hot encoded primitives from the batch at index i in the pipeline
+            encoded_primitives = pipelines[:, i, :]
+
+            # Add a dimension in the middle of the shape so it is batch size by sequence length by input size
+            # Note that the batch size is first in the shape because we selected batch first
+            encoded_primitives = encoded_primitives.unsqueeze(dim=1)
+
+            # Get the list of indices of input primitives coming into the current primitive
+            primitive_inputs = pipeline_structure[i]
+
+            # If this is the first primitive
+            if primitive_inputs == self.NULL_INPUTS:
+                lstm_input_state = lstm_start_state
+            else:
+                # Otherwise get the mean of the hidden states of the input primitives
+                lstm_input_state = self.get_lstm_input_state(prev_lstm_states=prev_lstm_states,
+                                                             primitive_inputs=primitive_inputs)
+
+            (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
+
+            prev_lstm_states.append(lstm_output_state)
+
+        # Since we're doing 1 primitive at a time, the sequence length in the LSTM output is 1
+        # Squeeze so the fully connected input is of shape batch size by num_directions*hidden_size
+        linear_input = lstm_output.squeeze(dim=1)
+
+        linear_output = self.linear_out(linear_input)
+        return linear_output.squeeze()
+
+    @staticmethod
+    def get_lstm_input_state(prev_lstm_states, primitive_inputs):
+        # Get the hidden and cell states produced by primitives connected to the current primitive as input
+        input_hidden_states = []
+        input_cell_states = []
+        for primitive_input in primitive_inputs:
+            (hidden_state, cell_state) = prev_lstm_states[primitive_input]
+            input_hidden_states.append(hidden_state.unsqueeze(dim=0))
+            input_cell_states.append(cell_state.unsqueeze(dim=0))
+
+        # Average the input hidden and cell states each into a single state
+        input_hidden_states = torch.cat(input_hidden_states, dim=0)
+        input_cell_states = torch.cat(input_cell_states, dim=0)
+        mean_hidden_state = torch.mean(input_hidden_states, dim=0)
+        mean_cell_state = torch.mean(input_cell_states, dim=0)
+
+        return (mean_hidden_state, mean_cell_state)
+
+    def save(self, save_dir):
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+        path = os.path.join(save_dir, "dag_rnn.pt")
+        torch.save(self.state_dict(), path)
+
+    def load(self, save_dir):
+        if not os.path.isdir(save_dir):
+            raise ValueError(f"save_dir {save_dir} does not exist")
+
+        path = os.path.join(save_dir, "dag_rnn.pt")
+        self.load_state_dict(torch.load(path))
+
 
 
 class DNASiameseModule(nn.Module):
@@ -656,6 +840,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'median_regression': MedianBaseline,
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
+        'rnn_regression': RNNRegressionModel
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(seed=seed)
