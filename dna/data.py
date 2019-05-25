@@ -10,9 +10,6 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Sampler
 
 
-DATA_DIR = './data'
-
-
 def group_json_objects(json_objects, group_key):
     """
     Groups JSON data by group_key.
