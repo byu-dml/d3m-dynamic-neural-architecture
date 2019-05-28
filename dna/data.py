@@ -395,7 +395,7 @@ class RNNDataset(Dataset):
         return (encoded_pipeline, x, y)
 
     def encode_pipeline(self, pipeline):
-        # Create a tensor of encoded primitives and a list of the indices of each primitive's inputs
+        # Create a tensor of encoded primitives
         encoding = []
         for primitive in pipeline['steps']:
             primitive_name = primitive['name']
