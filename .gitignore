@@ -1,2 +1,9 @@
 __pycache__/
 data/*.json
+.idea/
+env/
+large_rnn_reg_args.txt
+small_rnn_reg_args.txt
+large_dna_reg_args.txt
+small_dna_reg_args.txt
+results/
