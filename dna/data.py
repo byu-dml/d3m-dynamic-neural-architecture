@@ -150,6 +150,20 @@ class StandardScaler:
         return transformed_data
 
 
+def encode_dag(dag: typing.Sequence[typing.Sequence[typing.Any]]):
+    """
+    Converts a directed acyclic graph DAG) to a string. If two DAGs have the same encoding string, then they are equal.
+    However, two isomorphic DAGs may have different encoding strings.
+
+    Parameters
+    ----------
+    dag: typing.List[typing.List[typing.Any]]
+        A representation of a dag. Each element in the outer list represents a vertex. Each inner list or vertex
+        contains a reference to the outer list, representing edges.
+    """
+    return ''.join(''.join(str(edge) for edge in vertex) for vertex in dag)
+
+
 def preprocess_data(train_data, test_data):
     train_metafeatures = []
     for instance in train_data:
@@ -178,9 +192,13 @@ def preprocess_data(train_data, test_data):
     # convert from dict to list
     for instance, mf_instance in zip(train_data, train_metafeatures):
         instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
+        pipeline_dag = (step['inputs'] for step in instance['pipeline']['steps'])
+        instance['pipeline_structure'] = encode_dag(pipeline_dag)
 
     for instance, mf_instance in zip(test_data, test_metafeatures):
         instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
+        pipeline_dag = (step['inputs'] for step in instance['pipeline']['steps'])
+        instance['pipeline_structure'] = encode_dag(pipeline_dag)
 
     return train_data, test_data
 
