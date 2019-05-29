@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-from sklearn.preprocessing import OneHotEncoder
 
 from data import Dataset, GroupDataLoader, RNNDataLoader
 from kND import KNearestDatasets
@@ -402,6 +401,8 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
 
+        # TODO: Consider making the latent size the hidden state size and have a dense layer process the metafeatures
+        # TODO: The input size of that dense layer should be num mfs and output size should be hidden state size
         self.latent_size = latent_size
 
         objective = torch.nn.MSELoss(reduction="mean")
@@ -410,26 +411,41 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         self.primitive_name_to_enc = None
         self.target_key = 'test_f1_macro'
         self.batch_group_key = 'pipeline_structure'
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
 
     def _get_model(self, train_data):
-        primitives = []
-
-        # TODO: Verify this is what we want to do: Include all the primitives from both the training AND validation set
-        for instance in train_data:
-            primitives.extend(
-                [primitive['name'] for primitive in instance['pipeline']["steps"] if primitive['name'] not in primitives])
-
-        encoder = OneHotEncoder(handle_unknown='ignore', sparse=False)
-        encoding = encoder.fit_transform(np.unique(np.reshape(primitives, (-1, 1)), axis=0))
-
-        self.primitive_name_to_enc = {primitive: enc for primitive, enc in zip(primitives, encoding)}
-        num_primitives = len(self.primitive_name_to_enc)
+        num_primitives = self._get_primitive_name_to_enc(train_data=train_data)
 
         metafeatures_length = len(train_data[0]['metafeatures'])
         model = DAGRNN(rnn_input_size=num_primitives, hidden_state_size=metafeatures_length, output_layer_size=1,
                        n_layers=2, dropout=0.1, bidirectional=True)
         model.cuda()
         return model
+
+    def _get_primitive_name_to_enc(self, train_data):
+        primitive_names = set()
+
+        # Get a set of all the primitives in the train set
+        for instance in train_data:
+            primitives = instance[self.pipeline_key][self.steps_key]
+            for primitive in primitives:
+                primitive_name = primitive[self.prim_name_key]
+                primitive_names.add(primitive_name)
+
+        # Get one hot encodings of all the primitives
+        num_primitives = len(primitive_names)
+        encoding = np.zeros((num_primitives, num_primitives))
+        for i in range(num_primitives):
+            encoding[i][i] = 1
+
+        # Create a mapping of primitive names to one hot encodings
+        self.primitive_name_to_enc = {}
+        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+            self.primitive_name_to_enc[primitive_name] = primitive_encoding
+
+        return num_primitives
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
@@ -575,7 +591,6 @@ class DAGRNN(nn.Module):
 
         path = os.path.join(save_dir, "dag_rnn.pt")
         self.load_state_dict(torch.load(path))
-
 
 
 class DNASiameseModule(nn.Module):
