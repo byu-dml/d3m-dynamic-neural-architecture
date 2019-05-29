@@ -73,6 +73,9 @@ def _extract_tarfile(path):
     return extracted_path
 
 
+def write_data(data, path: str):
+    json.dump(data, open(path, "w"))
+
 def get_data(path):
     if tarfile.is_tarfile(path):
         path = _extract_tarfile(path)

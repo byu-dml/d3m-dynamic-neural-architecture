@@ -5,7 +5,7 @@ import sys
 import typing
 import uuid
 
-from data import get_data, preprocess_data, split_data
+from data import get_data, preprocess_data, split_data, write_data
 from models import get_model
 from problems import get_problem
 
@@ -112,6 +112,9 @@ def configure_evaluate_parser(parser):
         choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret'],
         help='the type of problem'
     )
+    parser.add_argument(
+        '--write-processed-data', default=False, action='store_true'
+    )
 
 
 def evaluate_handler(
@@ -121,19 +124,7 @@ def evaluate_handler(
 ):
     run_id = str(uuid.uuid4())
 
-    train_path = getattr(arguments, 'train_path')
-    train_data = data_resolver(train_path)
-
-    if getattr(arguments, 'test_path') is None:
-        train_data, test_data = split_data(
-            train_data, 'dataset_id', getattr(arguments, 'test_size'),
-            getattr(arguments, 'split_seed')
-        )
-    else:
-        test_path = getattr(arguments, 'test_path')
-        test_data = data_resolver(test_path)
-
-    train_data, test_data = preprocess_data(train_data, test_data)
+    (train_data, test_data) = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
 
     model_name = getattr(arguments, 'model')
     model_config_path = getattr(arguments, 'model_config_path', None)
@@ -180,6 +171,52 @@ def evaluate_handler(
             print()
 
     evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
+
+
+def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
+    train_path = getattr(arguments, 'train_path')
+
+    # Get the path for the processed train data
+    complete = 'complete_classification'
+    small = 'small_classification'
+    extension = '.json'
+    if complete in train_path:
+        train_processed_path = './data/' + complete + '_train_processed' + extension
+        test_processed_path = './data/' + complete + '_test_processed' + extension
+    elif small in train_path:
+        train_processed_path = './data/' + small + '_train_processed' + extension
+        test_processed_path = './data/' + small + '_test_processed' + extension
+    else:
+        raise Exception('The train path ' + train_path + ' is not valid')
+
+    processed_data_exists = os.path.isfile(train_processed_path) and os.path.isfile(test_processed_path)
+    if processed_data_exists:
+        # Get the already processed data from disk
+        train_data = get_data(path=train_processed_path)
+        test_data = get_data(path=test_processed_path)
+    else:
+        # Load the unprocessed data
+        train_data = data_resolver(train_path)
+
+        if getattr(arguments, 'test_path') is None:
+            train_data, test_data = split_data(
+                train_data, 'dataset_id', getattr(arguments, 'test_size'),
+                getattr(arguments, 'split_seed')
+            )
+        else:
+            test_path = getattr(arguments, 'test_path')
+            test_data = data_resolver(test_path)
+
+        # Process the unprocessed data
+        train_data, test_data = preprocess_data(train_data, test_data)
+
+        if arguments.write_processed_data:
+            # Write the processed data to disk
+            print('Writing Processed Data To Disk...')
+            write_data(data=train_data, path=train_processed_path)
+            write_data(data=test_data, path=test_processed_path)
+
+    return (train_data, test_data)
 
 
 def evaluate_serializer(
