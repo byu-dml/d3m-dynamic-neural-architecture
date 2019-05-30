@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -112,6 +113,14 @@ def configure_evaluate_parser(parser):
         choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret'],
         help='the type of problem'
     )
+    parser.add_argument(
+        '--cache-dir', type=str, default='.cache',
+        help='directory path to write outputs for this model run'
+    )
+    parser.add_argument(
+        '--no-cache', default=False, action='store_true',
+        help='when set, do not use cached preprocessed data'
+    )
 
 
 def evaluate_handler(
@@ -121,19 +130,7 @@ def evaluate_handler(
 ):
     run_id = str(uuid.uuid4())
 
-    train_path = getattr(arguments, 'train_path')
-    train_data = data_resolver(train_path)
-
-    if getattr(arguments, 'test_path') is None:
-        train_data, test_data = split_data(
-            train_data, 'dataset_id', getattr(arguments, 'test_size'),
-            getattr(arguments, 'split_seed')
-        )
-    else:
-        test_path = getattr(arguments, 'test_path')
-        test_data = data_resolver(test_path)
-
-    train_data, test_data = preprocess_data(train_data, test_data)
+    train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
 
     model_name = getattr(arguments, 'model')
     model_config_path = getattr(arguments, 'model_config_path', None)
@@ -180,6 +177,45 @@ def evaluate_handler(
             print()
 
     evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
+
+
+def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
+    data_arg_names = ['train_path', 'test_path', 'test_size', 'split_seed']
+    data_arg_str = ''.join(str(getattr(arguments, arg)) for arg in data_arg_names)
+    cache_id = hashlib.sha256(data_arg_str.encode('utf8')).hexdigest()
+    cache_dir = os.path.join(arguments.cache_dir, cache_id)
+    train_cache_path = os.path.join(cache_dir, 'train.json')
+    test_cache_path = os.path.join(cache_dir, 'test.json')
+
+    load_cached_data = (not arguments.no_cache) and (os.path.isdir(cache_dir))
+
+    # determine whether to load raw or cached data
+    if load_cached_data:
+        in_train_path = train_cache_path
+        in_test_path = test_cache_path
+    else:
+        in_train_path = arguments.train_path
+        in_test_path = arguments.test_path
+
+    # when loading raw data and test_path is not provided, split train into train and test data
+    train_data = data_resolver(in_train_path)
+    if in_test_path is None:
+        assert not load_cached_data
+        train_data, test_data = split_data(train_data, 'dataset_id', arguments.test_size, arguments.split_seed)
+    else:
+        test_data = data_resolver(in_test_path)
+
+    if not load_cached_data:
+        train_data, test_data = preprocess_data(train_data, test_data)
+        if not arguments.no_cache:
+            if not os.path.isdir(cache_dir):
+                os.makedirs(cache_dir)
+            with open(train_cache_path, 'w') as f:
+                json.dump(train_data, f, separators=(',',':'))
+            with open(test_cache_path, 'w') as f:
+                json.dump(test_data, f, separators=(',',':'))
+
+    return train_data, test_data
 
 
 def evaluate_serializer(
