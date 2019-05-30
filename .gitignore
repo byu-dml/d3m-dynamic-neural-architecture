@@ -3,3 +3,4 @@ data/*.json
 .idea/
 env/
 dev_results/
+.cache
