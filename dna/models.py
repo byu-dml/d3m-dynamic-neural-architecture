@@ -9,10 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from data import Dataset, GroupDataLoader, RNNDataLoader
+from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from kND import KNearestDatasets
 import utils
-
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
@@ -394,102 +393,13 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         }
 
 
-class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
-    def __init__(self, latent_size=50, *, seed, device='cuda:0'):
-        self._task_type = 'REGRESSION'
-        PyTorchModelBase.__init__(self, task_type=self._task_type, seed=seed, device=device)
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
-
-        # TODO: Consider making the latent size the hidden state size and have a dense layer process the metafeatures
-        # TODO: The input size of that dense layer should be num mfs and output size should be hidden state size
-        self.latent_size = latent_size
-
-        objective = torch.nn.MSELoss(reduction="mean")
-        self._loss_function = lambda y_hat, y: torch.sqrt(objective(y_hat, y))
-
-        self.primitive_name_to_enc = None
-        self.target_key = 'test_f1_macro'
-        self.batch_group_key = 'pipeline_structure'
-        self.pipeline_key = 'pipeline'
-        self.steps_key = 'steps'
-        self.prim_name_key = 'name'
-
-    def _get_model(self, train_data):
-        num_primitives = self._get_primitive_name_to_enc(train_data=train_data)
-
-        metafeatures_length = len(train_data[0]['metafeatures'])
-        model = DAGRNN(rnn_input_size=num_primitives, hidden_state_size=metafeatures_length, output_layer_size=1,
-                       n_layers=2, dropout=0.1, bidirectional=True)
-        model.cuda()
-        return model
-
-    def _get_primitive_name_to_enc(self, train_data):
-        primitive_names = set()
-
-        # Get a set of all the primitives in the train set
-        for instance in train_data:
-            primitives = instance[self.pipeline_key][self.steps_key]
-            for primitive in primitives:
-                primitive_name = primitive[self.prim_name_key]
-                primitive_names.add(primitive_name)
-
-        # Get one hot encodings of all the primitives
-        num_primitives = len(primitive_names)
-        encoding = np.zeros((num_primitives, num_primitives))
-        for i in range(num_primitives):
-            encoding[i][i] = 1
-
-        # Create a mapping of primitive names to one hot encodings
-        self.primitive_name_to_enc = {}
-        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
-            self.primitive_name_to_enc[primitive_name] = primitive_encoding
-
-        return num_primitives
-
-    def _get_optimizer(self, learning_rate):
-        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
-
-    def _get_data_loader(self, data, batch_size, drop_last):
-        dataset_params = {
-            "features_key": "metafeatures",
-            "target_key": self.target_key,
-            "task_type": self._task_type,
-            "device": self.device,
-            'prim_to_enc': self.primitive_name_to_enc
-        }
-
-        return RNNDataLoader(data=data,
-                             group_key=self.batch_group_key,
-                             dataset_params=dataset_params,
-                             batch_size=batch_size,
-                             drop_last=drop_last,
-                             shuffle=True,
-                             seed=self.seed)
-
-    def predict_regression(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
-
-        data_loader = self._get_data_loader(data, batch_size, False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-
-        return predictions
-
-    def predict_rank(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
-
-        data_loader = self._get_data_loader(data, batch_size, False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        ranks = utils.rank(np.array(predictions))
-        return {
-            'pipeline_id': [instance['pipeline']['id'] for instance in data],
-            'rank': ranks,
-        }
-
-
 class DAGRNN(nn.Module):
+    """
+    The DAG RNN, like the DNA Module, can be used in both an RNN regression task or an RNN siamese task.
+    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
+    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
+    The primitives are one hot encoded.
+    """
     def __init__(self, rnn_input_size, hidden_state_size, output_layer_size, n_layers, dropout, bidirectional):
         super(DAGRNN, self).__init__()
 
@@ -536,7 +446,8 @@ class DAGRNN(nn.Module):
             encoded_primitives = pipelines[:, i, :]
 
             # Add a dimension in the middle of the shape so it is batch size by sequence length by input size
-            # Note that the batch size is first in the shape because we selected batch first
+            # Note that the sequence length (middle) is 1 because we're doing 1 (batch of) primitive(s) at a time
+            # Also note that the batch size is first in the shape because we selected batch first
             encoded_primitives = encoded_primitives.unsqueeze(dim=1)
 
             # Get the list of indices of input primitives coming into the current primitive
@@ -591,6 +502,141 @@ class DAGRNN(nn.Module):
 
         path = os.path.join(save_dir, "dag_rnn.pt")
         self.load_state_dict(torch.load(path))
+
+
+class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
+    def __init__(self, latent_size=50, *, seed, device='cuda:0'):
+        self._task_type = 'REGRESSION'
+        PyTorchModelBase.__init__(self, task_type=self._task_type, seed=seed, device=device)
+        RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
+
+        # TODO: Consider making the latent size the hidden state size and have a dense layer process the metafeatures
+        # TODO: The input size of that dense layer should be num mfs and output size should be hidden state size
+        self.latent_size = latent_size
+
+        objective = torch.nn.MSELoss(reduction="mean")
+        self._loss_function = lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+
+        self.pipeline_structures = None
+        self.num_primitives = None
+        self.target_key = 'test_f1_macro'
+        self.batch_group_key = 'pipeline_structure'
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
+        self.prim_inputs_key = 'inputs'
+        self.features_key = 'metafeatures'
+
+    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        verbose=False):
+        # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
+        self.pipeline_structures = {}
+        grouped_by_structure = group_json_objects(train_data, self.batch_group_key)
+        for (group, group_indices) in grouped_by_structure.items():
+            index = group_indices[0]
+            item = train_data[index]
+            pipeline = item[self.pipeline_key][self.steps_key]
+            group_structure = [primitive[self.prim_inputs_key] for primitive in pipeline]
+            self.pipeline_structures[group] = group_structure
+
+        # Get the mapping of primitives to their one hot encoding
+        primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
+
+        # Encode all the pipelines in the training and validation set
+        self.encode_pipelines(data=train_data, primitive_name_to_enc=primitive_name_to_enc)
+        if validation_data is not None:
+            self.encode_pipelines(data=validation_data, primitive_name_to_enc=primitive_name_to_enc)
+
+        print('Ready to create model and start training')
+
+        PyTorchModelBase.fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last,
+                             validation_data=validation_data, output_dir=output_dir, verbose=verbose)
+
+    def _get_primitive_name_to_enc(self, train_data):
+        primitive_names = set()
+
+        # Get a set of all the primitives in the train set
+        for instance in train_data:
+            primitives = instance[self.pipeline_key][self.steps_key]
+            for primitive in primitives:
+                primitive_name = primitive[self.prim_name_key]
+                primitive_names.add(primitive_name)
+
+        # Get one hot encodings of all the primitives
+        self.num_primitives = len(primitive_names)
+        encoding = np.identity(n=self.num_primitives)
+
+        # Create a mapping of primitive names to one hot encodings
+        primitive_name_to_enc = {}
+        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+            primitive_name_to_enc[primitive_name] = primitive_encoding
+
+        return primitive_name_to_enc
+
+    def encode_pipelines(self, data, primitive_name_to_enc):
+        for instance in data:
+            pipeline = instance[self.pipeline_key][self.steps_key]
+            encoded_pipeline = self.encode_pipeline(pipeline=pipeline, primitive_to_enc=primitive_name_to_enc)
+            instance[self.pipeline_key][self.steps_key] = encoded_pipeline
+
+    def encode_pipeline(self, pipeline, primitive_to_enc):
+        # Create a tensor of encoded primitives
+        encoding = []
+        for primitive in pipeline:
+            primitive_name = primitive[self.prim_name_key]
+            encoded_primitive = primitive_to_enc[primitive_name]
+            encoding.append(encoded_primitive)
+
+        encoding = torch.tensor(encoding, dtype=torch.float32)
+
+        if "cuda" in self.device:
+            encoding = encoding.cuda()
+
+        return encoding
+
+    def _get_model(self, train_data):
+        metafeatures_length = len(train_data[0][self.features_key])
+        model = DAGRNN(rnn_input_size=self.num_primitives, hidden_state_size=metafeatures_length, output_layer_size=1,
+                       n_layers=2, dropout=0.1, bidirectional=True)
+        model.cuda()
+        return model
+
+    def _get_optimizer(self, learning_rate):
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+
+    def _get_data_loader(self, data, batch_size, drop_last):
+        dataset_params = {
+            "features_key": self.features_key,
+            "target_key": self.target_key,
+            "task_type": self._task_type,
+            "device": self.device
+        }
+
+        return RNNDataLoader(data=data, group_key=self.batch_group_key, dataset_params=dataset_params,
+                             batch_size=batch_size, drop_last=drop_last, shuffle=True, seed=self.seed,
+                             pipeline_structures=self.pipeline_structures)
+
+    def predict_regression(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+
+        return predictions
+
+    def predict_rank(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+        ranks = utils.rank(np.array(predictions))
+        return {
+            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'rank': ranks,
+        }
 
 
 class DNASiameseModule(nn.Module):
