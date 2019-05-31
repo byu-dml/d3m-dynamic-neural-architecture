@@ -146,6 +146,7 @@ def evaluate_handler(
     output_dir = getattr(arguments, 'output_dir')
     output_dir = os.path.join(output_dir, run_id)
     model_output_dir = os.path.join(output_dir, 'model')
+    os.makedirs(model_output_dir)
 
     scores = getattr(arguments, 'scores')
 
