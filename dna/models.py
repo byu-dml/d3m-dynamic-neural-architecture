@@ -79,12 +79,12 @@ class Submodule(nn.Module):
 class DNAModule(nn.Module):
 
     def __init__(
-        self, submodule_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
+        self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
         output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
         device: str = 'cuda:0', seed: int = 0
     ):
         super(DNAModule, self).__init__()
-        self.submodule_sizes = submodule_sizes
+        self.submodule_input_sizes = submodule_input_sizes
         self.n_layers = n_layers
         self.input_layer_size = input_layer_size
         self.hidden_layer_size = hidden_layer_size
@@ -118,8 +118,8 @@ class DNAModule(nn.Module):
 
     def _get_dynamic_submodules(self):
         dynamic_submodules = torch.nn.ModuleDict()
-        for i, (submodule_id, submodule_size) in enumerate(sorted(self.submodule_sizes.items())):
-            layer_sizes = [self.hidden_layer_size * submodule_size] + [self.hidden_layer_size] * (self.n_layers - 1)
+        for i, (submodule_id, submodule_input_size) in enumerate(sorted(self.submodule_input_sizes.items())):
+            layer_sizes = [self.hidden_layer_size * submodule_input_size] + [self.hidden_layer_size] * (self.n_layers - 1)
             dynamic_submodules[submodule_id] = Submodule(
                 layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
                 seed=self._dna_base_seed + i
@@ -316,14 +316,14 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         self._model_seed = self.seed + 1
 
     def _get_model(self, train_data):
-        submodule_sizes = {}
+        submodule_input_sizes = {}
         for instance in train_data:
             for step in instance['pipeline']['steps']:
-                submodule_sizes[step['name']] = len(step['inputs'])
+                submodule_input_sizes[step['name']] = len(step['inputs'])
         self.input_layer_size = len(train_data[0]['metafeatures'])
 
         return DNAModule(
-            submodule_sizes, self.n_hidden_layers + 1, self.input_layer_size, self.hidden_layer_size,
+            submodule_input_sizes, self.n_hidden_layers + 1, self.input_layer_size, self.hidden_layer_size,
             self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
             seed=self._model_seed
         )
