@@ -199,16 +199,12 @@ class Dataset(Dataset):
 
     def __init__(
         self, data: typing.List[typing.Dict], features_key: str,
-        target_key: str, task_type: str, device: str
+        target_key: str, y_dtype: typing.Any, device: str
     ):
         self.data = data
         self.features_key = features_key
         self.target_key = target_key
-        self.task_type = task_type
-        if self.task_type == "CLASSIFICATION":
-            self._y_dtype = torch.int64
-        elif self.task_type == "REGRESSION":
-            self._y_dtype = torch.float32
+        self.y_dtype = y_dtype
         self.device = device
 
     def __getitem__(self, item: int):
@@ -217,7 +213,7 @@ class Dataset(Dataset):
         )
         y = torch.tensor(
             self.data[item][self.target_key],
-            dtype=self._y_dtype,
+            dtype=self.y_dtype,
             device=self.device
         )
         return x, y

@@ -1,4 +1,11 @@
 {
+    "__init__": {
+        "n_hidden_layers": 2,
+        "hidden_layer_size": 50,
+        "activation_name": "relu",
+        "use_batch_norm": true,
+        "use_skip": true
+    },
     "fit": {
         "n_epochs": 1,
         "learning_rate": 0.0001,
