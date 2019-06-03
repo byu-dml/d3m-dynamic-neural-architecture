@@ -22,6 +22,21 @@ class ModelNotFitError(Exception):
     pass
 
 
+class PyTorchRandomStateContext:
+
+    def __init__(self, seed):
+        self.seed = seed
+        self._state = None
+
+    def __enter__(self):
+        self._state = torch.random.get_rng_state()
+        torch.manual_seed(self.seed)
+        # torch.cuda.manual_seed_all  # todo?
+
+    def __exit__(self, *args):
+        torch.random.set_rng_state(self._state)
+
+
 class Submodule(nn.Module):
 
     def __init__(
@@ -30,28 +45,29 @@ class Submodule(nn.Module):
     ):
         super(Submodule, self).__init__()
 
-        n_layers = len(layer_sizes) - 1
-        activation = ACTIVATIONS[activation_name]
+        with PyTorchRandomStateContext(seed):
+            n_layers = len(layer_sizes) - 1
+            activation = ACTIVATIONS[activation_name]
 
-        layers = []
-        for i in range(n_layers):
-            if i > 0:
-                layers.append(activation())
-            if use_batch_norm:
-                layers.append(nn.BatchNorm1d(layer_sizes[i]))
-            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
+            layers = []
+            for i in range(n_layers):
+                if i > 0:
+                    layers.append(activation())
+                if use_batch_norm:
+                    layers.append(nn.BatchNorm1d(layer_sizes[i]))
+                layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
 
-        self.net = nn.Sequential(*layers)
-        self.net.to(device=device)
+            self.net = nn.Sequential(*layers)
+            self.net.to(device=device)
 
-        if use_skip:
-            if layer_sizes[0] == layer_sizes[-1]:
-                self.skip = nn.Sequential()
+            if use_skip:
+                if layer_sizes[0] == layer_sizes[-1]:
+                    self.skip = nn.Sequential()
+                else:
+                    self.skip = nn.Linear(layer_sizes[0], layer_sizes[-1])
+                self.skip.to(device=device)
             else:
-                self.skip = nn.Linear(layer_sizes[0], layer_sizes[-1])
-            self.skip.to(device=device)
-        else:
-            self.skip = None
+                self.skip = None
 
     def forward(self, x):
         if self.skip is None:
@@ -67,7 +83,6 @@ class DNAModule(nn.Module):
         output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
         device: str = 'cuda:0', seed: int = 0
     ):
-        # todo use seed
         super(DNAModule, self).__init__()
         self.submodule_sizes = submodule_sizes
         self.n_layers = n_layers
