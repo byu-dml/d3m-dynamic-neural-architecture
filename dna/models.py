@@ -16,7 +16,6 @@ import utils
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
-ACTIVATION = 'leaky_relu'
 
 
 class ModelNotFitError(Exception):
@@ -38,9 +37,9 @@ class Submodule(nn.Module):
         for i in range(n_layers):
             if i > 0:
                 layers.append(activation())
-            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
             if use_batch_norm:
-                layers.append(nn.BatchNorm1d(layer_sizes[i+1]))
+                layers.append(nn.BatchNorm1d(layer_sizes[i]))
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
 
         self.net = nn.Sequential(*layers)
         self.net.to(device=device)
