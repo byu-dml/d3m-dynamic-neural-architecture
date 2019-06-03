@@ -400,9 +400,11 @@ class DAGRNN(nn.Module):
     It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
     The primitives are one hot encoded.
     """
-    def __init__(self, rnn_input_size, hidden_state_size, output_layer_size, n_layers, dropout, bidirectional):
+    def __init__(self, rnn_input_size: int, input_layer_size: int, hidden_state_size: int, output_size: int,
+                 n_layers: int, dropout: float, bidirectional: bool):
         super(DAGRNN, self).__init__()
 
+        self.linear_in = Submodule(input_layer_size=input_layer_size, output_size=hidden_state_size)
         n_directions = 2 if bidirectional else 1
         self.hidden_state_dim0_size = n_layers * n_directions
 
@@ -410,7 +412,9 @@ class DAGRNN(nn.Module):
                             dropout=dropout, bidirectional=bidirectional, batch_first=True)
 
         lstm_output_size = hidden_state_size * n_directions
-        self.linear_out = Submodule(lstm_output_size, output_layer_size)
+        self.linear_out = Submodule(input_layer_size=lstm_output_size, output_size=output_size)
+
+        print(self)
 
         self.NULL_INPUTS = ['inputs.0']
 
@@ -423,7 +427,9 @@ class DAGRNN(nn.Module):
         assert len(metafeatures) == batch_size
         assert len(pipeline_structure) == seq_len
 
-        # TODO: Consider passing the metafeatures through at least one dense layer so hidden size is not restricted
+        # Pass the metafeatures through the input layer
+        metafeatures = self.linear_in(metafeatures)
+
         # Add a dimension to the metafeatures so they can be concatenated across that dimension
         metafeatures = metafeatures.unsqueeze(dim=0)
 
@@ -505,15 +511,13 @@ class DAGRNN(nn.Module):
 
 
 class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
-    def __init__(self, latent_size=50, *, seed, device='cuda:0'):
+    def __init__(self, latent_size=64, *, seed, device='cuda:0'):
         self._task_type = 'REGRESSION'
         PyTorchModelBase.__init__(self, task_type=self._task_type, seed=seed, device=device)
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
 
-        # TODO: Consider making the latent size the hidden state size and have a dense layer process the metafeatures
-        # TODO: The input size of that dense layer should be num mfs and output size should be hidden state size
-        self.latent_size = latent_size
+        self.hidden_state_size = latent_size
 
         objective = torch.nn.MSELoss(reduction="mean")
         self._loss_function = lambda y_hat, y: torch.sqrt(objective(y_hat, y))
@@ -547,8 +551,6 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         self.encode_pipelines(data=train_data, primitive_name_to_enc=primitive_name_to_enc)
         if validation_data is not None:
             self.encode_pipelines(data=validation_data, primitive_name_to_enc=primitive_name_to_enc)
-
-        print('Ready to create model and start training')
 
         PyTorchModelBase.fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last,
                              validation_data=validation_data, output_dir=output_dir, verbose=verbose)
@@ -597,8 +599,9 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
     def _get_model(self, train_data):
         metafeatures_length = len(train_data[0][self.features_key])
-        model = DAGRNN(rnn_input_size=self.num_primitives, hidden_state_size=metafeatures_length, output_layer_size=1,
-                       n_layers=2, dropout=0.1, bidirectional=True)
+        model = DAGRNN(rnn_input_size=self.num_primitives, input_layer_size=metafeatures_length,
+                       hidden_state_size=self.hidden_state_size, output_size=1, n_layers=2, dropout=0.1,
+                       bidirectional=True)
         model.cuda()
         return model
 
