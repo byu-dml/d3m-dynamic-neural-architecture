@@ -377,8 +377,8 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
         data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-
-        return predictions
+        unshuffled_preds = data_loader.unshuffle(predictions)
+        return unshuffled_preds
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
@@ -386,7 +386,8 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
         data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        ranks = utils.rank(np.array(predictions))
+        unshuffled_preds = data_loader.unshuffle(predictions)
+        ranks = utils.rank(np.array(unshuffled_preds))
         return {
             'pipeline_id': [instance['pipeline']['id'] for instance in data],
             'rank': ranks,

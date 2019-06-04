@@ -59,7 +59,6 @@ class RegressionProblem(ProblemBase):
         return {'RMSE': rmse(predictions, targets)}
 
 
-
 class RankProblem(ProblemBase):
 
     def run(

@@ -292,6 +292,7 @@ class GroupDataLoader(object):
 
         self._random = random.Random()
         self._random.seed(seed)
+        self.old_indices = []
 
         self._init_dataloaders()
         self._init_group_metadataloader()
@@ -307,12 +308,12 @@ class GroupDataLoader(object):
         # create dataloaders
         self._group_dataloaders = {}
         for group, group_indices in grouped_data.items():
+            self.old_indices += group_indices
             group_data = [self.data[i] for i in group_indices]
             group_dataset = self.dataset_class(group_data, **self.dataset_params)
             new_dataloader = self._get_data_loader(
                 group_dataset
             )
-            # assert(len(new_dataloader) != 0)
             self._group_dataloaders[group] = new_dataloader
 
     def _get_data_loader(self, data):
@@ -326,7 +327,6 @@ class GroupDataLoader(object):
             batch_size = self.batch_size,
             drop_last = self.drop_last
         )
-        # assert(len(dataloader) != 0)
         return dataloader
 
     def _randint(self):
@@ -339,9 +339,21 @@ class GroupDataLoader(object):
         """
         self._group_batches = []
         for group, group_dataloader in self._group_dataloaders.items():
-            # assert(len(group_dataloader) != 0)
             self._group_batches += [group] * len(group_dataloader)
-        self._random.shuffle(self._group_batches)
+        if self.shuffle:
+            self._random.shuffle(self._group_batches)
+
+    def unshuffle(self, predictions):
+        """
+        Rearrange the order from the grouping
+        :param predictions:
+        :return: the unshuffled predictions
+        """
+        # use the index order that would be sorting the array to subset
+        indexes_to_order = np.argsort(np.array(self.old_indices))
+        numpy_preds = predictions.numpy()
+        unshuffled_preds = numpy_preds[indexes_to_order]
+        return unshuffled_preds
 
     def __iter__(self):
         return iter(self._iter())
