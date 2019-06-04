@@ -354,7 +354,7 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
-    def _get_data_loader(self, data, batch_size, drop_last):
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
         return GroupDataLoader(
             data = data,
             group_key = 'pipeline.id',
@@ -367,7 +367,7 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             },
             batch_size = batch_size,
             drop_last = drop_last,
-            shuffle = True,
+            shuffle = shuffle,
             seed = self.seed + 2
         )
 
@@ -375,16 +375,16 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         if self._model is None:
             raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, False)
+        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
 
-        return predictions, targets
+        return predictions
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, False)
+        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
         ranks = utils.rank(np.array(predictions))
         return {
