@@ -493,7 +493,7 @@ class PerPrimitiveBaseline(RegressionModelBase):
             prediction = 0
             for primitive in instance['pipeline']['steps']:
                 prediction += self.primitive_scores[primitive['name']]
-            prediction /= len(instance['pipeline'])
+            prediction /= len(instance['pipeline']['steps'])
             predictions.append(prediction)
 
         return predictions
