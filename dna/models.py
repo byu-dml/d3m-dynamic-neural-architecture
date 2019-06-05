@@ -16,148 +16,125 @@ import utils
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
-ACTIVATION = 'leaky_relu'
 
 
 class ModelNotFitError(Exception):
     pass
 
 
+class PyTorchRandomStateContext:
+
+    def __init__(self, seed):
+        self.seed = seed
+        self._state = None
+
+    def __enter__(self):
+        self._state = torch.random.get_rng_state()
+        torch.manual_seed(self.seed)
+        # torch.cuda.manual_seed_all  # todo?
+
+    def __exit__(self, *args):
+        torch.random.set_rng_state(self._state)
+
+
 class Submodule(nn.Module):
 
-    def __init__(self, input_layer_size, output_size, *, use_skip=False):
+    def __init__(
+        self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
+        device: str = 'cuda:0', seed: int = 0
+    ):
         super(Submodule, self).__init__()
 
-        # todo: make constructor arguments
-        activation = ACTIVATIONS[ACTIVATION]
-        n_layers=1
-        n_hidden_nodes=1
-        batch_norms=[True]
+        with PyTorchRandomStateContext(seed):
+            n_layers = len(layer_sizes) - 1
+            activation = ACTIVATIONS[activation_name]
 
-        # The length of the batch norms list must be this size to account for the hidden layers and input layer
-        assert len(batch_norms) == n_layers
-        assert n_layers >= 1
-        assert n_hidden_nodes >= 1
+            layers = []
+            for i in range(n_layers):
+                if i > 0:
+                    layers.append(activation())
+                if use_batch_norm:
+                    layers.append(nn.BatchNorm1d(layer_sizes[i]))
+                layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
 
-        layers = []
-        if n_layers == 1:
-            # Create a single without an activation function
-            if batch_norms[0]:
-                layers.append(nn.BatchNorm1d(input_layer_size))
-            layers.append(nn.Linear(input_layer_size, output_size))
-        else:
-            # Create the first layer
-            if batch_norms[0]:
-                layers.append(nn.BatchNorm1d(input_layer_size))
-            layers.append(nn.Linear(input_layer_size, n_hidden_nodes))
-            layers.append(activation())
+            self.net = nn.Sequential(*layers)
+            self.net.to(device=device)
 
-            # Create the hidden layers not including the output layer
-            last_index = n_layers - 1
-            for i in range(1, last_index):
-                if batch_norms[i]:
-                    layers.append(nn.BatchNorm1d(n_hidden_nodes))
-                layers.append(nn.Linear(n_hidden_nodes, n_hidden_nodes))
-                layers.append(activation())
-
-            # Create the output layer without an activation function
-            if batch_norms[last_index]:
-                layers.append(nn.BatchNorm1d(n_hidden_nodes))
-            layers.append(nn.Linear(n_hidden_nodes, output_size))
-
-        self.net = nn.Sequential(*layers)
-
-        if use_skip:
-            if input_layer_size == output_size:
-                self.skip = nn.Sequential()
+            if use_skip:
+                if layer_sizes[0] == layer_sizes[-1]:
+                    self.skip = nn.Sequential()
+                else:
+                    self.skip = nn.Linear(layer_sizes[0], layer_sizes[-1])
+                self.skip.to(device=device)
             else:
-                self.skip = nn.Linear(input_layer_size, output_size)
-        else:
-            self.skip = None
+                self.skip = None
 
     def forward(self, x):
-        if self.skip:
-            return self.net(x) + self.skip(x)
-        else:
+        if self.skip is None:
             return self.net(x)
+        else:
+            return self.net(x) + self.skip(x)
 
 
 class DNAModule(nn.Module):
 
     def __init__(
-        self, input_model=None, submodules=None, output_model=None, *, seed=0
+        self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
+        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
+        device: str = 'cuda:0', seed: int = 0
     ):
-        # todo use seed
         super(DNAModule, self).__init__()
-        self.input_model = input_model
-        self.submodules = submodules
-        self.output_model = output_model
-        self.h1 = None
-        self.f_activation = F_ACTIVATIONS[ACTIVATION]
+        self.submodule_input_sizes = submodule_input_sizes
+        self.n_layers = n_layers
+        self.input_layer_size = input_layer_size
+        self.hidden_layer_size = hidden_layer_size
+        self.output_layer_size = output_layer_size
+        self.activation_name = activation_name
+        self._activation = F_ACTIVATIONS[activation_name]
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
+        self.device = device
+        self.seed = seed
+        self._input_seed = seed + 1
+        self._output_seed = seed + 2
+        self._dna_base_seed = seed + 3
+        self._input_submodule = self._get_input_submodule()
+        self._output_submodule = self._get_output_submodule()
+        self._dynamic_submodules = self._get_dynamic_submodules()
+
+    def _get_input_submodule(self):
+        layer_sizes = [self.input_layer_size] + [self.hidden_layer_size] * (self.n_layers - 1)
+        return Submodule(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            seed=self._input_seed
+        )
+
+    def _get_output_submodule(self):
+        layer_sizes = [self.hidden_layer_size] * (self.n_layers - 1) + [self.output_layer_size]
+        return Submodule(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            seed=self._output_seed
+        )
+
+    def _get_dynamic_submodules(self):
+        dynamic_submodules = torch.nn.ModuleDict()
+        for i, (submodule_id, submodule_input_size) in enumerate(sorted(self.submodule_input_sizes.items())):
+            layer_sizes = [self.hidden_layer_size * submodule_input_size] + [self.hidden_layer_size] * (self.n_layers - 1)
+            dynamic_submodules[submodule_id] = Submodule(
+                layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+                seed=self._dna_base_seed + i
+            )
+        return dynamic_submodules
 
     def forward(self, args):
-        # pipeline_id, pipeline, x, datasets = args
         pipeline_id, pipeline, x = args
-        self.h1 = self.f_activation(self.input_model(x))
-        h2 = self.f_activation(self.recursive_get_output(pipeline['steps'], len(pipeline['steps']) - 1))
-        return torch.squeeze(self.output_model(h2))
-
-    def save(self, save_dir):
-        if not os.path.isdir(save_dir):
-            os.makedirs(save_dir)
-
-        path = os.path.join(save_dir, "input_model.pt")
-        self._save(self.input_model, path)
-
-        for name, model in self.submodules.items():
-            path = os.path.join(save_dir, f"{name}_model.pt")
-            self._save(model, path)
-
-        path = os.path.join(save_dir, "output_model.pt")
-        self._save(self.output_model, path)
-
-    def _save(self, model, save_path):
-        torch.save(model.state_dict(), save_path)
-
-    def load(self, save_dir):
-        if not os.path.isdir(save_dir):
-            raise ValueError(f"save_dir {save_dir} does not exist")
-
-        path = os.path.join(save_dir, "input_model.pt")
-        self._load(self.input_model, path)
-
-        for name, model in self.submodules.items():
-            path = os.path.join(save_dir, f"{name}_model.pt")
-            self._load(model, path)
-
-        path = os.path.join(save_dir, "output_model.pt")
-        self._load(self.output_model, path)
-
-    def _load(self, model, path):
-        model.load_state_dict(torch.load(path))
-
-    def recursive_get_output(self, pipeline, current_index):
-        """
-        The recursive call to find the input
-        :param pipeline: the pipeline list containing the submodules
-        :param current_index: the index of the current submodule
-        :return:
-        """
-        current_submodule = self.submodules[pipeline[current_index]["name"]]
-        if "inputs.0" in pipeline[current_index]["inputs"]:
-            return self.f_activation(current_submodule(self.h1))
-
-        outputs = []
-        for input in pipeline[current_index]["inputs"]:
-            curr_output = self.recursive_get_output(pipeline, input)
-            outputs.append(curr_output)
-
-        if len(outputs) > 1:
-            new_output = self.f_activation(current_submodule(torch.cat(tuple(outputs), dim=1)))
-        else:
-            new_output = self.f_activation(current_submodule(curr_output))
-
-        return new_output
+        outputs = {'inputs.0': self._input_submodule(x)}
+        for i, step in enumerate(pipeline['steps']):
+            inputs = torch.cat(tuple(outputs[j] for j in step['inputs']), dim=1)
+            submodule = self._dynamic_submodules[step['name']]
+            h = self._activation(submodule(inputs))
+            outputs[i] = h
+        return torch.squeeze(self._output_submodule(h))
 
 
 class ModelBase:
@@ -184,13 +161,17 @@ class RankModelBase(ModelBase):
 
 class PyTorchModelBase:
 
-    def __init__(self, task_type, *, seed, device):
-        if task_type == "CLASSIFICATION":
-            self._y_dtype = torch.int64
-        elif task_type == "REGRESSION":
-            self._y_dtype = torch.float32
-        self.seed = seed
+    def __init__(self, *, y_dtype, device, seed):
+        """
+        Parameters
+        ----------
+        y_dtype:
+            one of: torch.int64, torch.float32
+        """
+        self.y_dtype = y_dtype
         self.device = device
+        self.seed = seed
+
         self._model = None
 
     def fit(
@@ -198,6 +179,7 @@ class PyTorchModelBase:
         verbose=False
     ):
         self._model = self._get_model(train_data)
+        self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
 
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last)
@@ -212,7 +194,7 @@ class PyTorchModelBase:
             self._train_epoch(
                 train_data_loader, self._model, self._loss_function, self._optimizer, verbose=verbose
             )
-            self._model.save(os.path.join(output_dir, 'weights'))
+            torch.save(self._model.state_dict(), os.path.join(output_dir, 'model.pt'))
 
             train_predictions, train_targets = self._predict_epoch(train_data_loader, self._model, verbose=verbose)
             train_loss_score = self._loss_function(train_predictions, train_targets)
@@ -230,6 +212,9 @@ class PyTorchModelBase:
         self.fitted = True
 
     def _get_model(self, train_data):
+        raise NotImplementedError()
+
+    def _get_loss_function(self):
         raise NotImplementedError()
 
     def _get_optimzer(self, learning_rate):
@@ -285,7 +270,7 @@ class PyTorchModelBase:
         if verbose:
             progress.close()
 
-        return torch.tensor(predictions, dtype=self._y_dtype), torch.tensor(targets, dtype=self._y_dtype)
+        return torch.tensor(predictions, dtype=self.y_dtype), torch.tensor(targets, dtype=self.y_dtype)
 
     @staticmethod
     def _save_outputs(output_dir, phase, epoch, predictions, targets, loss_score):
@@ -313,43 +298,38 @@ class PyTorchModelBase:
 
 class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
-    def __init__(self, latent_size=50, *, seed, device='cuda:0'):
-        self._task_type = 'REGRESSION'
-        PyTorchModelBase.__init__(self, task_type=self._task_type, seed=seed, device=device)
+    def __init__(
+        self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
+        use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+    ):
+        PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
 
-        self.latent_size = latent_size
-
-        objective = torch.nn.MSELoss(reduction="mean")
-        self._loss_function = lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+        self.n_hidden_layers = n_hidden_layers
+        self.hidden_layer_size = hidden_layer_size
+        self.activation_name = activation_name
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
+        self.output_layer_size = 1
+        self._model_seed = self.seed + 1
 
     def _get_model(self, train_data):
-        self.shape = (len(train_data[0]['metafeatures']), self.latent_size, 1)
-        torch_state = torch.random.get_rng_state()
-        torch.manual_seed(self.seed)
-        torch.cuda.manual_seed_all(self.seed + 1)
-
-        input_submodule = Submodule(self.shape[0], self.shape[1])
-
-        submodules = torch.nn.ModuleDict()
+        submodule_input_sizes = {}
         for instance in train_data:
             for step in instance['pipeline']['steps']:
-                if not step['name'] in submodules:
-                    n_inputs = len(step['inputs'])
-                    submodules[step['name']] = Submodule(
-                        n_inputs * self.shape[1], self.shape[1]
-                    )
-                    submodules[step['name']].cuda()  # todo dynamically set device
+                submodule_input_sizes[step['name']] = len(step['inputs'])
+        self.input_layer_size = len(train_data[0]['metafeatures'])
 
-        output_submodule = Submodule(self.shape[1], self.shape[2], use_skip=False)
+        return DNAModule(
+            submodule_input_sizes, self.n_hidden_layers + 1, self.input_layer_size, self.hidden_layer_size,
+            self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            seed=self._model_seed
+        )
 
-        model = DNAModule(input_submodule, submodules, output_submodule)
-        model.cuda()  # todo dynamically set device
-
-        torch.random.set_rng_state(torch_state)
-
-        return model
+    def _get_loss_function(self):
+        objective = torch.nn.MSELoss(reduction="mean")
+        return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
@@ -362,7 +342,7 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             dataset_params = {
                 'features_key': 'metafeatures',
                 'target_key': 'test_f1_macro',
-                'task_type': self._task_type,
+                'y_dtype': self.y_dtype,
                 'device': self.device
             },
             batch_size = batch_size,
@@ -411,40 +391,6 @@ class DNASiameseModule(nn.Module):
         right_h2 = self.recursive_get_output(right_pipeline, len(right_pipeline) - 1)
         h2 = torch.cat((left_h2, right_h2), 1)
         return self.output_model(h2)
-
-    def save(self, save_dir):
-        if not os.path.isdir(save_dir):
-            os.makedirs(save_dir)
-
-        path = os.path.join(save_dir, "input_model.pt")
-        self._save(self.input_model, path)
-
-        for name, model in self.submodules.items():
-            path = os.path.join(save_dir, f"{name}_model.pt")
-            self._save(model, path)
-
-        path = os.path.join(save_dir, "output_model.pt")
-        self._save(self.output_model, path)
-
-    def _save(self, model, save_path):
-        torch.save(model.state_dict(), save_path)
-
-    def load(self, save_dir):
-        if not os.path.isdir(save_dir):
-            raise ValueError(f"save_dir {save_dir} does not exist")
-
-        path = os.path.join(save_dir, "input_model.pt")
-        self._load(self.input_model, path)
-
-        for name, model in self.submodules.items():
-            path = os.path.join(save_dir, f"{name}_model.pt")
-            self._load(model, path)
-
-        path = os.path.join(save_dir, "output_model.pt")
-        self._load(self.output_model, path)
-
-    def _load(self, model, path):
-        model.load_state_dict(torch.load(path))
 
     def recursive_get_output(self, pipeline, current_index):
         """
@@ -658,4 +604,4 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'autosklearn': AutoSklearnMetalearner,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
-    return model_class(seed=seed)
+    return model_class(**init_model_config, seed=seed)
