@@ -249,7 +249,6 @@ class PyTorchModelBase:
         model.eval()
         predictions = []
         targets = []
-
         if verbose:
             progress = tqdm(total=len(data_loader), position=0)
 
@@ -334,7 +333,7 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
-    def _get_data_loader(self, data, batch_size, drop_last):
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
         return GroupDataLoader(
             data = data,
             group_key = 'pipeline.id',
@@ -347,7 +346,7 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             },
             batch_size = batch_size,
             drop_last = drop_last,
-            shuffle = True,
+            shuffle = shuffle,
             seed = self.seed + 2
         )
 
@@ -355,18 +354,17 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         if self._model is None:
             raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, False)
+        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-
-        return predictions
+        reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
+        return reordered_predictions
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        ranks = utils.rank(np.array(predictions))
+        predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
+        ranks = utils.rank(predictions)
         return {
             'pipeline_id': [instance['pipeline']['id'] for instance in data],
             'rank': ranks,
@@ -786,7 +784,7 @@ class PerPrimitiveBaseline(RegressionModelBase):
             prediction = 0
             for primitive in instance['pipeline']['steps']:
                 prediction += self.primitive_scores[primitive['name']]
-            prediction /= len(instance['pipeline'])
+            prediction /= len(instance['pipeline']['steps'])
             predictions.append(prediction)
 
         return predictions

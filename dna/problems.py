@@ -1,10 +1,7 @@
 import numpy as np
-import scipy.stats
 
 from data import group_json_objects
 from metrics import rmse, regret_value, top_k, spearman_correlation
-import utils
-
 
 class ProblemBase:
 
