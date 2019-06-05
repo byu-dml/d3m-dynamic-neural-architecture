@@ -357,17 +357,15 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
         data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        unshuffled_preds = data_loader.unshuffle(predictions)
-        return unshuffled_preds
+        reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
+        return reordered_predictions
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        unshuffled_preds = data_loader.unshuffle(predictions)
-        ranks = utils.rank(np.array(unshuffled_preds))
+        predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
+        ranks = utils.rank(predictions)
         return {
             'pipeline_id': [instance['pipeline']['id'] for instance in data],
             'rank': ranks,
