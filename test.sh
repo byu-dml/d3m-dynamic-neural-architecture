@@ -83,8 +83,8 @@ python3 dna evaluate \
     --verbose
 
 python3 dna evaluate \
-    --model rnn_regression \
-    --model-config-path ./model_configs/rnn_regression_config.json \
+    --model dagrnn_regression \
+    --model-config-path ./model_configs/dagrnn_regression_config.json \
     --problem regression rank \
     --k $k \
     --scores top-k-count top-1-regret spearman \

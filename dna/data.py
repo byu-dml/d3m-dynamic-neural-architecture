@@ -226,14 +226,8 @@ class Dataset(Dataset):
         self.device = device
 
     def __getitem__(self, item: int):
-        x = torch.tensor(
-            self.data[item][self.features_key], dtype=torch.float32, device=self.device
-        )
-        y = torch.tensor(
-            self.data[item][self.target_key],
-            dtype=self.y_dtype,
-            device=self.device
-        )
+        x = torch.tensor(self.data[item][self.features_key], dtype=torch.float32, device=self.device)
+        y = torch.tensor(self.data[item][self.target_key], dtype=self.y_dtype, device=self.device)
         return x, y
 
     def __len__(self):
@@ -373,7 +367,9 @@ class GroupDataLoader(object):
     def __len__(self):
         return len(self._group_batches)
 
+
 class RNNDataset(Dataset):
+
     def __init__(self, data: dict, features_key: str, target_key: str, y_dtype, device: str):
         super(RNNDataset, self).__init__(data, features_key, target_key, y_dtype, device)
         self.pipeline_key = 'pipeline'
@@ -382,16 +378,20 @@ class RNNDataset(Dataset):
     def __getitem__(self, index):
         (x, y) = super().__getitem__(index)
         item = self.data[index]
-        encoded_pipeline = item[self.pipeline_key][self.steps_key]
+        encoded_pipeline = torch.tensor(
+            item[self.pipeline_key][self.steps_key], dtype=torch.float32, device=self.device
+        )
         return (encoded_pipeline, x, y)
 
-class RNNDataLoader(GroupDataLoader):
-    def __init__(self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool,
-                 shuffle: bool, seed: int, pipeline_structures):
-        self.pipeline_structures = pipeline_structures
 
-        dataset_class = RNNDataset
-        super().__init__(data, group_key, dataset_class, dataset_params, batch_size, drop_last, shuffle, seed)
+class RNNDataLoader(GroupDataLoader):
+
+    def __init__(
+        self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
+        seed: int, pipeline_structures
+    ):
+        super().__init__(data, group_key, RNNDataset, dataset_params, batch_size, drop_last, shuffle, seed)
+        self.pipeline_structures = pipeline_structures
 
     def _iter(self):
         group_dataloader_iters = {}

@@ -375,17 +375,18 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
 class DAGRNN(nn.Module):
     """
-    The DAG RNN, like the DNA Module, can be used in both an RNN regression task or an RNN siamese task.
+    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
     It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
     It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
     The primitives are one hot encoded.
     """
 
-    def __init__(self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int,
-             input_dropout: float, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float,
-             bidirectional: bool, output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float,
-             use_batch_norm: bool, use_skip: bool, rnn_input_size: int, input_layer_size: int, output_size: int,
-             device: str, seed: int):
+    def __init__(
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
+        hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
+        use_skip: bool, rnn_input_size: int, input_layer_size: int, output_size: int, device: str, seed: int
+    ):
         super(DAGRNN, self).__init__()
 
         self.input_layer_size = input_layer_size
@@ -404,16 +405,17 @@ class DAGRNN(nn.Module):
 
         n_directions = 2 if bidirectional else 1
         self.hidden_state_dim0_size = lstm_n_layers * n_directions
-        self.lstm = nn.LSTM(input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers,
-                            dropout=lstm_dropout, bidirectional=bidirectional, batch_first=True)
+        self.lstm = nn.LSTM(
+            input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
+            bidirectional=bidirectional, batch_first=True
+        )
+        self.lstm.to(device=self.device)
 
         lstm_output_size = hidden_state_size * n_directions
         self.output_n_hidden_layers = output_n_hidden_layers
         self.output_hidden_layer_size = output_hidden_layer_size
         self.output_dropout = output_dropout
         self._output_submodule = self._get_output_submodule(input_size=lstm_output_size)
-
-        print(self)
 
         self.NULL_INPUTS = ['inputs.0']
 
@@ -511,25 +513,15 @@ class DAGRNN(nn.Module):
 
         return (mean_hidden_state, mean_cell_state)
 
-    def save(self, save_dir):
-        if not os.path.isdir(save_dir):
-            os.makedirs(save_dir)
-        path = os.path.join(save_dir, "dag_rnn.pt")
-        torch.save(self.state_dict(), path)
 
-    def load(self, save_dir):
-        if not os.path.isdir(save_dir):
-            raise ValueError(f"save_dir {save_dir} does not exist")
+class DAGRNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
-        path = os.path.join(save_dir, "dag_rnn.pt")
-        self.load_state_dict(torch.load(path))
-
-
-class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
-    def __init__(self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int,
-                 input_dropout: float, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float,
-                 bidirectional: bool, output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float,
-                 use_batch_norm: bool, use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0):
+    def __init__(
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
+        hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
+        use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+    ):
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
@@ -580,8 +572,10 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
         if validation_data is not None:
             self.encode_pipelines(data=validation_data, primitive_name_to_enc=primitive_name_to_enc)
 
-        PyTorchModelBase.fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last,
-                             validation_data=validation_data, output_dir=output_dir, verbose=verbose)
+        PyTorchModelBase.fit(
+            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            output_dir=output_dir, verbose=verbose
+        )
 
     def _get_primitive_name_to_enc(self, train_data):
         primitive_names = set()
@@ -617,27 +611,19 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             primitive_name = primitive[self.prim_name_key]
             encoded_primitive = primitive_to_enc[primitive_name]
             encoding.append(encoded_primitive)
-
-        encoding = torch.tensor(encoding, dtype=torch.float32)
-
-        if "cuda" in self.device:
-            encoding = encoding.cuda()
-
         return encoding
 
     def _get_model(self, train_data):
         metafeatures_length = len(train_data[0][self.features_key])
-
-        model = DAGRNN(activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
-                       input_hidden_layer_size=self.input_hidden_layer_size, input_dropout=self.input_dropout,
-                       hidden_state_size=self.hidden_state_size, lstm_n_layers=self.lstm_n_layers,
-                       lstm_dropout=self.lstm_dropout, bidirectional=self.bidirectional,
-                       output_n_hidden_layers=self.output_n_hidden_layers,
-                       output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
-                       use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
-                       input_layer_size=metafeatures_length, output_size=1, device=self.device, seed=self.seed)
-        model.cuda()
-        return model
+        return DAGRNN(
+            activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
+            input_hidden_layer_size=self.input_hidden_layer_size, input_dropout=self.input_dropout,
+            hidden_state_size=self.hidden_state_size, lstm_n_layers=self.lstm_n_layers, lstm_dropout=self.lstm_dropout,
+            bidirectional=self.bidirectional, output_n_hidden_layers=self.output_n_hidden_layers,
+            output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
+            use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
+            input_layer_size=metafeatures_length, output_size=1, device=self.device, seed=self.seed
+        )
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
@@ -650,9 +636,10 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             'device': self.device
         }
 
-        return RNNDataLoader(data=data, group_key=self.batch_group_key, dataset_params=dataset_params,
-                             batch_size=batch_size, drop_last=drop_last, shuffle=True, seed=self.seed,
-                             pipeline_structures=self.pipeline_structures)
+        return RNNDataLoader(
+            data=data, group_key=self.batch_group_key, dataset_params=dataset_params, batch_size=batch_size,
+            drop_last=drop_last, shuffle=True, seed=self.seed, pipeline_structures=self.pipeline_structures
+        )
 
     def predict_regression(self, data, *, batch_size, verbose):
         if self._model is None:
@@ -678,7 +665,6 @@ class RNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
     def _get_loss_function(self):
         objective = torch.nn.MSELoss(reduction="mean")
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
-
 
 
 class DNASiameseModule(nn.Module):
@@ -909,7 +895,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'median_regression': MedianBaseline,
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
-        'rnn_regression': RNNRegressionModel
+        'dagrnn_regression': DAGRNNRegressionModel
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
