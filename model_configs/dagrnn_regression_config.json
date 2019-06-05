@@ -18,10 +18,10 @@
         "output_dropout": 0.0
     },
     "fit": {
-        "n_epochs": 2,
+        "n_epochs": 1,
         "learning_rate": 0.0001,
-        "batch_size": 2,
-        "drop_last": true
+        "batch_size": 7,
+        "drop_last": false
     },
     "predict_regression": {
         "batch_size": 2

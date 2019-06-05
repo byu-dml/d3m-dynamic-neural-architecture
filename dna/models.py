@@ -181,10 +181,10 @@ class PyTorchModelBase:
         self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
 
-        train_data_loader = self._get_data_loader(train_data, batch_size, drop_last)
+        train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         if validation_data is not None:
-            validation_data_loader = self._get_data_loader(validation_data, batch_size, False)
+            validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
 
         for e in range(n_epochs):
             if verbose:
@@ -219,7 +219,7 @@ class PyTorchModelBase:
     def _get_optimizer(self, learning_rate):
         raise NotImplementedError()
 
-    def _get_data_loader(self, data, batch_size, drop_last):
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle):
         raise NotImplementedError()
 
     def _train_epoch(
@@ -295,7 +295,30 @@ class PyTorchModelBase:
             json.dump(outputs, f, separators=(',',':'))
 
 
-class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
+class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
+
+    def predict_regression(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+        reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
+        return reordered_predictions
+
+    def predict_rank(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
+        ranks = utils.rank(predictions)
+        return {
+            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'rank': ranks,
+        }
+
+
+class DNARegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
@@ -349,26 +372,6 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             shuffle = shuffle,
             seed = self.seed + 2
         )
-
-    def predict_regression(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
-
-        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
-        return reordered_predictions
-
-    def predict_rank(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
-
-        predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
-        ranks = utils.rank(predictions)
-        return {
-            'pipeline_id': [instance['pipeline']['id'] for instance in data],
-            'rank': ranks,
-        }
 
 
 class DAGRNN(nn.Module):
@@ -512,7 +515,7 @@ class DAGRNN(nn.Module):
         return (mean_hidden_state, mean_cell_state)
 
 
-class DAGRNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
+class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
@@ -539,6 +542,8 @@ class DAGRNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase
         self.use_skip = use_skip
         self.device = device
         self.seed = seed
+        self._data_loader_seed = seed + 1
+        self._model_seed = seed + 2
 
         self.pipeline_structures = None
         self.num_primitives = None
@@ -620,45 +625,28 @@ class DAGRNNRegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase
             bidirectional=self.bidirectional, output_n_hidden_layers=self.output_n_hidden_layers,
             output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
             use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
-            input_layer_size=metafeatures_length, output_size=1, device=self.device, seed=self.seed
+            input_layer_size=metafeatures_length, output_size=1, device=self.device, seed=self._model_seed
         )
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
-    def _get_data_loader(self, data, batch_size, drop_last):
-        dataset_params = {
-            'features_key': self.features_key,
-            'target_key': self.target_key,
-            'y_dtype': self.y_dtype,
-            'device': self.device
-        }
-
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
         return RNNDataLoader(
-            data=data, group_key=self.batch_group_key, dataset_params=dataset_params, batch_size=batch_size,
-            drop_last=drop_last, shuffle=True, seed=self.seed, pipeline_structures=self.pipeline_structures
+            data=data,
+            group_key=self.batch_group_key,
+            dataset_params={
+                'features_key': self.features_key,
+                'target_key': self.target_key,
+                'y_dtype': self.y_dtype,
+                'device': self.device
+            },
+            batch_size=batch_size,
+            drop_last=drop_last,
+            shuffle=shuffle,
+            seed=self._data_loader_seed,
+            pipeline_structures=self.pipeline_structures
         )
-
-    def predict_regression(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
-
-        data_loader = self._get_data_loader(data, batch_size, False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-
-        return predictions
-
-    def predict_rank(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
-
-        data_loader = self._get_data_loader(data, batch_size, False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        ranks = utils.rank(np.array(predictions))
-        return {
-            'pipeline_id': [instance['pipeline']['id'] for instance in data],
-            'rank': ranks,
-        }
 
     def _get_loss_function(self):
         objective = torch.nn.MSELoss(reduction="mean")
