@@ -147,6 +147,20 @@ class StandardScaler:
         return transformed_data
 
 
+def encode_dag(dag: typing.Sequence[typing.Sequence[typing.Any]]):
+    """
+    Converts a directed acyclic graph DAG) to a string. If two DAGs have the same encoding string, then they are equal.
+    However, two isomorphic DAGs may have different encoding strings.
+
+    Parameters
+    ----------
+    dag: typing.List[typing.List[typing.Any]]
+        A representation of a dag. Each element in the outer list represents a vertex. Each inner list or vertex
+        contains a reference to the outer list, representing edges.
+    """
+    return ''.join(''.join(str(edge) for edge in vertex) for vertex in dag)
+
+
 def preprocess_data(train_data, test_data):
     train_metafeatures = []
     for instance in train_data:
@@ -175,9 +189,13 @@ def preprocess_data(train_data, test_data):
     # convert from dict to list
     for instance, mf_instance in zip(train_data, train_metafeatures):
         instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
+        pipeline_dag = (step['inputs'] for step in instance['pipeline']['steps'])
+        instance['pipeline_structure'] = encode_dag(pipeline_dag)
 
     for instance, mf_instance in zip(test_data, test_metafeatures):
         instance['metafeatures'] = [value for key, value in sorted(mf_instance.items())]
+        pipeline_dag = (step['inputs'] for step in instance['pipeline']['steps'])
+        instance['pipeline_structure'] = encode_dag(pipeline_dag)
 
     return train_data, test_data
 
@@ -208,14 +226,8 @@ class Dataset(Dataset):
         self.device = device
 
     def __getitem__(self, item: int):
-        x = torch.tensor(
-            self.data[item][self.features_key], dtype=torch.float32, device=self.device
-        )
-        y = torch.tensor(
-            self.data[item][self.target_key],
-            dtype=self.y_dtype,
-            device=self.device
-        )
+        x = torch.tensor(self.data[item][self.features_key], dtype=torch.float32, device=self.device)
+        y = torch.tensor(self.data[item][self.target_key], dtype=self.y_dtype, device=self.device)
         return x, y
 
     def __len__(self):
@@ -363,3 +375,44 @@ class GroupDataLoader(object):
 
     def __len__(self):
         return len(self._group_batches)
+
+
+class RNNDataset(Dataset):
+
+    def __init__(self, data: dict, features_key: str, target_key: str, y_dtype, device: str):
+        super(RNNDataset, self).__init__(data, features_key, target_key, y_dtype, device)
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+
+    def __getitem__(self, index):
+        (x, y) = super().__getitem__(index)
+        item = self.data[index]
+        encoded_pipeline = torch.tensor(
+            item[self.pipeline_key][self.steps_key], dtype=torch.float32, device=self.device
+        )
+        return (encoded_pipeline, x, y)
+
+
+class RNNDataLoader(GroupDataLoader):
+
+    def __init__(
+        self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
+        seed: int, pipeline_structures
+    ):
+        super().__init__(data, group_key, RNNDataset, dataset_params, batch_size, drop_last, shuffle, seed)
+        self.pipeline_structures = pipeline_structures
+
+    def _iter(self):
+        group_dataloader_iters = {}
+        for group in self._group_batches:
+            if not group in group_dataloader_iters:
+                group_dataloader_iters[group] = iter(self._group_dataloaders[group])
+
+            # Get a batch of encoded pipelines, metafeatures, and targets
+            (pipeline_batch, x_batch, y_batch) = next(group_dataloader_iters[group])
+
+            # Get the structure of the pipelines in this group so the RNN can parse the pipeline
+            group_structure = self.pipeline_structures[group]
+
+            yield ((group_structure, pipeline_batch, x_batch), y_batch)
+        raise StopIteration()

@@ -9,10 +9,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from data import Dataset, GroupDataLoader
+from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from kND import KNearestDatasets
 import utils
-
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
@@ -182,10 +181,10 @@ class PyTorchModelBase:
         self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
 
-        train_data_loader = self._get_data_loader(train_data, batch_size, drop_last)
+        train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         if validation_data is not None:
-            validation_data_loader = self._get_data_loader(validation_data, batch_size, False)
+            validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
 
         for e in range(n_epochs):
             if verbose:
@@ -217,10 +216,10 @@ class PyTorchModelBase:
     def _get_loss_function(self):
         raise NotImplementedError()
 
-    def _get_optimzer(self, learning_rate):
+    def _get_optimizer(self, learning_rate):
         raise NotImplementedError()
 
-    def _get_data_loader(self, data, batch_size, drop_last):
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle):
         raise NotImplementedError()
 
     def _train_epoch(
@@ -296,7 +295,30 @@ class PyTorchModelBase:
             json.dump(outputs, f, separators=(',',':'))
 
 
-class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
+class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
+
+    def predict_regression(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
+        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
+        reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
+        return reordered_predictions
+
+    def predict_rank(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
+        ranks = utils.rank(predictions)
+        return {
+            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'rank': ranks,
+        }
+
+
+class DNARegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
@@ -351,25 +373,284 @@ class DNARegressionModel(PyTorchModelBase, RegressionModelBase, RankModelBase):
             seed = self.seed + 2
         )
 
-    def predict_regression(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
-        predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
-        return reordered_predictions
+class DAGRNN(nn.Module):
+    """
+    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
+    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
+    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
+    The primitives are one hot encoded.
+    """
 
-    def predict_rank(self, data, *, batch_size, verbose):
-        if self._model is None:
-            raise Exception('model not fit')
+    def __init__(
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
+        hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
+        use_skip: bool, rnn_input_size: int, input_layer_size: int, output_size: int, device: str, seed: int
+    ):
+        super(DAGRNN, self).__init__()
 
-        predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
-        ranks = utils.rank(predictions)
-        return {
-            'pipeline_id': [instance['pipeline']['id'] for instance in data],
-            'rank': ranks,
-        }
+        self.input_layer_size = input_layer_size
+        self.activation_name = activation_name
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
+        self.output_size = output_size
+        self.device = device
+        self._input_seed = seed + 1
+        self._output_seed = seed + 2
+
+        self.input_n_hidden_layers = input_n_hidden_layers
+        self.input_hidden_layer_size = input_hidden_layer_size
+        self.input_dropout = input_dropout
+        self._input_submodule = self._get_input_submodule(output_size=hidden_state_size)
+
+        n_directions = 2 if bidirectional else 1
+        self.hidden_state_dim0_size = lstm_n_layers * n_directions
+        self.lstm = nn.LSTM(
+            input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
+            bidirectional=bidirectional, batch_first=True
+        )
+        self.lstm.to(device=self.device)
+
+        lstm_output_size = hidden_state_size * n_directions
+        self.output_n_hidden_layers = output_n_hidden_layers
+        self.output_hidden_layer_size = output_hidden_layer_size
+        self.output_dropout = output_dropout
+        self._output_submodule = self._get_output_submodule(input_size=lstm_output_size)
+
+        self.NULL_INPUTS = ['inputs.0']
+
+    def _get_input_submodule(self, output_size):
+        layer_sizes = [self.input_layer_size] + [self.input_hidden_layer_size] * self.input_n_hidden_layers
+        layer_sizes += [output_size]
+        return Submodule(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            seed=self._input_seed
+        )
+
+    def _get_output_submodule(self, input_size):
+        layer_sizes = [input_size] + [self.output_hidden_layer_size] * self.output_n_hidden_layers
+        layer_sizes += [self.output_size]
+        return Submodule(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            seed=self._output_seed
+        )
+
+    def forward(self, args):
+        (pipeline_structure, pipelines, metafeatures) = args
+
+        batch_size = pipelines.shape[0]
+        seq_len = pipelines.shape[1]
+
+        assert len(metafeatures) == batch_size
+        assert len(pipeline_structure) == seq_len
+
+        # Pass the metafeatures through the input layer
+        metafeatures = self._input_submodule(metafeatures)
+
+        # Add a dimension to the metafeatures so they can be concatenated across that dimension
+        metafeatures = metafeatures.unsqueeze(dim=0)
+
+        # Initialize the hidden state and cell state using a concatenation of the metafeatures
+        hidden_state = []
+        for i in range(self.hidden_state_dim0_size):
+            hidden_state.append(metafeatures)
+        hidden_state = torch.cat(hidden_state, dim=0)
+        cell_state = hidden_state
+        lstm_start_state = (hidden_state, cell_state)
+
+        # Keep track of the previous hidden and cell states as we traverse the pipeline
+        prev_lstm_states = []
+
+        lstm_output = None
+
+        # For each batch of primitives coming from the batch of pipelines
+        for i in range(seq_len):
+            # Get the one hot encoded primitives from the batch at index i in the pipeline
+            encoded_primitives = pipelines[:, i, :]
+
+            # Add a dimension in the middle of the shape so it is batch size by sequence length by input size
+            # Note that the sequence length (middle) is 1 because we're doing 1 (batch of) primitive(s) at a time
+            # Also note that the batch size is first in the shape because we selected batch first
+            encoded_primitives = encoded_primitives.unsqueeze(dim=1)
+
+            # Get the list of indices of input primitives coming into the current primitive
+            primitive_inputs = pipeline_structure[i]
+
+            # If this is the first primitive
+            if primitive_inputs == self.NULL_INPUTS:
+                lstm_input_state = lstm_start_state
+            else:
+                # Otherwise get the mean of the hidden states of the input primitives
+                lstm_input_state = self.get_lstm_input_state(prev_lstm_states=prev_lstm_states,
+                                                             primitive_inputs=primitive_inputs)
+
+            (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
+
+            prev_lstm_states.append(lstm_output_state)
+
+        # Since we're doing 1 primitive at a time, the sequence length in the LSTM output is 1
+        # Squeeze so the fully connected input is of shape batch size by num_directions*hidden_size
+        linear_input = lstm_output.squeeze(dim=1)
+
+        linear_output = self._output_submodule(linear_input)
+        return linear_output.squeeze()
+
+    @staticmethod
+    def get_lstm_input_state(prev_lstm_states, primitive_inputs):
+        # Get the hidden and cell states produced by primitives connected to the current primitive as input
+        input_hidden_states = []
+        input_cell_states = []
+        for primitive_input in primitive_inputs:
+            (hidden_state, cell_state) = prev_lstm_states[primitive_input]
+            input_hidden_states.append(hidden_state.unsqueeze(dim=0))
+            input_cell_states.append(cell_state.unsqueeze(dim=0))
+
+        # Average the input hidden and cell states each into a single state
+        input_hidden_states = torch.cat(input_hidden_states, dim=0)
+        input_cell_states = torch.cat(input_cell_states, dim=0)
+        mean_hidden_state = torch.mean(input_hidden_states, dim=0)
+        mean_cell_state = torch.mean(input_cell_states, dim=0)
+
+        return (mean_hidden_state, mean_cell_state)
+
+
+class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
+
+    def __init__(
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
+        hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
+        use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+    ):
+        PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
+        RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
+
+        self.activation_name = activation_name
+        self.input_n_hidden_layers = input_n_hidden_layers
+        self.input_hidden_layer_size = input_hidden_layer_size
+        self.input_dropout = input_dropout
+        self.hidden_state_size = hidden_state_size
+        self.lstm_n_layers = lstm_n_layers
+        self.lstm_dropout = lstm_dropout
+        self.bidirectional = bidirectional
+        self.output_n_hidden_layers = output_n_hidden_layers
+        self.output_hidden_layer_size = output_hidden_layer_size
+        self.output_dropout = output_dropout
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
+        self.device = device
+        self.seed = seed
+        self._data_loader_seed = seed + 1
+        self._model_seed = seed + 2
+
+        self.pipeline_structures = None
+        self.num_primitives = None
+        self.target_key = 'test_f1_macro'
+        self.batch_group_key = 'pipeline_structure'
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
+        self.prim_inputs_key = 'inputs'
+        self.features_key = 'metafeatures'
+
+    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        verbose=False):
+        # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
+        self.pipeline_structures = {}
+        grouped_by_structure = group_json_objects(train_data, self.batch_group_key)
+        for (group, group_indices) in grouped_by_structure.items():
+            index = group_indices[0]
+            item = train_data[index]
+            pipeline = item[self.pipeline_key][self.steps_key]
+            group_structure = [primitive[self.prim_inputs_key] for primitive in pipeline]
+            self.pipeline_structures[group] = group_structure
+
+        # Get the mapping of primitives to their one hot encoding
+        primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
+
+        # Encode all the pipelines in the training and validation set
+        self.encode_pipelines(data=train_data, primitive_name_to_enc=primitive_name_to_enc)
+        if validation_data is not None:
+            self.encode_pipelines(data=validation_data, primitive_name_to_enc=primitive_name_to_enc)
+
+        PyTorchModelBase.fit(
+            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            output_dir=output_dir, verbose=verbose
+        )
+
+    def _get_primitive_name_to_enc(self, train_data):
+        primitive_names = set()
+
+        # Get a set of all the primitives in the train set
+        for instance in train_data:
+            primitives = instance[self.pipeline_key][self.steps_key]
+            for primitive in primitives:
+                primitive_name = primitive[self.prim_name_key]
+                primitive_names.add(primitive_name)
+
+        # Get one hot encodings of all the primitives
+        self.num_primitives = len(primitive_names)
+        encoding = np.identity(n=self.num_primitives)
+
+        # Create a mapping of primitive names to one hot encodings
+        primitive_name_to_enc = {}
+        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+            primitive_name_to_enc[primitive_name] = primitive_encoding
+
+        return primitive_name_to_enc
+
+    def encode_pipelines(self, data, primitive_name_to_enc):
+        for instance in data:
+            pipeline = instance[self.pipeline_key][self.steps_key]
+            encoded_pipeline = self.encode_pipeline(pipeline=pipeline, primitive_to_enc=primitive_name_to_enc)
+            instance[self.pipeline_key][self.steps_key] = encoded_pipeline
+
+    def encode_pipeline(self, pipeline, primitive_to_enc):
+        # Create a tensor of encoded primitives
+        encoding = []
+        for primitive in pipeline:
+            primitive_name = primitive[self.prim_name_key]
+            encoded_primitive = primitive_to_enc[primitive_name]
+            encoding.append(encoded_primitive)
+        return encoding
+
+    def _get_model(self, train_data):
+        metafeatures_length = len(train_data[0][self.features_key])
+        return DAGRNN(
+            activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
+            input_hidden_layer_size=self.input_hidden_layer_size, input_dropout=self.input_dropout,
+            hidden_state_size=self.hidden_state_size, lstm_n_layers=self.lstm_n_layers, lstm_dropout=self.lstm_dropout,
+            bidirectional=self.bidirectional, output_n_hidden_layers=self.output_n_hidden_layers,
+            output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
+            use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
+            input_layer_size=metafeatures_length, output_size=1, device=self.device, seed=self._model_seed
+        )
+
+    def _get_optimizer(self, learning_rate):
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
+        return RNNDataLoader(
+            data=data,
+            group_key=self.batch_group_key,
+            dataset_params={
+                'features_key': self.features_key,
+                'target_key': self.target_key,
+                'y_dtype': self.y_dtype,
+                'device': self.device
+            },
+            batch_size=batch_size,
+            drop_last=drop_last,
+            shuffle=shuffle,
+            seed=self._data_loader_seed,
+            pipeline_structures=self.pipeline_structures
+        )
+
+    def _get_loss_function(self):
+        objective = torch.nn.MSELoss(reduction="mean")
+        return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
 
 class DNASiameseModule(nn.Module):
@@ -600,6 +881,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'median_regression': MedianBaseline,
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
+        'dagrnn_regression': DAGRNNRegressionModel
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
