@@ -1,6 +1,6 @@
 {
     "__init__": {
-        "n_hidden_layers": 2,
+        "n_hidden_layers": 1,
         "hidden_layer_size": 50,
         "activation_name": "relu",
         "use_batch_norm": true,
