@@ -150,6 +150,7 @@ class RankProblem(ProblemBase):
             }
         if 'top-k-regret' in scores:
             results['top_k_regret'] = {
+                'k': k,
                 'mean': np.mean(top_k_regrets),
                 'std_dev': np.std(top_k_regrets, ddof=1),
             }
