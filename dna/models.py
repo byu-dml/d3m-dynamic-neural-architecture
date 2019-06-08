@@ -40,7 +40,7 @@ class Submodule(nn.Module):
 
     def __init__(
         self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
-        device: str = 'cuda:0', seed: int = 0
+        device: str = 'cuda:0', seed: int = 0, dropout: float = 0.0
     ):
         super(Submodule, self).__init__()
 
@@ -52,6 +52,7 @@ class Submodule(nn.Module):
             for i in range(n_layers):
                 if i > 0:
                     layers.append(activation())
+                    layers.append(nn.Dropout(p=dropout))
                 if use_batch_norm:
                     layers.append(nn.BatchNorm1d(layer_sizes[i]))
                 layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
@@ -404,6 +405,12 @@ class DAGRNN(nn.Module):
         self.input_dropout = input_dropout
         self._input_submodule = self._get_input_submodule(output_size=hidden_state_size)
 
+        activation = ACTIVATIONS[activation_name]
+        self.activation = activation()
+        self.input_dropout_layer = nn.Dropout(p=input_dropout)
+        self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+        self.batch_norm.to(device=self.device)
+
         n_directions = 2 if bidirectional else 1
         self.hidden_state_dim0_size = lstm_n_layers * n_directions
         self.lstm = nn.LSTM(
@@ -425,7 +432,7 @@ class DAGRNN(nn.Module):
         layer_sizes += [output_size]
         return Submodule(
             layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._input_seed
+            seed=self._input_seed, dropout=self.input_dropout
         )
 
     def _get_output_submodule(self, input_size):
@@ -433,7 +440,7 @@ class DAGRNN(nn.Module):
         layer_sizes += [self.output_size]
         return Submodule(
             layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._output_seed
+            seed=self._output_seed, dropout=self.output_dropout
         )
 
     def forward(self, args):
@@ -447,6 +454,9 @@ class DAGRNN(nn.Module):
 
         # Pass the metafeatures through the input layer
         metafeatures = self._input_submodule(metafeatures)
+        metafeatures = self.activation(metafeatures)
+        metafeatures = self.input_dropout_layer(metafeatures)
+        metafeatures = self.batch_norm(metafeatures)
 
         # Add a dimension to the metafeatures so they can be concatenated across that dimension
         metafeatures = metafeatures.unsqueeze(dim=0)
