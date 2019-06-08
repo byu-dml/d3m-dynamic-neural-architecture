@@ -1,5 +1,6 @@
 {
     "__init__": {
+        "basic": false,
         "activation_name": "leaky_relu",
         "use_batch_norm": true,
         "use_skip": false,
