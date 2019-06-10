@@ -183,6 +183,10 @@ class PyTorchModelBase:
         self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
 
+        model_save_path = None
+        if output_dir is not None:
+            model_save_path = os.path.join(output_dir, 'model.pt')
+
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         min_loss_score = np.inf
@@ -218,8 +222,11 @@ class PyTorchModelBase:
                     min_loss_score = train_loss_score
                     save_model = True
 
-            if save_model:
-                torch.save(self._model.state_dict(), os.path.join(output_dir, 'model.pt'))
+            if save_model and model_save_path is not None:
+                torch.save(self._model.state_dict(), model_save_path)
+
+        if not save_model and model_save_path is not None:  # model not saved during final epoch
+            self._model.load_state_dict(torch.load(model_save_path))
 
         self.fitted = True
 
