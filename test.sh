@@ -93,3 +93,15 @@ python3 dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose
+
+python3 dna evaluate \
+    --model meta_hidden_dagrnn_regression \
+    --model-config-path ./model_configs/meta_hidden_dagrnn_regression_config.json \
+    --problem regression rank \
+    --k $k \
+    --scores top-k-count top-1-regret spearman \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose

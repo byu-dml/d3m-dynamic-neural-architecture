@@ -374,18 +374,21 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
         )
 
 
-class BasicDAGRNN(nn.Module):
+class DAGRNN(nn.Module):
     """
-    A simpler version of the DAG RNN with a more basic architecture and forward function
+    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
+    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
+    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
+    The primitives are one hot encoded. This DAG RNN initializes the hidden state with zeros.
     """
 
     def __init__(
         self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float,
         bidirectional: bool, output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float,
-        use_batch_norm: bool, use_skip: bool, rnn_input_size: int, output_size: int, device: str, seed: int,
-        metafeatures_length: int
+        use_batch_norm: bool, use_skip: bool, rnn_input_size: int, output_size: int, device: str, seed: int, *,
+        output_submodule_in_layer_extra_size: int=None
     ):
-        super(BasicDAGRNN, self).__init__()
+        super(DAGRNN, self).__init__()
 
         self.activation_name = activation_name
         self.use_batch_norm = use_batch_norm
@@ -404,10 +407,9 @@ class BasicDAGRNN(nn.Module):
         self.lstm.to(device=self.device)
 
         lstm_output_size = hidden_state_size * n_directions
-        output_submodule_input_size = lstm_output_size + metafeatures_length
-
-        if isinstance(self, DAGRNN):
-            output_submodule_input_size -= metafeatures_length
+        output_submodule_input_size = lstm_output_size
+        if output_submodule_in_layer_extra_size is not None:
+            output_submodule_input_size += output_submodule_in_layer_extra_size
 
         self.output_n_hidden_layers = output_n_hidden_layers
         self.output_hidden_layer_size = output_hidden_layer_size
@@ -439,10 +441,10 @@ class BasicDAGRNN(nn.Module):
 
 
         dag_rnn_output = self.parse_DAG(seq_len, pipelines, pipeline_structure, lstm_start_state)
-        linear_input = torch.cat((dag_rnn_output, metafeatures), dim=1)
+        fc_input = torch.cat((dag_rnn_output, metafeatures), dim=1)
 
-        linear_output = self._output_submodule(linear_input)
-        return linear_output.squeeze()
+        fc_output = self._output_submodule(fc_input)
+        return fc_output.squeeze()
 
     def parse_DAG(self, seq_len, pipelines, pipeline_structure, lstm_start_state):
         # Keep track of the previous hidden and cell states as we traverse the pipeline
@@ -498,12 +500,11 @@ class BasicDAGRNN(nn.Module):
         return (mean_hidden_state, mean_cell_state)
 
 
-class DAGRNN(BasicDAGRNN):
+class MetaHiddenDAGRNN(DAGRNN):
     """
-    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
-    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
-    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
-    The primitives are one hot encoded.
+    This DAG RNN, unlike the one that it extends, initializes the hidden state by mapping the metafeatures to a new
+    feature space using a submodule. Then those mapped metafeatures are duplicated and concatenated to form an
+    initial hidden state.
     """
 
     def __init__(
@@ -512,9 +513,9 @@ class DAGRNN(BasicDAGRNN):
         output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
         use_skip: bool, rnn_input_size: int, metafeatures_length: int, output_size: int, device: str, seed: int
     ):
-        super(DAGRNN, self).__init__(activation_name, hidden_state_size, lstm_n_layers, lstm_dropout, bidirectional,
-                                     output_n_hidden_layers, output_hidden_layer_size, output_dropout, use_batch_norm,
-                                     use_skip, rnn_input_size, output_size, device, seed, metafeatures_length)
+        super(MetaHiddenDAGRNN, self).__init__(activation_name, hidden_state_size, lstm_n_layers, lstm_dropout, bidirectional,
+                                               output_n_hidden_layers, output_hidden_layer_size, output_dropout, use_batch_norm,
+                                               use_skip, rnn_input_size, output_size, device, seed)
 
         self.input_layer_size = metafeatures_length
         self._input_seed = seed + 1
@@ -555,17 +556,16 @@ class DAGRNN(BasicDAGRNN):
         cell_state = hidden_state
         lstm_start_state = (hidden_state, cell_state)
 
-        linear_input = self.parse_DAG(seq_len, pipelines, pipeline_structure, lstm_start_state)
+        fc_input = self.parse_DAG(seq_len, pipelines, pipeline_structure, lstm_start_state)
 
-        linear_output = self._output_submodule(linear_input)
-        return linear_output.squeeze()
+        fc_output = self._output_submodule(fc_input)
+        return fc_output.squeeze()
 
 
 class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
-        self, basic: bool, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int,
-        input_dropout: float, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
+        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
         output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
         use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
     ):
@@ -573,11 +573,7 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
 
-        self.basic = basic
         self.activation_name = activation_name
-        self.input_n_hidden_layers = input_n_hidden_layers
-        self.input_hidden_layer_size = input_hidden_layer_size
-        self.input_dropout = input_dropout
         self.hidden_state_size = hidden_state_size
         self.lstm_n_layers = lstm_n_layers
         self.lstm_dropout = lstm_dropout
@@ -664,27 +660,13 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         return encoding
 
     def _get_model(self, train_data):
+        print('Using Basic DAG RNN')
+
         metafeatures_length = len(train_data[0][self.features_key])
-
-        if self.basic:
-            print('Using Basic DAG RNN')
-
-            return BasicDAGRNN(self.activation_name, self.hidden_state_size, self.lstm_n_layers, self.lstm_dropout,
-                               self.bidirectional, self.output_n_hidden_layers, self.output_hidden_layer_size,
-                               self.output_dropout, self.use_batch_norm, self.use_skip, self.num_primitives, 1,
-                               self.device, self.seed, metafeatures_length)
-        else:
-            print('Using Complex DAG RNN')
-
-            return DAGRNN(
-                activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
-                input_hidden_layer_size=self.input_hidden_layer_size, input_dropout=self.input_dropout,
-                hidden_state_size=self.hidden_state_size, lstm_n_layers=self.lstm_n_layers, lstm_dropout=self.lstm_dropout,
-                bidirectional=self.bidirectional, output_n_hidden_layers=self.output_n_hidden_layers,
-                output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
-                use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
-                metafeatures_length=metafeatures_length, output_size=1, device=self.device, seed=self._model_seed
-            )
+        return DAGRNN(self.activation_name, self.hidden_state_size, self.lstm_n_layers, self.lstm_dropout,
+                      self.bidirectional, self.output_n_hidden_layers, self.output_hidden_layer_size,
+                      self.output_dropout, self.use_batch_norm, self.use_skip, self.num_primitives, output_size=1,
+                      device=self.device, seed=self.seed, output_submodule_in_layer_extra_size=metafeatures_length)
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
@@ -709,6 +691,35 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
     def _get_loss_function(self):
         objective = torch.nn.MSELoss(reduction="mean")
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+
+class MetaHiddenDAGRNNRegressionModel(DAGRNNRegressionModel):
+    def __init__(
+            self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int,
+            input_dropout: float, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
+            output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
+            use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+    ):
+        super().__init__(activation_name, hidden_state_size, lstm_n_layers, lstm_dropout, bidirectional,
+                         output_n_hidden_layers, output_hidden_layer_size, output_dropout, use_batch_norm,
+                         use_skip, device=device, seed=seed)
+
+        self.input_n_hidden_layers = input_n_hidden_layers
+        self.input_hidden_layer_size = input_hidden_layer_size
+        self.input_dropout = input_dropout
+
+    def _get_model(self, train_data):
+        print('Using Complex DAG RNN')
+
+        metafeatures_length = len(train_data[0][self.features_key])
+        return MetaHiddenDAGRNN(
+            activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
+            input_hidden_layer_size=self.input_hidden_layer_size, input_dropout=self.input_dropout,
+            hidden_state_size=self.hidden_state_size, lstm_n_layers=self.lstm_n_layers, lstm_dropout=self.lstm_dropout,
+            bidirectional=self.bidirectional, output_n_hidden_layers=self.output_n_hidden_layers,
+            output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
+            use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
+            metafeatures_length=metafeatures_length, output_size=1, device=self.device, seed=self._model_seed
+        )
 
 
 class DNASiameseModule(nn.Module):
@@ -939,7 +950,8 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'median_regression': MedianBaseline,
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
-        'dagrnn_regression': DAGRNNRegressionModel
+        'dagrnn_regression': DAGRNNRegressionModel,
+        'meta_hidden_dagrnn_regression': MetaHiddenDAGRNNRegressionModel
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
