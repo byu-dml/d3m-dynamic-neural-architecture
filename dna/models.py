@@ -39,8 +39,8 @@ class PyTorchRandomStateContext:
 class Submodule(nn.Module):
 
     def __init__(
-        self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
-        device: str = 'cuda:0', seed: int = 0, dropout: float = 0.0
+        self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False,
+        dropout: float = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
         super(Submodule, self).__init__()
 
@@ -52,7 +52,8 @@ class Submodule(nn.Module):
             for i in range(n_layers):
                 if i > 0:
                     layers.append(activation())
-                    layers.append(nn.Dropout(p=dropout))
+                    if dropout > 0.0:
+                        layers.append(nn.Dropout(p=dropout))
                 if use_batch_norm:
                     layers.append(nn.BatchNorm1d(layer_sizes[i]))
                 layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
@@ -405,11 +406,15 @@ class DAGRNN(nn.Module):
         self.input_dropout = input_dropout
         self._input_submodule = self._get_input_submodule(output_size=hidden_state_size)
 
-        activation = ACTIVATIONS[activation_name]
-        self.activation = activation()
-        self.input_dropout_layer = nn.Dropout(p=input_dropout)
-        self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-        self.batch_norm.to(device=self.device)
+        self.activation = ACTIVATIONS[activation_name]()
+
+        if input_dropout > 0.0:
+            self.input_dropout_layer = nn.Dropout(p=input_dropout)
+            self.input_dropout_layer.to(device=device)
+
+        if use_batch_norm:
+            self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+            self.batch_norm.to(device=self.device)
 
         n_directions = 2 if bidirectional else 1
         self.hidden_state_dim0_size = lstm_n_layers * n_directions
@@ -455,8 +460,12 @@ class DAGRNN(nn.Module):
         # Pass the metafeatures through the input layer
         metafeatures = self._input_submodule(metafeatures)
         metafeatures = self.activation(metafeatures)
-        metafeatures = self.input_dropout_layer(metafeatures)
-        metafeatures = self.batch_norm(metafeatures)
+
+        if self.input_dropout > 0.0:
+            metafeatures = self.input_dropout_layer(metafeatures)
+
+        if self.use_batch_norm:
+            metafeatures = self.batch_norm(metafeatures)
 
         # Add a dimension to the metafeatures so they can be concatenated across that dimension
         metafeatures = metafeatures.unsqueeze(dim=0)
