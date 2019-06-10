@@ -183,17 +183,18 @@ class PyTorchModelBase:
 
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
+        min_loss_score = np.inf
         if validation_data is not None:
             validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
 
         for e in range(n_epochs):
+            save_model = False
             if verbose:
                 print('epoch {}'.format(e))
 
             self._train_epoch(
                 train_data_loader, self._model, self._loss_function, self._optimizer, verbose=verbose
             )
-            torch.save(self._model.state_dict(), os.path.join(output_dir, 'model.pt'))
 
             train_predictions, train_targets = self._predict_epoch(train_data_loader, self._model, verbose=verbose)
             train_loss_score = self._loss_function(train_predictions, train_targets)
@@ -207,6 +208,16 @@ class PyTorchModelBase:
                 self._save_outputs(output_dir, 'validation', e, validation_predictions, validation_targets, validation_loss_score)
                 if verbose:
                     print('validation loss: {}'.format(validation_loss_score))
+                if validation_loss_score < min_loss_score:
+                    min_loss_score = validation_loss_score
+                    save_model = True
+            else:
+                if train_loss_score < min_loss_score:
+                    min_loss_score = train_loss_score
+                    save_model = True
+
+            if save_model:
+                torch.save(self._model.state_dict(), os.path.join(output_dir, 'model.pt'))
 
         self.fitted = True
 
