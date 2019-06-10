@@ -121,6 +121,9 @@ def configure_evaluate_parser(parser):
         '--no-cache', default=False, action='store_true',
         help='when set, do not use cached preprocessed data'
     )
+    parser.add_argument(
+        '--metafeature-subset', type=str, default='all', choices=['all', 'just-landmarks', 'no-landmarks']
+    )
 
 
 def evaluate_handler(
@@ -181,7 +184,10 @@ def evaluate_handler(
 
 
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
-    data_arg_names = ['train_path', 'test_path', 'test_size', 'split_seed']
+    metafeature_subset = arguments.metafeature_subset
+    print('Metafeature Subset:', metafeature_subset)
+
+    data_arg_names = ['train_path', 'test_path', 'test_size', 'split_seed', 'metafeature_subset']
     data_arg_str = ''.join(str(getattr(arguments, arg)) for arg in data_arg_names)
     cache_id = hashlib.sha256(data_arg_str.encode('utf8')).hexdigest()
     cache_dir = os.path.join(arguments.cache_dir, cache_id)
@@ -207,7 +213,7 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
         test_data = data_resolver(in_test_path)
 
     if not load_cached_data:
-        train_data, test_data = preprocess_data(train_data, test_data)
+        train_data, test_data = preprocess_data(train_data, test_data, metafeature_subset)
         if not arguments.no_cache:
             if not os.path.isdir(cache_dir):
                 os.makedirs(cache_dir)

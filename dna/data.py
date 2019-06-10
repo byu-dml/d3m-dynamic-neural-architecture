@@ -160,17 +160,42 @@ def encode_dag(dag: typing.Sequence[typing.Sequence[typing.Any]]):
     """
     return ''.join(''.join(str(edge) for edge in vertex) for vertex in dag)
 
+def filter_metafeatures(instance: dict, metafeature_subset: str):
+    metafeatures = instance['metafeatures']
 
-def preprocess_data(train_data, test_data):
+    if metafeature_subset == 'all':
+        return metafeatures
+
+    metafeature_keys = list(metafeatures.keys())
+    landmark_key_part1 = 'ErrRate'
+    landmark_key_part2 = 'Kappa'
+    if metafeature_subset == 'just-landmarks':
+        for metafeature_key in metafeature_keys:
+            if landmark_key_part1 not in metafeature_key and landmark_key_part2 not in metafeature_key:
+                metafeatures.pop(metafeature_key)
+    elif metafeature_subset == 'no-landmarks':
+        for metafeature_key in metafeature_keys:
+            if landmark_key_part1 in metafeature_key or landmark_key_part2 in metafeature_key:
+                metafeatures.pop(metafeature_key)
+    else:
+        raise Exception('No valid metafeatures subset provided')
+
+    return metafeatures
+
+def preprocess_data(train_data, test_data, metafeature_subset: str):
     train_metafeatures = []
     for instance in train_data:
-        train_metafeatures.append(instance['metafeatures'])
+        metafeatures = filter_metafeatures(instance, metafeature_subset)
+
+        train_metafeatures.append(metafeatures)
         for step in instance['pipeline']['steps']:
             step['name'] = step['name'].replace('.', '_')
 
     test_metafeatures = []
     for instance in test_data:
-        test_metafeatures.append(instance['metafeatures'])
+        metafeatures = filter_metafeatures(instance, metafeature_subset)
+
+        test_metafeatures.append(metafeatures)
         for step in instance['pipeline']['steps']:
             step['name'] = step['name'].replace('.', '_')
 

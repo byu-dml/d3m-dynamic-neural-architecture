@@ -17,6 +17,7 @@ test_split_seed=9232859745
 validation_size=2
 validation_split_seed=5460650386
 k=2
+metafeature_subset=all
 
 
 results_dir=./dev_results
@@ -80,7 +81,8 @@ python3 dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --metafeature-subset $metafeature_subset
 
 python3 dna evaluate \
     --model dagrnn_regression \
@@ -92,4 +94,5 @@ python3 dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --metafeature-subset $metafeature_subset
