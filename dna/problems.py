@@ -1,11 +1,7 @@
 import numpy as np
 
 from data import group_json_objects
-<<<<<<< HEAD
-from metrics import rmse, regret_value, top_k, spearman_correlation, pearsons_correlation
-=======
-from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation
->>>>>>> cc7e9af1c15b9fb7140b2cc7fb335fc2fe70b7e1
+from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearsons_correlation
 
 class ProblemBase:
 
@@ -61,7 +57,7 @@ class RegressionProblem(ProblemBase):
         for instance in data:
             targets.append(instance['test_f1_macro'])
         correlation, sig = pearsons_correlation(predictions, targets)
-        return {'RMSE': rmse(predictions, targets), "PearsonsCorrelation": {"correlation_coefficient": correlation, "p_value": sig}}
+        return {'RMSE': rmse(predictions, targets), "PearsonCorrelation": {"correlation_coefficient": correlation, "p_value": sig}}
 
 
 class RankProblem(ProblemBase):
