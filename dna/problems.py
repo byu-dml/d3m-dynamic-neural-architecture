@@ -1,7 +1,11 @@
 import numpy as np
 
 from data import group_json_objects
+<<<<<<< HEAD
 from metrics import rmse, regret_value, top_k, spearman_correlation, pearsons_correlation
+=======
+from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation
+>>>>>>> cc7e9af1c15b9fb7140b2cc7fb335fc2fe70b7e1
 
 class ProblemBase:
 
@@ -118,22 +122,25 @@ class RankProblem(ProblemBase):
 
         top_k_counts = []
         spearmans = []
-        regrets = []
         pearsons_coef = []
         pearsons_p = []
+        top_1_regrets = []
+        top_k_regrets = []
 
         for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
             actual_ranks = actual_ranks_by_dataset[dataset_id]
             if 'top-k-count' in scores:
-                top_k_counts.append(top_k(predicted_ranks, actual_ranks, k))
+                top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
                 spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
-            if 'top-1-regret' in scores:
-                regrets.append(regret_value(predicted_ranks, actual_ranks))
             if 'pearsons_correlation' in scores:
                 coef, sig = pearsons_correlation(predicted_ranks, actual_ranks, rank=True)
                 pearsons_coef.append(coef)
                 pearsons_p.append(sig)
+            if 'top-1-regret' in scores:
+                top_1_regrets.append(top_k_regret(predicted_ranks, actual_ranks, 1))
+            if 'top-k-regret' in scores:
+                top_k_regrets.append(top_k_regret(predicted_ranks, actual_ranks, k))
 
         results = {}
         if 'top-k-count' in scores:
@@ -149,8 +156,14 @@ class RankProblem(ProblemBase):
             }
         if 'top-1-regret' in scores:
             results['top_1_regret'] = {
-                'mean': np.mean(regrets),
-                'std_dev': np.std(regrets, ddof=1),
+                'mean': np.mean(top_1_regrets),
+                'std_dev': np.std(top_1_regrets, ddof=1),
+            }
+        if 'top-k-regret' in scores:
+            results['top_k_regret'] = {
+                'k': k,
+                'mean': np.mean(top_k_regrets),
+                'std_dev': np.std(top_k_regrets, ddof=1),
             }
         if 'pearsons_correlation' in scores:
             results["pearsons_coefficient"] = {

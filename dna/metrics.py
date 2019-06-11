@@ -31,22 +31,27 @@ def pearsons_correlation(y_hat, y, rank=False):
     else:
         return scipy.stats.pearsonr(y_hat, y)
 
-def top_k(ranked_data: dict, actual_data: dict, k):
+
+def top_k_correct(ranked_data: dict, actual_data: dict, k):
     ranked_df = pd.DataFrame(ranked_data)
     actual_df = pd.DataFrame(actual_data)
     top_actual = [pipeline["id"] for pipeline in actual_df.nlargest(k, columns='test_f1_macro').pipeline]
     top_predicted = ranked_df.nsmallest(k, columns="rank").pipeline_id
     return len(set(top_actual).intersection(set(top_predicted)))
 
-def regret_value(ranked_data, actual_data):
-    actual_df = pd.DataFrame(actual_data)
-    actual_best_metric_value = actual_df['test_f1_macro'].max()  # np.nanmax
 
-    best_ranked_index = np.argmin(ranked_data['rank'])
-    best_ranked_pipeline_id = ranked_data['pipeline_id'][best_ranked_index]
-    for instance in actual_data:
-        if instance['pipeline']['id'] == best_ranked_pipeline_id:
-            return actual_best_metric_value - instance['test_f1_macro']
+def top_k_regret(ranked_data, actual_data, k):
+    pipeline_ids = pd.Series([instance['pipeline']['id'] for instance in actual_data], name='pipeline_id')
+    actual_df = pd.concat([pd.DataFrame(actual_data), pipeline_ids], axis=1)
+    actual_best_score = actual_df['test_f1_macro'].max()
+
+    top_k_ranked = pd.DataFrame(ranked_data).nsmallest(k, columns="rank").pipeline_id
+    min_regret = np.inf
+    for index, pipeline_id in top_k_ranked.iteritems():
+        regret = actual_best_score - actual_df[actual_df['pipeline_id'] == pipeline_id]['test_f1_macro'].iloc[0]
+        min_regret = min(min_regret, regret)
+    return min_regret
+
 
 def spearman_correlation(ranked_data, actual_data):
     actual_data = pd.DataFrame(actual_data)
