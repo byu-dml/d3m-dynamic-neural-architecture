@@ -39,8 +39,8 @@ class PyTorchRandomStateContext:
 class Submodule(nn.Module):
 
     def __init__(
-        self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
-        device: str = 'cuda:0', seed: int = 0
+        self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False,
+        dropout: float = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
         super(Submodule, self).__init__()
 
@@ -52,6 +52,8 @@ class Submodule(nn.Module):
             for i in range(n_layers):
                 if i > 0:
                     layers.append(activation())
+                    if dropout > 0.0:
+                        layers.append(nn.Dropout(p=dropout))
                 if use_batch_norm:
                     layers.append(nn.BatchNorm1d(layer_sizes[i]))
                 layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
@@ -181,6 +183,10 @@ class PyTorchModelBase:
         self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
 
+        model_save_path = None
+        if output_dir is not None:
+            model_save_path = os.path.join(output_dir, 'model.pt')
+
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         min_loss_score = np.inf
@@ -216,8 +222,11 @@ class PyTorchModelBase:
                     min_loss_score = train_loss_score
                     save_model = True
 
-            if save_model:
-                torch.save(self._model.state_dict(), os.path.join(output_dir, 'model.pt'))
+            if save_model and model_save_path is not None:
+                torch.save(self._model.state_dict(), model_save_path)
+
+        if not save_model and model_save_path is not None:  # model not saved during final epoch
+            self._model.load_state_dict(torch.load(model_save_path))
 
         self.fitted = True
 
@@ -434,7 +443,7 @@ class DAGRNN(nn.Module):
         layer_sizes += [self.output_size]
         return Submodule(
             layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._output_seed
+            seed=self._output_seed, dropout=self.output_dropout
         )
 
     def forward(self, args):
@@ -531,6 +540,17 @@ class MetaHiddenDAGRNN(DAGRNN):
         self.input_layer_size = metafeatures_length
         self._input_seed = seed + 1
 
+        self.activation = ACTIVATIONS[activation_name]()
+
+        if input_dropout > 0.0:
+            self.input_dropout_layer = nn.Dropout(p=input_dropout)
+            self.input_dropout_layer.to(device=device)
+
+        if use_batch_norm:
+            self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+            self.batch_norm.to(device=self.device)
+
+
         self.input_n_hidden_layers = input_n_hidden_layers
         self.input_hidden_layer_size = input_hidden_layer_size
         self.input_dropout = input_dropout
@@ -541,7 +561,7 @@ class MetaHiddenDAGRNN(DAGRNN):
         layer_sizes += [output_size]
         return Submodule(
             layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._input_seed
+            seed=self._input_seed, dropout=self.input_dropout
         )
 
     def forward(self, args):
@@ -555,6 +575,13 @@ class MetaHiddenDAGRNN(DAGRNN):
 
         # Pass the metafeatures through the input layer
         metafeatures = self._input_submodule(metafeatures)
+        metafeatures = self.activation(metafeatures)
+
+        if self.input_dropout > 0.0:
+            metafeatures = self.input_dropout_layer(metafeatures)
+
+        if self.use_batch_norm:
+            metafeatures = self.batch_norm(metafeatures)
 
         # Add a dimension to the metafeatures so they can be concatenated across that dimension
         metafeatures = metafeatures.unsqueeze(dim=0)
@@ -564,6 +591,7 @@ class MetaHiddenDAGRNN(DAGRNN):
         for i in range(self.hidden_state_dim0_size):
             hidden_state.append(metafeatures)
         hidden_state = torch.cat(hidden_state, dim=0)
+
         cell_state = hidden_state
         lstm_start_state = (hidden_state, cell_state)
 
@@ -671,8 +699,6 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         return encoding
 
     def _get_model(self, train_data):
-        print('Using Basic DAG RNN')
-
         metafeatures_length = len(train_data[0][self.features_key])
         return DAGRNN(self.activation_name, self.hidden_state_size, self.lstm_n_layers, self.lstm_dropout,
                       self.bidirectional, self.output_n_hidden_layers, self.output_hidden_layer_size,
@@ -719,8 +745,6 @@ class MetaHiddenDAGRNNRegressionModel(DAGRNNRegressionModel):
         self.input_dropout = input_dropout
 
     def _get_model(self, train_data):
-        print('Using Complex DAG RNN')
-
         metafeatures_length = len(train_data[0][self.features_key])
         return MetaHiddenDAGRNN(
             activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
