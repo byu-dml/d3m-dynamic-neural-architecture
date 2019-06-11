@@ -1,7 +1,7 @@
 import numpy as np
 
 from data import group_json_objects
-from metrics import rmse, regret_value, top_k, spearman_correlation
+from metrics import rmse, regret_value, top_k, spearman_correlation, pearsons_correlation
 
 class ProblemBase:
 
@@ -56,7 +56,8 @@ class RegressionProblem(ProblemBase):
         targets = []
         for instance in data:
             targets.append(instance['test_f1_macro'])
-        return {'RMSE': rmse(predictions, targets)}
+        correlation, sig = pearsons_correlation(predictions, targets)
+        return {'RMSE': rmse(predictions, targets), "PearsonsCorrelation": {"correlation_coefficient": correlation, "p_value": sig}}
 
 
 class RankProblem(ProblemBase):
@@ -118,6 +119,8 @@ class RankProblem(ProblemBase):
         top_k_counts = []
         spearmans = []
         regrets = []
+        pearsons_coef = []
+        pearsons_p = []
 
         for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
             actual_ranks = actual_ranks_by_dataset[dataset_id]
@@ -127,6 +130,10 @@ class RankProblem(ProblemBase):
                 spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
             if 'top-1-regret' in scores:
                 regrets.append(regret_value(predicted_ranks, actual_ranks))
+            if 'pearsons_correlation' in scores:
+                coef, sig = pearsons_correlation(predicted_ranks, actual_ranks, rank=True)
+                pearsons_coef.append(coef)
+                pearsons_p.append(sig)
 
         results = {}
         if 'top-k-count' in scores:
@@ -145,6 +152,14 @@ class RankProblem(ProblemBase):
                 'mean': np.mean(regrets),
                 'std_dev': np.std(regrets, ddof=1),
             }
+        if 'pearsons_correlation' in scores:
+            results["pearsons_coefficient"] = {
+                'mean': np.mean(pearsons_coef),
+                'std_dev': np.std(pearsons_coef, ddof=1),
+                'mean_p_value': np.mean(pearsons_p),
+                'std_dev_p_value': np.std(pearsons_p, ddof=1),
+            }
+
         return results
 
 

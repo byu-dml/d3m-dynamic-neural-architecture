@@ -109,7 +109,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--scores', nargs='+',
-        choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret'],
+        choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret', 'pearsons_correlation'],
         help='the type of problem'
     )
 

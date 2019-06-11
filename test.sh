@@ -72,7 +72,7 @@ python3 dna evaluate \
     --model-config-path ./model_configs/dna_regression_config.json \
     --problem regression rank \
     --k $k \
-    --scores top-k-count top-1-regret spearman \
+    --scores top-k-count top-1-regret spearman pearsons_correlation \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \

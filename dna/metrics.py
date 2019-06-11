@@ -9,12 +9,27 @@ def accuracy(y_hat, y):
     y_hat = np.argmax(y_hat, axis=1)
     return np.sum(y_hat == y, dtype=np.float32) / len(y)
 
-
 def rmse(y_hat, y):
     """
     Calculates the unbiased standard deviation of the residuals.
     """
     return mean_squared_error(np.array(y_hat), np.array(y))**.5
+
+def pearsons_correlation(y_hat, y, rank=False):
+    """
+    Calculates Pearson's R^2 coefficient
+    
+    Returns a tuple containing: 
+        correlation_coefficient: the linear relationship between two datasets
+        p_value:  roughly indicates the probability of an uncorrelated system producing datasets that have a Pearson correlation at least as extreme as 
+        the one computed from these datasets. The p-values are not entirely reliable but are probably reasonable for datasets larger than 500 or so.
+    """
+    if rank:
+        actual_data = pd.DataFrame(y)
+        ranked_data = pd.DataFrame(y_hat)
+        return scipy.stats.pearsonr(ranked_data['rank'], utils.rank(actual_data.test_f1_macro))
+    else:
+        return scipy.stats.pearsonr(y_hat, y)
 
 def top_k(ranked_data: dict, actual_data: dict, k):
     ranked_df = pd.DataFrame(ranked_data)
