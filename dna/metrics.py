@@ -17,7 +17,7 @@ def rmse(y_hat, y):
     """
     Calculates the unbiased standard deviation of the residuals.
     """
-    return mean_squared_error(np.array(y_hat), np.array(y))**.5
+    return mean_squared_error(y_hat, y)**.5
 
 
 def pearson_correlation(y_hat, y):
