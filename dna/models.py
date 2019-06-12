@@ -835,7 +835,6 @@ class LinearRegressionBaseline(RegressionModelBase):
             raise ModelNotFitError('LinearRegressionBaseline not fit')
             
         X_data, y = self.prepare_data_for_regression(data) 
-        import pdb; pdb.set_trace()
         predictions = self.regressor.predict(X_data)
         return predictions
     
