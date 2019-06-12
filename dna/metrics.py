@@ -1,7 +1,10 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import scipy.stats
 from sklearn.metrics import mean_squared_error
+
 import utils
 
 
@@ -15,6 +18,15 @@ def rmse(y_hat, y):
     Calculates the unbiased standard deviation of the residuals.
     """
     return mean_squared_error(np.array(y_hat), np.array(y))**.5
+
+
+def pearson_correlation(y_hat, y):
+    """
+    Calculates Pearson's R^2 coefficient. Returns a tuple containing the correlation coefficient and the p value for
+    the test that the correlation coefficient is different than 0.
+    """
+    with warnings.catch_warnings(record=True) as w:
+        return scipy.stats.pearsonr(y_hat, y)
 
 
 def top_k_correct(ranked_data: dict, actual_data: dict, k):
