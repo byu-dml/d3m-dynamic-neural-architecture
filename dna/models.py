@@ -842,19 +842,23 @@ class LinearRegressionBaseline(RegressionModelBase):
         full_data = pd.DataFrame(data)
         y = full_data["test_f1_macro"]
 
+        # this takes a column of lists of ints and expands it out into a dataframe of ints
         metafeature_df_raw = pd.DataFrame(full_data.metafeatures.values.tolist()).reset_index(drop=True)
         metafeature_df = pd.DataFrame(np.nan_to_num(metafeature_df_raw.values))
         assert np.isnan(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: nans exist"
         assert np.isinf(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: infs exist"
 
+        # one hot encode by primitive
         one_hot_encoding = self.one_hot_encode_pipelines(data)
         assert np.isnan(one_hot_encoding.values).sum() == 0, "Was not able to impute the primitive encoding: nans exist"
         assert np.isinf(one_hot_encoding.values).sum() == 0, "Was not able to impute the primitive encoding: infs exist"
 
+        # remove unused columns, one hot encode the structure type
         needed_data = full_data.drop(["test_f1_macro", "problem_type", "pipeline", "metafeatures", "dataset_id"], axis=1).reset_index(drop=True)
         needed_data = pd.get_dummies(data=needed_data, columns=['pipeline_structure'])
 
-        assert needed_data.shape[0] == one_hot_encoding.shape[0] == metafeature_df.shape[0], "Wrong shape dataframe for regression"  
+        # concatenate the parts together and validate
+        assert needed_data.shape[0] == one_hot_encoding.shape[0] == metafeature_df.shape[0], "Wrong shape dataframes for regression"  
         X_data = pd.concat([needed_data, one_hot_encoding, metafeature_df], axis=1, ignore_index=True)
         assert X_data.shape[1] == (needed_data.shape[1] + one_hot_encoding.shape[1] + metafeature_df.shape[1]), "dataframe was combined incorrectly"
         return X_data, y
