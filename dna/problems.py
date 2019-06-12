@@ -126,7 +126,8 @@ class RankProblem(ProblemBase):
         top_k_regrets = []
 
         for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
-            actual_ranks = actual_ranks_by_dataset[dataset_id]
+            predicted_ranks = pd.DataFrame(predicted_ranks)
+            actual_ranks = pd.DataFrame(actual_ranks_by_dataset[dataset_id])
             if 'top-k-count' in scores:
                 top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
