@@ -26,14 +26,17 @@ class PyTorchRandomStateContext:
     def __init__(self, seed):
         self.seed = seed
         self._state = None
+        self._cuda_state = None
 
     def __enter__(self):
         self._state = torch.random.get_rng_state()
+        self._cuda_state = torch.cuda.random.get_rng_state() # TODO: Device?
         torch.manual_seed(self.seed)
-        # torch.cuda.manual_seed_all  # todo?
+        torch.cuda.manual_seed_all(self.seed + 1)
 
     def __exit__(self, *args):
         torch.random.set_rng_state(self._state)
+        torch.cuda.random.set_rng_state(self._cuda_state)
 
 
 class Submodule(nn.Module):
@@ -424,23 +427,24 @@ class DAGRNN(nn.Module):
         self.input_dropout = input_dropout
         self._input_submodule = self._get_input_submodule(output_size=hidden_state_size)
 
-        self.activation = ACTIVATIONS[activation_name]()
+        with PyTorchRandomStateContext(seed):
+            self.activation = ACTIVATIONS[activation_name]()
 
-        if input_dropout > 0.0:
-            self.input_dropout_layer = nn.Dropout(p=input_dropout)
-            self.input_dropout_layer.to(device=device)
+            if input_dropout > 0.0:
+                self.input_dropout_layer = nn.Dropout(p=input_dropout)
+                self.input_dropout_layer.to(device=device)
 
-        if use_batch_norm:
-            self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-            self.batch_norm.to(device=self.device)
+            if use_batch_norm:
+                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+                self.batch_norm.to(device=self.device)
 
-        n_directions = 2 if bidirectional else 1
-        self.hidden_state_dim0_size = lstm_n_layers * n_directions
-        self.lstm = nn.LSTM(
-            input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
-            bidirectional=bidirectional, batch_first=True
-        )
-        self.lstm.to(device=self.device)
+            n_directions = 2 if bidirectional else 1
+            self.hidden_state_dim0_size = lstm_n_layers * n_directions
+            self.lstm = nn.LSTM(
+                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
+                bidirectional=bidirectional, batch_first=True
+            )
+            self.lstm.to(device=self.device)
 
         lstm_output_size = hidden_state_size * n_directions
         self.output_n_hidden_layers = output_n_hidden_layers
@@ -578,7 +582,6 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
         self.device = device
-        self.seed = seed
         self._data_loader_seed = seed + 1
         self._model_seed = seed + 2
 
@@ -632,6 +635,7 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         encoding = np.identity(n=self.num_primitives)
 
         # Create a mapping of primitive names to one hot encodings
+        primitive_names = sorted(primitive_names)
         primitive_name_to_enc = {}
         for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
             primitive_name_to_enc[primitive_name] = primitive_encoding
