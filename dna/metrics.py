@@ -1,7 +1,10 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import scipy.stats
 from sklearn.metrics import mean_squared_error
+
 import utils
 
 
@@ -17,20 +20,12 @@ def rmse(y_hat, y):
     return mean_squared_error(np.array(y_hat), np.array(y))**.5
 
 
-def pearsons_correlation(y_hat, y, rank=False):
+def pearson_correlation(y_hat, y):
     """
-    Calculates Pearson's R^2 coefficient
-    
-    Returns a tuple containing: 
-        correlation_coefficient: the linear relationship between two datasets
-        p_value:  roughly indicates the probability of an uncorrelated system producing datasets that have a Pearson correlation at least as extreme as 
-        the one computed from these datasets. The p-values are not entirely reliable but are probably reasonable for datasets larger than 500 or so.
+    Calculates Pearson's R^2 coefficient. Returns a tuple containing the correlation coefficient and the p value for
+    the test that the correlation coefficient is different than 0.
     """
-    if rank:
-        actual_data = pd.DataFrame(y)
-        ranked_data = pd.DataFrame(y_hat)
-        return scipy.stats.pearsonr(ranked_data['rank'], utils.rank(actual_data.test_f1_macro))
-    else:
+    with warnings.catch_warnings(record=True) as w:
         return scipy.stats.pearsonr(y_hat, y)
 
 

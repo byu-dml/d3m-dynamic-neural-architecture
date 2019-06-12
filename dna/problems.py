@@ -1,7 +1,8 @@
 import numpy as np
+import pandas as pd
 
 from data import group_json_objects
-from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearsons_correlation
+from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
 class ProblemBase:
 
@@ -56,8 +57,9 @@ class RegressionProblem(ProblemBase):
         targets = []
         for instance in data:
             targets.append(instance['test_f1_macro'])
-        correlation, sig = pearsons_correlation(predictions, targets)
-        return {'RMSE': rmse(predictions, targets), "PearsonCorrelation": {"correlation_coefficient": correlation, "p_value": sig}}
+
+        correlation, p_value = pearson_correlation(predictions, targets)
+        return {'RMSE': rmse(predictions, targets), 'PearsonCorrelation': {'correlation_coefficient': correlation, 'p_value': p_value}}
 
 
 class RankProblem(ProblemBase):
@@ -118,8 +120,8 @@ class RankProblem(ProblemBase):
 
         top_k_counts = []
         spearmans = []
-        pearsons_coef = []
-        pearsons_p = []
+        pearson_coefs = []
+        pearson_ps = []
         top_1_regrets = []
         top_k_regrets = []
 
@@ -129,10 +131,10 @@ class RankProblem(ProblemBase):
                 top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
                 spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
-            if 'pearsons_correlation' in scores:
-                coef, sig = pearsons_correlation(predicted_ranks, actual_ranks, rank=True)
-                pearsons_coef.append(coef)
-                pearsons_p.append(sig)
+            if 'pearson' in scores:
+                coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'])
+                pearson_coefs.append(coefficient)
+                pearson_ps.append(p_value)
             if 'top-1-regret' in scores:
                 top_1_regrets.append(top_k_regret(predicted_ranks, actual_ranks, 1))
             if 'top-k-regret' in scores:
@@ -161,12 +163,12 @@ class RankProblem(ProblemBase):
                 'mean': np.mean(top_k_regrets),
                 'std_dev': np.std(top_k_regrets, ddof=1),
             }
-        if 'pearsons_correlation' in scores:
-            results["pearsons_coefficient"] = {
-                'mean': np.mean(pearsons_coef),
-                'std_dev': np.std(pearsons_coef, ddof=1),
-                'mean_p_value': np.mean(pearsons_p),
-                'std_dev_p_value': np.std(pearsons_p, ddof=1),
+        if 'pearson' in scores:
+            results['pearson_correlation'] = {
+                'mean': np.mean(pearson_coefs),
+                'std_dev': np.std(pearson_coefs, ddof=1),
+                'mean_p_value': np.mean(pearson_ps),
+                'std_dev_p_value': np.std(pearson_ps, ddof=1),
             }
 
         return results
