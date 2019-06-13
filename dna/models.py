@@ -815,9 +815,10 @@ class PerPrimitiveBaseline(RegressionModelBase):
 
         return predictions
 
-class LinearRegressionBaseline(RegressionModelBase):
+class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
         self.regressor = linear_model.LinearRegression()
         self.fitted = False
         self.pipeline_key = 'pipeline'
@@ -833,10 +834,22 @@ class LinearRegressionBaseline(RegressionModelBase):
     def predict_regression(self, data, *, verbose=False):
         if self.fitted is False:
             raise ModelNotFitError('LinearRegressionBaseline not fit')
-            
+
         X_data, y = self.prepare_data_for_regression(data) 
         predictions = self.regressor.predict(X_data)
         return predictions
+
+    def predict_rank(self, data, *, verbose=False):
+        if self.fitted is False:
+            raise ModelNotFitError('LinearRegressionBaseline not fit')
+
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        return {
+                'pipeline_id': pipeline_ids,
+                'rank': ranks,
+            }
     
     def prepare_data_for_regression(self, data):
         full_data = pd.DataFrame(data)
@@ -853,14 +866,14 @@ class LinearRegressionBaseline(RegressionModelBase):
         assert np.isnan(one_hot_encoding.values).sum() == 0, "Was not able to impute the primitive encoding: nans exist"
         assert np.isinf(one_hot_encoding.values).sum() == 0, "Was not able to impute the primitive encoding: infs exist"
 
-        # remove unused columns, one hot encode the structure type
-        needed_data = full_data.drop(["test_f1_macro", "problem_type", "pipeline", "metafeatures", "dataset_id"], axis=1).reset_index(drop=True)
-        needed_data = pd.get_dummies(data=needed_data, columns=['pipeline_structure'])
+        # remove unused columns
+        needed_data = full_data.drop(["test_f1_macro", "problem_type", "pipeline", "metafeatures", "dataset_id", "pipeline_structure"], axis=1).reset_index(drop=True)
 
         # concatenate the parts together and validate
         assert needed_data.shape[0] == one_hot_encoding.shape[0] == metafeature_df.shape[0], "Wrong shape dataframes for regression"  
         X_data = pd.concat([needed_data, one_hot_encoding, metafeature_df], axis=1, ignore_index=True)
         assert X_data.shape[1] == (needed_data.shape[1] + one_hot_encoding.shape[1] + metafeature_df.shape[1]), "dataframe was combined incorrectly"
+        assert X_data.shape[0] == y.shape[0], "X_data and y data are ill-shaped for regression: X_data: {}, y: {}".format(X_data.shape, y.shape)
         return X_data, y
 
     def _one_hot_encode_mapping(self, data):
