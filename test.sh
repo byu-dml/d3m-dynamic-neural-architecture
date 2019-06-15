@@ -22,77 +22,77 @@ k=2
 results_dir=./dev_results
 
 
-python3 dna split-data \
-    --data-path $raw_data_path \
-    --test-size $test_size \
-    --split-seed $test_split_seed
+# python3 dna split-data \
+#     --data-path $raw_data_path \
+#     --test-size $test_size \
+#     --split-seed $test_split_seed
 
 
-python3 dna evaluate \
-    --model autosklearn \
-    --problem rank \
-    --k $k \
-    --scores top-k-count top-1-regret top-k-regret \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model autosklearn \
+#     --problem rank \
+#     --k $k \
+#     --scores top-k-count top-1-regret top-k-regret \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
 
-python3 dna evaluate \
-    --model mean_regression \
-    --problem regression \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model mean_regression \
+#     --problem regression \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
 
-python3 dna evaluate \
-    --model median_regression \
-    --problem regression \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model median_regression \
+#     --problem regression \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
 
-python3 dna evaluate \
-    --model per_primitive_regression \
-    --problem regression \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model per_primitive_regression \
+#     --problem regression \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
 
-python3 dna evaluate \
-    --model dna_regression \
-    --model-config-path ./model_configs/dna_regression_config.json \
-    --problem regression rank \
-    --k $k \
-    --scores top-k-count top-1-regret spearman top-k-regret pearson \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model dna_regression \
+#     --model-config-path ./model_configs/dna_regression_config.json \
+#     --problem regression rank \
+#     --k $k \
+#     --scores top-k-count top-1-regret spearman top-k-regret pearson \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
-python3 dna evaluate \
-    --model dagrnn_regression \
-    --model-config-path ./model_configs/dagrnn_regression_config.json \
-    --problem regression rank \
-    --k $k \
-    --scores top-k-count top-1-regret spearman top-k-regret pearson \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model dagrnn_regression \
+#     --model-config-path ./model_configs/dagrnn_regression_config.json \
+#     --problem regression rank \
+#     --k $k \
+#     --scores top-k-count top-1-regret spearman top-k-regret pearson \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
 python3 dna evaluate \
     --model linear_regression \
@@ -104,9 +104,19 @@ python3 dna evaluate \
     --output-dir $results_dir \
     --verbose
 
+# python3 dna evaluate \
+#     --model random \
+#     --problem rank \
+#     --train-path $train_path \
+#     --scores top-k-count top-1-regret spearman top-k-regret pearson \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
+
 python3 dna evaluate \
-    --model random \
-    --problem rank \
+    --model meta_autosklearn \
+    --problem regression rank \
     --train-path $train_path \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --test-size $validation_size \
