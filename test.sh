@@ -103,3 +103,13 @@ python3 dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose
+
+python3 dna evaluate \
+    --model random \
+    --problem rank \
+    --train-path $train_path \
+    --scores top-k-count top-1-regret spearman top-k-regret pearson \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose

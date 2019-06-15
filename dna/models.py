@@ -815,6 +815,27 @@ class PerPrimitiveBaseline(RegressionModelBase):
 
         return predictions
 
+class RandomBaseline(RankModelBase):
+    def __init__(self, seed=0):
+        RankModelBase.__init__(self, seed=seed)
+        # Random is always ready
+        self.fitted = True
+        self.state = np.random.RandomState(seed)
+
+    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+        pass
+
+    def predict_rank(self, data, *, verbose=False):
+        predictions = list(range(len(data)))
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        # shuffles in place
+        self.state.shuffle(pipeline_ids)
+
+        return {
+                'pipeline_id': pipeline_ids,
+                'rank': predictions,
+            }
+
 class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
@@ -1020,7 +1041,8 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
         'dagrnn_regression': DAGRNNRegressionModel,
-        'linear_regression': LinearRegressionBaseline
+        'linear_regression': LinearRegressionBaseline,
+        "random": RandomBaseline,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
