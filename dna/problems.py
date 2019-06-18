@@ -34,13 +34,13 @@ class ProblemBase:
         train_predictions = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
         test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
 
-        train_scores = self._score(train_predictions, train_data)
-        test_scores = self._score(test_predictions, test_data)
+        train_scores = self._score(train_predictions, train_data, graph_name='train', graph_directory=output_dir)
+        test_scores = self._score(test_predictions, test_data, graph_name='validation', graph_directory=output_dir)
 
         return train_predictions, test_predictions, train_scores, test_scores
 
     @staticmethod
-    def _score(predictions, data):
+    def _score(predictions, data, graph_name: str = None, graph_directory: str = None):
         raise NotImplementedError()
 
     @staticmethod
@@ -53,12 +53,12 @@ class RegressionProblem(ProblemBase):
     _predict_method_name = 'predict_regression'
 
     @staticmethod
-    def _score(predictions, data):
+    def _score(predictions, data, graph_name: str = None, graph_directory: str = None):
         targets = []
         for instance in data:
             targets.append(instance['test_f1_macro'])
 
-        correlation, p_value = pearson_correlation(predictions, targets)
+        correlation, p_value = pearson_correlation(predictions, targets, name=graph_name, directory=graph_directory)
         return {'RMSE': rmse(predictions, targets), 'PearsonCorrelation': {'correlation_coefficient': correlation, 'p_value': p_value}}
 
 
@@ -90,8 +90,8 @@ class RankProblem(ProblemBase):
         train_predicted_ranks = self._predict_rank(train_data_by_dataset, model, verbose, predict_rank_model_config)
         test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
 
-        train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k)
-        test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k)
+        train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k, output_dir)
+        test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k, output_dir)
 
         return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores
 
@@ -114,7 +114,7 @@ class RankProblem(ProblemBase):
         return predictions_by_dataset
 
     @staticmethod
-    def _score(scores, predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k):
+    def _score(scores, predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k, output_dir):
         if not scores:
             return {}
 
@@ -131,9 +131,10 @@ class RankProblem(ProblemBase):
             if 'top-k-count' in scores:
                 top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
-                spearmans.append(spearman_correlation(predicted_ranks, actual_ranks))
+                spearmans.append(spearman_correlation(predicted_ranks, actual_ranks, name=dataset_id, directory=output_dir))
             if 'pearson' in scores:
-                coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'])
+                coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'],
+                                                           name=dataset_id, directory=output_dir)
                 pearson_coefs.append(coefficient)
                 pearson_ps.append(p_value)
             if 'top-1-regret' in scores:

@@ -3,6 +3,8 @@ import warnings
 import pandas as pd
 import scipy.stats
 from sklearn.metrics import accuracy_score, mean_squared_error
+from matplotlib import pyplot as plt
+import os
 
 import utils
 
@@ -15,11 +17,22 @@ def rmse(y_hat, y):
     return mean_squared_error(y, y_hat)**.5
 
 
-def pearson_correlation(y_hat, y):
+def pearson_correlation(y_hat, y, name: str, directory: str):
     """
     Calculates Pearson's R^2 coefficient. Returns a tuple containing the correlation coefficient and the p value for
     the test that the correlation coefficient is different than 0.
     """
+    plt.title('Pearson Correlation: ' + name)
+    plt.xlabel('y_hat')
+    plt.ylabel('y')
+    plt.scatter(y_hat, y)
+    new_dir = os.path.join(directory, 'pearson_plots')
+    if not os.path.isdir(new_dir):
+        os.makedirs(new_dir)
+    file_name = os.path.join(new_dir, name)
+    plt.savefig(fname=file_name)
+    plt.clf()
+
     with warnings.catch_warnings(record=True) as w:
         return scipy.stats.pearsonr(y_hat, y)
 
@@ -43,7 +56,21 @@ def top_k_regret(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, k: int):
     return min_regret
 
 
-def spearman_correlation(ranked_data: pd.DataFrame, actual_data: pd.DataFrame):
+def spearman_correlation(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, name: str, directory: str):
     actual_data = pd.DataFrame(actual_data)
-    score = scipy.stats.spearmanr(ranked_data['rank'], utils.rank(actual_data.test_f1_macro))
+    ranked_data = ranked_data['rank']
+    actual_data = utils.rank(actual_data.test_f1_macro)
+    score = scipy.stats.spearmanr(ranked_data, actual_data)
+
+    plt.title('Spearman Correlation: ' + name)
+    plt.xlabel('Ranked Data')
+    plt.ylabel('Actual Data')
+    plt.scatter(ranked_data, actual_data)
+    new_dir = os.path.join(directory, 'spearman_plots')
+    if not os.path.isdir(new_dir):
+        os.makedirs(new_dir)
+    file_name = os.path.join(new_dir, name)
+    plt.savefig(fname=file_name)
+    plt.clf()
+
     return score.correlation
