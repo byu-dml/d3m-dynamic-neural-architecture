@@ -942,15 +942,13 @@ class LinearRegressionBaseline(SklearnBase):
             }
 
 class MetaAutoSklearn(SklearnBase):
-    def __init__(self, seed=0, *):
+    def __init__(self, seed=0):
         SklearnBase.__init__(self, seed=seed)
-        self.regressor = autosklearn.AutoSklearnRegressor(
-            time_left_for_this_task=120,
-            per_run_time_limit=30)
         self.fitted = False
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+    def fit(self, data, *, time_left_for_this_task=120, per_run_time_limit=30, validation_data=None, output_dir=None, verbose=False):
         self.fitted = True
+        self.regressor = autosklearn.AutoSklearnRegressor(time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit)
         self.one_hot_primitives_map = self._one_hot_encode_mapping(data + validation_data)
         X_data, y = self.prepare_data(data)
         self.regressor.fit(X_data, y)
@@ -968,7 +966,6 @@ class MetaAutoSklearn(SklearnBase):
             raise ModelNotFitError('MetaAutoSklearn not fit')
 
         predictions = self.predict_regression(data)
-        ranks = utils.rank(predictions)
         pipeline_ids = [instance['pipeline']['id'] for instance in data]
         return {
                 'pipeline_id': pipeline_ids,
