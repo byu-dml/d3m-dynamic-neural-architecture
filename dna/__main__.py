@@ -6,7 +6,7 @@ import sys
 import typing
 import uuid
 
-from data import get_data, preprocess_data, split_data
+from models.data import get_data, preprocess_data, split_data
 from models import get_model
 from problems import get_problem
 

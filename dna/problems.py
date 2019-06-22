@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from data import group_json_objects
-from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from models.data import group_json_objects
+from models.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
 class ProblemBase:
 

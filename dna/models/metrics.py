@@ -4,7 +4,7 @@ import pandas as pd
 import scipy.stats
 from sklearn.metrics import accuracy_score, mean_squared_error
 
-import utils
+from .utils import rank
 
 
 def accuracy(y_hat, y):
@@ -45,5 +45,5 @@ def top_k_regret(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, k: int):
 
 def spearman_correlation(ranked_data: pd.DataFrame, actual_data: pd.DataFrame):
     actual_data = pd.DataFrame(actual_data)
-    score = scipy.stats.spearmanr(ranked_data['rank'], utils.rank(actual_data.test_f1_macro))
+    score = scipy.stats.spearmanr(ranked_data['rank'], rank(actual_data.test_f1_macro))
     return score.correlation
