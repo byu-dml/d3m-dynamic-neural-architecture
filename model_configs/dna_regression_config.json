@@ -1,21 +1,21 @@
 {
     "__init__": {
-        "n_hidden_layers": 1,
-        "hidden_layer_size": 50,
         "activation_name": "relu",
+        "hidden_layer_size": 50,
+        "n_hidden_layers": 1,
         "use_batch_norm": true,
         "use_skip": true
     },
     "fit": {
-        "n_epochs": 1,
-        "learning_rate": 0.0001,
         "batch_size": 7,
-        "drop_last": false
-    },
-    "predict_regression": {
-        "batch_size": 2
+        "drop_last": false,
+        "learning_rate": 0.0001,
+        "n_epochs": 1
     },
     "predict_rank": {
+        "batch_size": 2
+    },
+    "predict_regression": {
         "batch_size": 2
     }
 }
