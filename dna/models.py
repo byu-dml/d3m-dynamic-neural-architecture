@@ -426,23 +426,24 @@ class DAGRNN(nn.Module):
         self.input_dropout = input_dropout
         self._input_submodule = self._get_input_submodule(output_size=hidden_state_size)
 
-        self.activation = ACTIVATIONS[activation_name]()
+        with PyTorchRandomStateContext(seed=seed):
+            self.activation = ACTIVATIONS[activation_name]()
 
-        if input_dropout > 0.0:
-            self.input_dropout_layer = nn.Dropout(p=input_dropout)
-            self.input_dropout_layer.to(device=device)
+            if input_dropout > 0.0:
+                self.input_dropout_layer = nn.Dropout(p=input_dropout)
+                self.input_dropout_layer.to(device=device)
 
-        if use_batch_norm:
-            self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-            self.batch_norm.to(device=self.device)
+            if use_batch_norm:
+                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+                self.batch_norm.to(device=self.device)
 
-        n_directions = 2 if bidirectional else 1
-        self.hidden_state_dim0_size = lstm_n_layers * n_directions
-        self.lstm = nn.LSTM(
-            input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
-            bidirectional=bidirectional, batch_first=True
-        )
-        self.lstm.to(device=self.device)
+            n_directions = 2 if bidirectional else 1
+            self.hidden_state_dim0_size = lstm_n_layers * n_directions
+            self.lstm = nn.LSTM(
+                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
+                bidirectional=bidirectional, batch_first=True
+            )
+            self.lstm.to(device=self.device)
 
         lstm_output_size = hidden_state_size * n_directions
         self.output_n_hidden_layers = output_n_hidden_layers
@@ -524,6 +525,7 @@ class DAGRNN(nn.Module):
                 lstm_input_state = self.get_lstm_input_state(prev_lstm_states=prev_lstm_states,
                                                              primitive_inputs=primitive_inputs)
 
+            # Get the output of the LSTM and the next hidden state and cell state
             (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
 
             prev_lstm_states.append(lstm_output_state)
@@ -565,6 +567,9 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
+
+        # Disable cuDNN so that the LSTM layer is deterministic
+        torch.backends.cudnn.enabled = False
 
         self.activation_name = activation_name
         self.input_n_hidden_layers = input_n_hidden_layers
@@ -635,6 +640,7 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
 
         # Create a mapping of primitive names to one hot encodings
         primitive_name_to_enc = {}
+        primitive_names = sorted(primitive_names)
         for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
             primitive_name_to_enc[primitive_name] = primitive_encoding
 
