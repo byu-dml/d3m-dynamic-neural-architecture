@@ -160,31 +160,29 @@ def encode_dag(dag: typing.Sequence[typing.Sequence[typing.Any]]):
     """
     return ''.join(''.join(str(edge) for edge in vertex) for vertex in dag)
 
+
 def filter_metafeatures(metafeatures: dict, metafeature_subset: str):
-    metafeature_keys = list(metafeatures.keys())
     landmarker_key_part1 = 'ErrRate'
     landmarker_key_part2 = 'Kappa'
 
-    if metafeature_subset == 'all':
-        return metafeatures
-    elif metafeature_subset == 'landmarkers':
+    metafeature_keys = list(metafeatures.keys())
+
+    if metafeature_subset == 'landmarkers':
         for metafeature_key in metafeature_keys:
             if landmarker_key_part1 not in metafeature_key and landmarker_key_part2 not in metafeature_key:
                 metafeatures.pop(metafeature_key)
-    elif metafeature_subset == 'no-landmarkers':
+    elif metafeature_subset == 'non-landmarkers':
         for metafeature_key in metafeature_keys:
             if landmarker_key_part1 in metafeature_key or landmarker_key_part2 in metafeature_key:
                 metafeatures.pop(metafeature_key)
-    else:
-        raise Exception('No valid metafeature subset provided')
 
     return metafeatures
+
 
 def preprocess_data(train_data, test_data, metafeature_subset: str):
     train_metafeatures = []
     for instance in train_data:
-        metafeatures = instance['metafeatures']
-        metafeatures = filter_metafeatures(metafeatures, metafeature_subset)
+        metafeatures = filter_metafeatures(instance['metafeatures'], metafeature_subset)
 
         train_metafeatures.append(metafeatures)
         for step in instance['pipeline']['steps']:
@@ -192,8 +190,7 @@ def preprocess_data(train_data, test_data, metafeature_subset: str):
 
     test_metafeatures = []
     for instance in test_data:
-        metafeatures = instance['metafeatures']
-        metafeatures = filter_metafeatures(metafeatures, metafeature_subset)
+        metafeatures = filter_metafeatures(instance['metafeatures'], metafeature_subset)
 
         test_metafeatures.append(metafeatures)
         for step in instance['pipeline']['steps']:
