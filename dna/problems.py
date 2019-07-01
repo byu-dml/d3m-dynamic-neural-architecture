@@ -3,6 +3,7 @@ import pandas as pd
 
 from data import group_json_objects
 from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+import utils
 
 class ProblemBase:
 
@@ -58,7 +59,9 @@ class RegressionProblem(ProblemBase):
         for instance in data:
             targets.append(instance['test_f1_macro'])
 
-        correlation, p_value = pearson_correlation(predictions, targets, name=graph_name, directory=graph_directory)
+        correlation, p_value = pearson_correlation(predictions, targets)
+        utils.plot_pearson(y_hat=predictions, y=targets, directory=graph_directory, name=graph_name, score=correlation)
+
         return {'RMSE': rmse(predictions, targets), 'PearsonCorrelation': {'correlation_coefficient': correlation, 'p_value': p_value}}
 
 
@@ -131,10 +134,14 @@ class RankProblem(ProblemBase):
             if 'top-k-count' in scores:
                 top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
-                spearmans.append(spearman_correlation(predicted_ranks, actual_ranks, name=dataset_id, directory=output_dir))
+                correlation = spearman_correlation(predicted_ranks, actual_ranks)
+                spearmans.append(correlation)
+                utils.plot_spearman(predicted_ranks, actual_ranks, name=dataset_id, directory=output_dir,
+                                    score=correlation)
             if 'pearson' in scores:
-                coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'],
-                                                           name=dataset_id, directory=output_dir)
+                coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'])
+                utils.plot_pearson(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'],
+                                                           name=dataset_id, directory=output_dir, score=coefficient)
                 pearson_coefs.append(coefficient)
                 pearson_ps.append(p_value)
             if 'top-1-regret' in scores:
