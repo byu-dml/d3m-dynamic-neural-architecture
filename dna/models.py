@@ -826,7 +826,7 @@ class LinearRegressionBaseline(RegressionModelBase):
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
         self.fitted = True
-        self.one_hot_primitives_map = self._one_hot_encode_mapping(data + validation_data)
+        self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
         X_data, y = self.prepare_data_for_regression(data)
         self.regressor.fit(X_data, y)
 
@@ -844,7 +844,7 @@ class LinearRegressionBaseline(RegressionModelBase):
 
         # this takes a column of lists of ints and expands it out into a dataframe of ints
         metafeature_df_raw = pd.DataFrame(full_data.metafeatures.values.tolist()).reset_index(drop=True)
-        metafeature_df = pd.DataFrame(np.nan_to_num(metafeature_df_raw.values))
+        # metafeature_df = pd.DataFrame(np.nan_to_num(metafeature_df_raw.values))
         assert np.isnan(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: nans exist"
         assert np.isinf(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: infs exist"
 
