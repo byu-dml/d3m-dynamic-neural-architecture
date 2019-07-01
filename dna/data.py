@@ -183,7 +183,6 @@ def preprocess_data(train_data, test_data, metafeature_subset: str):
     train_metafeatures = []
     for instance in train_data:
         metafeatures = filter_metafeatures(instance['metafeatures'], metafeature_subset)
-
         train_metafeatures.append(metafeatures)
         for step in instance['pipeline']['steps']:
             step['name'] = step['name'].replace('.', '_')
@@ -191,7 +190,6 @@ def preprocess_data(train_data, test_data, metafeature_subset: str):
     test_metafeatures = []
     for instance in test_data:
         metafeatures = filter_metafeatures(instance['metafeatures'], metafeature_subset)
-
         test_metafeatures.append(metafeatures)
         for step in instance['pipeline']['steps']:
             step['name'] = step['name'].replace('.', '_')
