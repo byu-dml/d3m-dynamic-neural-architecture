@@ -843,7 +843,7 @@ class LinearRegressionBaseline(RegressionModelBase):
         y = full_data["test_f1_macro"]
 
         # this takes a column of lists of ints and expands it out into a dataframe of ints
-        metafeature_df_raw = pd.DataFrame(full_data.metafeatures.values.tolist()).reset_index(drop=True)
+        metafeature_df = pd.DataFrame(full_data.metafeatures.values.tolist()).reset_index(drop=True)
         # metafeature_df = pd.DataFrame(np.nan_to_num(metafeature_df_raw.values))
         assert np.isnan(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: nans exist"
         assert np.isinf(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: infs exist"
