@@ -17,6 +17,7 @@ test_split_seed=9232859745
 validation_size=2
 validation_split_seed=5460650386
 k=2
+metafeature_subset=all
 
 
 results_dir=./dev_results
@@ -32,6 +33,7 @@ python3 dna evaluate \
     --model autosklearn \
     --problem rank \
     --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret top-k-regret \
     --train-path $train_path \
     --test-size $validation_size \
@@ -71,44 +73,53 @@ python3 dna evaluate \
 
 
 python3 dna evaluate \
-    --model dna_regression \
-    --model-config-path ./model_configs/dna_regression_config.json \
+    --model linear_regression \
     --problem regression rank \
     --k $k \
+    --scores top-k-count top-1-regret spearman top-k-regret pearson \
+    --metafeature-subset $metafeature_subset \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
+
+
+python3 dna evaluate \
+    --model random \
+    --problem rank \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose
+
+
+python3 dna evaluate \
+    --model dna_regression \
+    --model-config-path ./model_configs/dna_regression_config.json \
+    --problem regression rank \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
+    --scores top-k-count top-1-regret spearman top-k-regret pearson \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
+
 
 python3 dna evaluate \
     --model dagrnn_regression \
     --model-config-path ./model_configs/dagrnn_regression_config.json \
     --problem regression rank \
     --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
-
-python3 dna evaluate \
-    --model linear_regression \
-    --problem regression rank \
-    --train-path $train_path \
-    --scores top-k-count top-1-regret spearman top-k-regret pearson \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
-
-python3 dna evaluate \
-    --model random \
-    --problem rank \
-    --train-path $train_path \
-    --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
@@ -117,8 +128,10 @@ python3 dna evaluate \
 python3 dna evaluate \
     --model meta_autosklearn \
     --problem regression rank \
-    --train-path $train_path \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
+    --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
