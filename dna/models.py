@@ -32,7 +32,6 @@ class PyTorchRandomStateContext:
     def __enter__(self):
         self._state = torch.random.get_rng_state()
         torch.manual_seed(self.seed)
-        # torch.cuda.manual_seed_all  # todo?
 
     def __exit__(self, *args):
         torch.random.set_rng_state(self._state)
@@ -888,26 +887,26 @@ class PerPrimitiveBaseline(RegressionModelBase):
 
         return predictions
 
+
 class RandomBaseline(RankModelBase):
+
     def __init__(self, seed=0):
         RankModelBase.__init__(self, seed=seed)
-        # Random is always ready
+        self._random_state = np.random.RandomState(seed)
         self.fitted = True
-        self.state = np.random.RandomState(seed)
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+    def fit(self, *args, **kwargs):
         pass
 
     def predict_rank(self, data, *, verbose=False):
         predictions = list(range(len(data)))
         pipeline_ids = [instance['pipeline']['id'] for instance in data]
-        # shuffles in place
-        self.state.shuffle(pipeline_ids)
-
+        self._random_state.shuffle(predictions)
         return {
-                'pipeline_id': pipeline_ids,
-                'rank': predictions,
-            }
+            'pipeline_id': pipeline_ids,
+            'rank': predictions,
+        }
+
 
 class LinearRegressionBaseline(SklearnBase):
     def __init__(self, seed=0):
@@ -916,22 +915,24 @@ class LinearRegressionBaseline(SklearnBase):
         self.fitted = False
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
-        self.fitted = True
         self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
-        X_data, y = self.prepare_data(data)
+        data = pd.DataFrame(data)
+        y = data['test_f1_macro']
+        X_data = self.prepare_data_for_regression(data)
         self.regressor.fit(X_data, y)
+        self.fitted = True
 
     def predict_regression(self, data, *, verbose=False):
-        if self.fitted is False:
-            raise ModelNotFitError('LinearRegressionBaseline not fit')
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
 
-        X_data, y = self.prepare_data(data) 
-        predictions = self.regressor.predict(X_data)
-        return predictions
+        data = pd.DataFrame(data)
+        X_data = self.prepare_data_for_regression(data)
+        return self.regressor.predict(X_data)
 
     def predict_rank(self, data, *, verbose=False):
-        if self.fitted is False:
-            raise ModelNotFitError('LinearRegressionBaseline not fit')
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
 
         predictions = self.predict_regression(data)
         ranks = utils.rank(predictions)
