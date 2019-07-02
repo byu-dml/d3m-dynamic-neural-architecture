@@ -182,7 +182,7 @@ def evaluate_handler(
             print('test scores: {}'.format(test_scores))
             print('model runtimes (s): {} \n'.format(timings))
 
-    evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
+    evaluate_serializer(arguments, parser, result_scores, output_dir, model_config, timings)
 
 
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
@@ -226,7 +226,7 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
 
 def evaluate_serializer(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser, scores: typing.Dict, output_dir: str,
-    model_config: typing.Dict
+    model_config: typing.Dict, timings: typing.Dict
 ):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
@@ -236,7 +236,8 @@ def evaluate_serializer(
             {
                 'arguments': arguments.__dict__,
                 'scores': scores,
-                'model_config': model_config
+                'model_config': model_config,
+                "model_runtimes": timings
             }, f, indent=4, sort_keys=True
         )
 

@@ -51,8 +51,8 @@ class ProblemBase:
         timings = {}
         if fit_time is not None:
             timings["train"] = fit_time
-        timings["test_rank_time"] = test_eval_time
-        timings["train_rank_time"] = test_eval_time_train
+        timings["test_regression_time"] = test_eval_time
+        timings["train_regression_time"] = test_eval_time_train
 
         return train_predictions, test_predictions, train_scores, test_scores, timings
 
