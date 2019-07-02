@@ -815,10 +815,31 @@ class PerPrimitiveBaseline(RegressionModelBase):
         return predictions
 
 
-class LinearRegressionBaseline(RegressionModelBase):
+class RandomBaseline(RankModelBase):
+
+    def __init__(self, seed=0):
+        RankModelBase.__init__(self, seed=seed)
+        self._random_state = np.random.RandomState(seed)
+        self.fitted = True
+
+    def fit(self, *args, **kwargs):
+        pass
+
+    def predict_rank(self, data, *, verbose=False):
+        predictions = list(range(len(data)))
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        self._random_state.shuffle(predictions)
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': predictions,
+        }
+
+
+class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
         self.regressor = linear_model.LinearRegression()
         self.fitted = False
         self.pipeline_key = 'pipeline'
@@ -840,6 +861,18 @@ class LinearRegressionBaseline(RegressionModelBase):
         data = pd.DataFrame(data)
         X_data = self.prepare_data_for_regression(data)
         return self.regressor.predict(X_data)
+
+    def predict_rank(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': ranks,
+        }
 
     def prepare_data_for_regression(self, data):
         # expand the column of lists of metafeatures into a full dataframe
@@ -1001,6 +1034,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'autosklearn': AutoSklearnMetalearner,
         'dagrnn_regression': DAGRNNRegressionModel,
         'linear_regression': LinearRegressionBaseline,
+        "random": RandomBaseline,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
