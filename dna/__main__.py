@@ -160,12 +160,12 @@ def evaluate_handler(
         problem = problem_resolver(problem_name)
         if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
-            train_predictions, test_predictions, train_scores, test_scores = problem.run(
+            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
                 train_data, test_data, model, k, scores, model_config=model_config,
                 re_fit_model=False, verbose=verbose, output_dir=model_output_dir
             )
         else:
-            train_predictions, test_predictions, train_scores, test_scores = problem.run(
+            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
                 train_data, test_data, model, model_config=model_config,
                 re_fit_model=False, verbose=verbose, output_dir=model_output_dir
             )
@@ -173,12 +173,14 @@ def evaluate_handler(
             'problem_name': problem_name,
             'model_name': model_name,
             'train_scores': train_scores,
-            'test_scores': test_scores
+            'test_scores': test_scores,
+            "model_time": timings
+
         })
         if verbose:
             print('train scores: {}'.format(train_scores))
             print('test scores: {}'.format(test_scores))
-            print()
+            print('model runtimes (s): {} \n'.format(timings))
 
     evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
 
