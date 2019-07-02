@@ -814,7 +814,9 @@ class PerPrimitiveBaseline(RegressionModelBase):
 
         return predictions
 
+
 class LinearRegressionBaseline(RegressionModelBase):
+
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
         self.regressor = linear_model.LinearRegression()
@@ -824,43 +826,36 @@ class LinearRegressionBaseline(RegressionModelBase):
         self.prim_name_key = 'name'
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
-        self.fitted = True
         self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
-        X_data, y = self.prepare_data_for_regression(data)
+        data = pd.DataFrame(data)
+        y = data['test_f1_macro']
+        X_data = self.prepare_data_for_regression(data)
         self.regressor.fit(X_data, y)
+        self.fitted = True
 
     def predict_regression(self, data, *, verbose=False):
-        if self.fitted is False:
-            raise ModelNotFitError('LinearRegressionBaseline not fit')
-            
-        X_data, y = self.prepare_data_for_regression(data) 
-        predictions = self.regressor.predict(X_data)
-        return predictions
-    
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        data = pd.DataFrame(data)
+        X_data = self.prepare_data_for_regression(data)
+        return self.regressor.predict(X_data)
+
     def prepare_data_for_regression(self, data):
-        full_data = pd.DataFrame(data)
-        y = full_data["test_f1_macro"]
+        # expand the column of lists of metafeatures into a full dataframe
+        metafeature_df = pd.DataFrame(data.metafeatures.values.tolist()).reset_index(drop=True)
+        assert np.isnan(metafeature_df.values).sum() == 0, 'metafeatures should not contain nans'
+        assert np.isinf(metafeature_df.values).sum() == 0, 'metafeatures should not contain infs'
 
-        # this takes a column of lists of ints and expands it out into a dataframe of ints
-        metafeature_df = pd.DataFrame(full_data.metafeatures.values.tolist()).reset_index(drop=True)
-        # metafeature_df = pd.DataFrame(np.nan_to_num(metafeature_df_raw.values))
-        assert np.isnan(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: nans exist"
-        assert np.isinf(metafeature_df.values).sum() == 0, "Was not able to impute the metafeatures: infs exist"
-
-        # one hot encode by primitive
-        one_hot_encoding = self.one_hot_encode_pipelines(data)
-        assert np.isnan(one_hot_encoding.values).sum() == 0, "Was not able to impute the primitive encoding: nans exist"
-        assert np.isinf(one_hot_encoding.values).sum() == 0, "Was not able to impute the primitive encoding: infs exist"
-
-        # remove unused columns, one hot encode the structure type
-        needed_data = full_data.drop(["test_f1_macro", "problem_type", "pipeline", "metafeatures", "dataset_id"], axis=1).reset_index(drop=True)
-        needed_data = pd.get_dummies(data=needed_data, columns=['pipeline_structure'])
+        encoded_pipelines = self.one_hot_encode_pipelines(data)
+        assert np.isnan(encoded_pipelines.values).sum() == 0, 'pipeline encodings should not contain nans'
+        assert np.isinf(encoded_pipelines.values).sum() == 0, 'pipeline encodings should not contain infs'
 
         # concatenate the parts together and validate
-        assert needed_data.shape[0] == one_hot_encoding.shape[0] == metafeature_df.shape[0], "Wrong shape dataframes for regression"  
-        X_data = pd.concat([needed_data, one_hot_encoding, metafeature_df], axis=1, ignore_index=True)
-        assert X_data.shape[1] == (needed_data.shape[1] + one_hot_encoding.shape[1] + metafeature_df.shape[1]), "dataframe was combined incorrectly"
-        return X_data, y
+        assert metafeature_df.shape[0] == encoded_pipelines.shape[0], 'number of metafeature instances does not match number of pipeline instances'
+        X_data = pd.concat([encoded_pipelines, metafeature_df], axis=1, ignore_index=True)
+        assert X_data.shape[1] == (encoded_pipelines.shape[1] + metafeature_df.shape[1]), 'dataframe was combined incorrectly'
+        return X_data
 
     def _one_hot_encode_mapping(self, data):
         primitive_names = set()
@@ -872,9 +867,11 @@ class LinearRegressionBaseline(RegressionModelBase):
                 primitive_name = primitive[self.prim_name_key]
                 primitive_names.add(primitive_name)
 
+        primitive_names = sorted(primitive_names)
+
         # Get one hot encodings of all the primitives
-        self.num_primitives = len(primitive_names)
-        encoding = np.identity(n=self.num_primitives)
+        self.n_primitives = len(primitive_names)
+        encoding = np.identity(n=self.n_primitives)
 
         # Create a mapping of primitive names to one hot encodings
         primitive_name_to_enc = {}
@@ -884,17 +881,14 @@ class LinearRegressionBaseline(RegressionModelBase):
         return primitive_name_to_enc
 
     def one_hot_encode_pipelines(self, data):
-        primitive_encoding = []
-        for instance in data:
-            pipeline = instance[self.pipeline_key][self.steps_key]
-            encoded_pipeline = self.encode_pipeline(pipeline=pipeline)
-            primitive_encoding.append(encoded_pipeline)
-
-        return pd.DataFrame(primitive_encoding)
+        return pd.DataFrame([self.encode_pipeline(pipeline) for pipeline in data[self.pipeline_key]])
 
     def encode_pipeline(self, pipeline):
-        encoding = np.zeros(self.num_primitives)
-        for primitive in pipeline:
+        """
+        Encodes a pipeline by OR-ing the one-hot encoding of the primitives.
+        """
+        encoding = np.zeros(self.n_primitives)
+        for primitive in pipeline[self.steps_key]:
             primitive_name = primitive[self.prim_name_key]
             # get the position of the one hot encoding
             primitive_index = np.argmax(self.one_hot_primitives_map[primitive_name])
@@ -1006,7 +1000,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
         'dagrnn_regression': DAGRNNRegressionModel,
-        'linear_regression': LinearRegressionBaseline
+        'linear_regression': LinearRegressionBaseline,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)

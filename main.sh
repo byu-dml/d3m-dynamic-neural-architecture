@@ -73,6 +73,16 @@ python3 dna evaluate \
 
 
 python3 dna evaluate \
+    --model linear_regression \
+    --problem regression \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
+
+
+python3 dna evaluate \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
     --problem regression rank \
@@ -85,6 +95,7 @@ python3 dna evaluate \
     --output-dir $results_dir \
     --verbose
 
+
 python3 dna evaluate \
     --model dagrnn_regression \
     --model-config-path ./model_configs/dagrnn_regression_config.json \
@@ -92,15 +103,6 @@ python3 dna evaluate \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
-
-python3 dna evaluate \
-    --model linear_regression \
-    --problem regression \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
