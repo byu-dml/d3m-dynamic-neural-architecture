@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import os
 
 def rank(values):
-    return np.argsort(values)[::-1]
+    return len(values) - 1 - np.argsort(values)
 
 
 def plot_spearman(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, name: str, directory: str, score: float):
