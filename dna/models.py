@@ -552,13 +552,43 @@ class DAGRNN(nn.Module):
 
         return (mean_hidden_state, mean_cell_state)
 
+
 class SklearnBase(RegressionModelBase, RankModelBase):
+
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
         self.pipeline_key = 'pipeline'
         self.steps_key = 'steps'
         self.prim_name_key = 'name'
+
+    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+        self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
+        data = pd.DataFrame(data)
+        y = data['test_f1_macro']
+        X_data = self.prepare_data(data)
+        self.regressor.fit(X_data, y)
+        self.fitted = True
+
+    def predict_regression(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        data = pd.DataFrame(data)
+        X_data = self.prepare_data(data)
+        return self.regressor.predict(X_data)
+
+    def predict_rank(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': ranks,
+        }
 
     def prepare_data(self, data):
         # expand the column of lists of metafeatures into a full dataframe
@@ -905,67 +935,15 @@ class LinearRegressionBaseline(SklearnBase):
         self.regressor = linear_model.LinearRegression()
         self.fitted = False
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
-        self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
-        data = pd.DataFrame(data)
-        y = data['test_f1_macro']
-        X_data = self.prepare_data_for_regression(data)
-        self.regressor.fit(X_data, y)
-        self.fitted = True
-
-    def predict_regression(self, data, *, verbose=False):
-        if not self.fitted:
-            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
-
-        data = pd.DataFrame(data)
-        X_data = self.prepare_data_for_regression(data)
-        return self.regressor.predict(X_data)
-
-    def predict_rank(self, data, *, verbose=False):
-        if not self.fitted:
-            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
-
-        predictions = self.predict_regression(data)
-        ranks = utils.rank(predictions)
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
-        return {
-            'pipeline_id': pipeline_ids,
-            'rank': ranks,
-        }
-
 
 class MetaAutoSklearn(SklearnBase):
 
-    def __init__(self, seed=0):
+    def __init__(self, time_left_for_this_task=60, per_run_time_limit=10, seed=0):
         SklearnBase.__init__(self, seed=seed)
+        self.regressor = autosklearn.AutoSklearnRegressor(
+            time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit, seed=seed
+        )
         self.fitted = False
-
-    def fit(self, data, *, time_left_for_this_task=120, per_run_time_limit=30, validation_data=None, output_dir=None, verbose=False):
-        self.fitted = True
-        self.regressor = autosklearn.AutoSklearnRegressor(time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit)
-        self.one_hot_primitives_map = self._one_hot_encode_mapping(data + validation_data)
-        X_data, y = self.prepare_data(data)
-        self.regressor.fit(X_data, y)
-
-    def predict_regression(self, data, *, verbose=False):
-        if not self.fitted:
-            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
-
-        data = pd.DataFrame(data)
-        X_data = self.prepare_data_for_regression(data)
-        return self.regressor.predict(X_data)
-
-    def predict_rank(self, data, *, verbose=False):
-        if not self.fitted:
-            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
-
-        predictions = self.predict_regression(data)
-        ranks = utils.rank(predictions)
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
-        return {
-            'pipeline_id': pipeline_ids,
-            'rank': ranks,
-        }
 
 
 class AutoSklearnMetalearner(RankModelBase):
