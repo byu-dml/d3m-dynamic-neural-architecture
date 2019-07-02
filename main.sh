@@ -73,6 +73,16 @@ python3 dna evaluate \
 
 
 python3 dna evaluate \
+    --model linear_regression \
+    --problem regression \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
+
+
+python3 dna evaluate \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
     --problem regression rank \
@@ -84,6 +94,7 @@ python3 dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose
+
 
 python3 dna evaluate \
     --model dagrnn_regression \
