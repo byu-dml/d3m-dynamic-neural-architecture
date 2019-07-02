@@ -75,6 +75,7 @@ python3 dna evaluate \
 python3 dna evaluate \
     --model linear_regression \
     --problem regression \
+    --metafeature-subset $metafeature_subset \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
@@ -85,8 +86,10 @@ python3 dna evaluate \
 python3 dna evaluate \
     --model random \
     --problem rank \
-    --train-path $train_path \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
+    --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
