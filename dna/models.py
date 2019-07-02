@@ -30,7 +30,6 @@ class PyTorchRandomStateContext:
     def __enter__(self):
         self._state = torch.random.get_rng_state()
         torch.manual_seed(self.seed)
-        # torch.cuda.manual_seed_all  # todo?
 
     def __exit__(self, *args):
         torch.random.set_rng_state(self._state)
