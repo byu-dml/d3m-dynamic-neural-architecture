@@ -74,7 +74,9 @@ python3 dna evaluate \
 
 python3 dna evaluate \
     --model linear_regression \
-    --problem regression \
+    --problem regression rank \
+    --k $k \
+    --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
     --test-size $validation_size \
