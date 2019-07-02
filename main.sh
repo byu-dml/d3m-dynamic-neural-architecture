@@ -17,6 +17,7 @@ test_split_seed=9232859745
 validation_size=2
 validation_split_seed=5460650386
 k=2
+metafeature_subset=all
 
 
 results_dir=./dev_results
@@ -32,6 +33,7 @@ python3 dna evaluate \
     --model autosklearn \
     --problem rank \
     --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret top-k-regret \
     --train-path $train_path \
     --test-size $validation_size \
@@ -75,6 +77,7 @@ python3 dna evaluate \
     --model-config-path ./model_configs/dna_regression_config.json \
     --problem regression rank \
     --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --train-path $train_path \
     --test-size $validation_size \
@@ -87,6 +90,7 @@ python3 dna evaluate \
     --model-config-path ./model_configs/dagrnn_regression_config.json \
     --problem regression rank \
     --k $k \
+    --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --train-path $train_path \
     --test-size $validation_size \

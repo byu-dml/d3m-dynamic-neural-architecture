@@ -1,4 +1,4 @@
 import numpy as np
 
 def rank(values):
-    return np.argsort(values)[::-1]
+    return len(values) - 1 - np.argsort(values)
