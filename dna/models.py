@@ -440,9 +440,12 @@ class DAGRNN(nn.Module):
 
             n_directions = 2 if bidirectional else 1
             self.hidden_state_dim0_size = lstm_n_layers * n_directions
+            if lstm_dropout > 0 and bidirectional:
+                # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
+                torch.backends.cudnn.enabled = False
             self.lstm = nn.LSTM(
-                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
-                bidirectional=bidirectional, batch_first=True
+                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers,
+                dropout=lstm_dropout, bidirectional=bidirectional, batch_first=True
             )
             self.lstm.to(device=self.device)
 
@@ -568,9 +571,6 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
-
-        # Disable cuDNN so that the LSTM layer is deterministic
-        torch.backends.cudnn.enabled = False
 
         self.activation_name = activation_name
         self.input_n_hidden_layers = input_n_hidden_layers
