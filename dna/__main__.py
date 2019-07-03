@@ -152,6 +152,8 @@ def evaluate_handler(
     os.makedirs(model_output_dir)
 
     scores = getattr(arguments, 'scores')
+    # write to file in case of interuption
+    evaluate_serializer(arguments, parser, output_dir, model_config, scores=scores)
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
@@ -180,7 +182,7 @@ def evaluate_handler(
             print('test scores: {}'.format(test_scores))
             print()
 
-    evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
+    evaluate_serializer(arguments, parser, output_dir, model_config, scores=result_scores)
 
 
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
@@ -223,8 +225,8 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
 
 
 def evaluate_serializer(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, scores: typing.Dict, output_dir: str,
-    model_config: typing.Dict
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser, output_dir: str,
+    model_config: typing.Dict, scores: typing.Dict = None,
 ):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
