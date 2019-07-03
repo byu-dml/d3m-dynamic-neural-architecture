@@ -815,6 +815,17 @@ class PerPrimitiveBaseline(RegressionModelBase):
 
         return predictions
 
+    def predict_rank(self, data, *, verbose=False):
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': ranks,
+        } 
+
+    
+
 
 class RandomBaseline(RankModelBase):
 
