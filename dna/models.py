@@ -13,6 +13,7 @@ from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from kND import KNearestDatasets
 from sklearn import linear_model
 import utils
+import autosklearn.regression as autosklearn
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
@@ -835,13 +836,11 @@ class RandomBaseline(RankModelBase):
         }
 
 
-class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
+class SklearnBase(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
-        self.regressor = linear_model.LinearRegression()
-        self.fitted = False
         self.pipeline_key = 'pipeline'
         self.steps_key = 'steps'
         self.prim_name_key = 'name'
@@ -850,7 +849,7 @@ class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
         self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
         data = pd.DataFrame(data)
         y = data['test_f1_macro']
-        X_data = self.prepare_data_for_regression(data)
+        X_data = self.prepare_data(data)
         self.regressor.fit(X_data, y)
         self.fitted = True
 
@@ -859,7 +858,7 @@ class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
             raise ModelNotFitError('{} not fit'.format(type(self).__name__))
 
         data = pd.DataFrame(data)
-        X_data = self.prepare_data_for_regression(data)
+        X_data = self.prepare_data(data)
         return self.regressor.predict(X_data)
 
     def predict_rank(self, data, *, verbose=False):
@@ -874,7 +873,7 @@ class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
             'rank': ranks,
         }
 
-    def prepare_data_for_regression(self, data):
+    def prepare_data(self, data):
         # expand the column of lists of metafeatures into a full dataframe
         metafeature_df = pd.DataFrame(data.metafeatures.values.tolist()).reset_index(drop=True)
         assert np.isnan(metafeature_df.values).sum() == 0, 'metafeatures should not contain nans'
@@ -927,6 +926,24 @@ class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
             primitive_index = np.argmax(self.one_hot_primitives_map[primitive_name])
             encoding[primitive_index] = 1
         return encoding
+
+
+class LinearRegressionBaseline(SklearnBase):
+
+    def __init__(self, seed=0):
+        SklearnBase.__init__(self, seed=seed)
+        self.regressor = linear_model.LinearRegression()
+        self.fitted = False
+
+
+class MetaAutoSklearn(SklearnBase):
+
+    def __init__(self, time_left_for_this_task=60, per_run_time_limit=10, seed=0):
+        SklearnBase.__init__(self, seed=seed)
+        self.regressor = autosklearn.AutoSklearnRegressor(
+            time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit, seed=seed
+        )
+        self.fitted = False
 
 
 class AutoSklearnMetalearner(RankModelBase):
@@ -1035,6 +1052,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'dagrnn_regression': DAGRNNRegressionModel,
         'linear_regression': LinearRegressionBaseline,
         "random": RandomBaseline,
+        "meta_autosklearn": MetaAutoSklearn,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
