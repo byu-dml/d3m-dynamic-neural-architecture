@@ -37,22 +37,22 @@ class ProblemBase:
 
         model_predict_method = getattr(model, self._predict_method_name)
 
-        start_eval_time_train = time.time()
+        start_timestamp = time.time()
         train_predictions = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
-        test_eval_time_train = time.time() - start_eval_time_train
+        train_predict_time = time.time() - start_timestamp
 
-        start_eval_time = time.time()
+        start_timestamp = time.time()
         test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
-        test_eval_time = time.time() - start_eval_time
+        test_predict_time = time.time() - start_timestamp
 
         train_scores = self._score(train_predictions, train_data)
         test_scores = self._score(test_predictions, test_data)
 
-        timings = {}
-        if fit_time is not None:
-            timings["train"] = fit_time
-        timings["test_regression_time"] = test_eval_time
-        timings["train_regression_time"] = test_eval_time_train
+        timings = {
+            'fit_time': fit_time,
+            'train_predict_time': train_predict_time,
+            'test_predict_time': test_predict_time,
+        }
 
         return train_predictions, test_predictions, train_scores, test_scores, timings
 
@@ -98,31 +98,31 @@ class RankProblem(ProblemBase):
 
         fit_time = None
         if not model.fitted or re_fit_model:
-            start_time = time.time()
+            start_timestamp = time.time()
             model.fit(
                 train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
             )
-            fit_time = time.time() - start_time
+            fit_time = time.time() - start_timestamp
 
         train_data_by_dataset = self._group_data(train_data)
         test_data_by_dataset = self._group_data(test_data)
 
-        start_eval_time_train = time.time()
+        start_timestamp = time.time()
         train_predicted_ranks = self._predict_rank(train_data_by_dataset, model, verbose, predict_rank_model_config)
-        test_eval_time_train = time.time() - start_eval_time_train
+        train_predict_time = time.time() - start_timestamp
 
-        start_eval_time = time.time()
+        start_timestamp = time.time()
         test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
-        test_eval_time = time.time() - start_eval_time
+        test_predict_time = time.time() - start_timestamp
 
         train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k)
         test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k)
 
-        timings = {}
-        if fit_time is not None:
-            timings["train"] = fit_time
-        timings["test_rank_time"] = test_eval_time
-        timings["train_rank_time"] = test_eval_time_train
+        timings = {
+            'fit_time': fit_time,
+            'train_predict_time': train_predict_time,
+            'test_predict_time': test_predict_time,
+        }
 
         return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores, timings
 

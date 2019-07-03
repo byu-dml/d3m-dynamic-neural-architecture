@@ -171,8 +171,7 @@ def evaluate_handler(
             'model_name': model_name,
             'train_scores': train_scores,
             'test_scores': test_scores,
-            "model_time": timings
-
+            **timings,
         })
         if arguments.verbose:
             print('train scores:\n{}'.format(train_scores))
@@ -180,7 +179,7 @@ def evaluate_handler(
             print('model runtimes (s):\n{}'.format(timings))
             print()
 
-        record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores, timings=timings)
+    record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
 
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
@@ -224,7 +223,7 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
 
 def record_run(
     run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
-    scores: typing.Dict = None, timings: typing.Dict = None
+    scores: typing.Dict = None
 ):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
@@ -237,8 +236,6 @@ def record_run(
     }
     if scores is not None:
         run['scores'] = scores
-    if timings is not None:
-        run['model_runtimes'] = timings
 
     with open(path, 'w') as f:
         json.dump(run, f, indent=4, sort_keys=True)
