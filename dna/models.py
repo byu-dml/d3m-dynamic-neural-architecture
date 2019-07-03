@@ -931,10 +931,16 @@ class LinearRegressionBaseline(RegressionModelBase, RankModelBase):
 
 class AutoSklearnMetalearner(RankModelBase):
 
-    def __init__(self, seed=0):
+    def __init__(self, rank_distance_metric, seed=0):
         RankModelBase.__init__(self, seed=seed)
+        if rank_distance_metric == "inverse":
+            self.rank_distance_metric = lambda x, y: x / y
+        else:
+            raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, runs, current_dataset_name):
+
+
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, runs, current_dataset_name, rank_type):
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         # this should aready be done by the time it gets here
@@ -947,25 +953,30 @@ class AutoSklearnMetalearner(RankModelBase):
         # get the ids for pipelines that we have real values for
         current_validation_ids = set(pipeline['id'] for pipeline in data.pipeline)
 
-        kND = KNearestDatasets(metric='l1', random_state=3)
+        kND = KNearestDatasets(metric='l1', random_state=3, rank_distance_metric=self.rank_distance_metric)
         kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
-        # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-        best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=all_other_metafeatures.shape[0])
-        k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
+        if rank_type == "k":
+            # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
+            best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=all_other_metafeatures.shape[0])
+            k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
+        elif rank_type == "all":
+            k_best_pipelines = kND.allBestSuggestions(pd.Series(dataset_metafeatures))
+        else:
+            raise Exception("Not a valid ranking option for KND")
         return k_best_pipelines
 
-    def get_k_best_pipelines_per_dataset(self, data):
+    def get_k_best_pipelines_per_dataset(self, data, rank_type="k"):
         # they all should have the same dataset and metafeatures so take it from the first row
         dataset_metafeatures = data["metafeatures"].iloc[0]
         dataset_name = data["dataset_id"].iloc[0]
         all_other_metafeatures = self.metafeatures
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, all_other_metafeatures, self.runs, dataset_name)
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, all_other_metafeatures, self.runs, dataset_name, rank_type)
         return pipelines
 
 
-    def predict_rank(self, data, *, verbose=False):
+    def predict_rank_k_only(self, data, *, verbose=False):
         """
-        A wrapper for all the other functions so that this is organized
+        A wrapper for all the other functions so that this is organized.  This follows the original code so it only returns the top k max (often less than k)
         :data: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
         from each dataset being passed in.  This is used for the rankings
         :return:
@@ -976,6 +987,31 @@ class AutoSklearnMetalearner(RankModelBase):
             'pipeline_id': k_best_pipelines_per_dataset,
             'rank': list(range(len(k_best_pipelines_per_dataset))),
         }
+
+    def predict_rank(self, data, top_k_only, *, verbose=False):
+        """
+        A wrapper for all the other functions that includes all pipelines ranked instead of just the top k
+        :data: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
+        from each dataset being passed in.  This is used for the rankings
+        :return:
+        """
+        # if we are using top k only to stay true to their code
+        if top_k_only == True:
+            return self.predict_rank_k_only(data, verbose=verbose)
+
+        data = pd.DataFrame(data)
+        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(data, rank_type="all")
+        test_pipelines = [value[1]["pipeline"]["id"] for value in data.iterrows()]
+
+        # don't rank "training set only" pipelines
+        for pipeline_id in set(k_best_pipelines_per_dataset).difference(set(test_pipelines)):
+            k_best_pipelines_per_dataset.remove(pipeline_id)
+
+        return {
+            'pipeline_id': k_best_pipelines_per_dataset,
+            'rank': list(range(len(k_best_pipelines_per_dataset))),
+        }
+
 
     def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True, *, validation_data=None, output_dir=None, verbose=False):
         """

@@ -8,9 +8,10 @@ import sklearn.utils
 
 
 class KNearestDatasets(object):
-    def __init__(self, metric='l1', random_state=None, metric_params=None):
+    def __init__(self, metric='l1', random_state=None, metric_params=None, rank_distance_metric=None):
 
         self.metric = metric
+        self.rank_distance_metric = rank_distance_metric
         self.model = None
         self.metric_params = metric_params
         self.metafeatures = None
@@ -52,6 +53,7 @@ class KNearestDatasets(object):
 
         # for each dataset, sort the runs according to their result
         best_configuration_per_dataset = {}
+        all_configuration_per_dataset = {}
 
         if maximize_metric:
             opt = np.nanargmax
@@ -60,6 +62,7 @@ class KNearestDatasets(object):
         for dataset_name in runs:
             if not np.isfinite(runs[dataset_name]).any():
                 best_configuration_per_dataset[dataset_name] = None
+                all_configuration_per_dataset[dataset_name] = None
             else:
                 configuration_idx = ""
                 # TODO: I added this.  Should I take it out?
@@ -69,8 +72,10 @@ class KNearestDatasets(object):
                     runs[dataset_name].iloc[opt_index] = np.nan
 
                 best_configuration_per_dataset[dataset_name] = configuration_idx
+                all_configuration_per_dataset[dataset_name] = runs[dataset_name].reset_index()
 
         self.best_configuration_per_dataset = best_configuration_per_dataset
+        self.all_configuration_per_dataset = all_configuration_per_dataset
 
         if callable(self.metric):
             self._metric = self.metric
@@ -162,6 +167,41 @@ class KNearestDatasets(object):
         if k == -1:
             k = len(kbest)
         return kbest[:k]
+
+    def allBestSuggestions(self, x, exclude_double_configurations=True):
+        """
+        This is our implementation of nearest neighbors to grab the ranking of pipelines.
+        """
+        assert type(x) == pd.Series
+
+        
+        nearest_datasets, distances = self.kNearestDatasets(x, -1, return_distance=True)
+        kbest = []
+
+        added_configurations = set()
+        initialized = False
+        # add the distance ranking to each dataset scores
+        for dataset_name, distance in zip(nearest_datasets, distances):
+            all_configurations = self.all_configuration_per_dataset[dataset_name]
+            if initialized == False:
+                # create the empty dataframe
+                all_pipelines_ranked = pd.DataFrame(columns=["pipeline", "rank"])
+                initialized = True
+
+            # weight the scores by the distance
+            all_configurations[dataset_name] = self.rank_distance_metric(all_configurations[dataset_name], distance)
+            all_configurations.columns = all_pipelines_ranked.columns
+            all_pipelines_ranked = all_pipelines_ranked.append(all_configurations, ignore_index=True)
+
+        # pick the top ranked pipeline for each pipeline
+        row_list = []
+        for pipeline in all_pipelines_ranked["pipeline"].unique():
+            rank_score = all_pipelines_ranked[all_pipelines_ranked["pipeline"] == pipeline]["rank"].max()
+            row_list.append({"pipeline": pipeline, "rank": rank_score})
+
+        final_df = pd.DataFrame(row_list)
+        final_df.sort_values("rank", inplace=True)
+        return final_df["pipeline"].tolist()
 
     """
     Scaling should have already been done in the preprocessing part of DNA 

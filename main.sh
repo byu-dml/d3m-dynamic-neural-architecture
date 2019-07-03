@@ -33,6 +33,7 @@ python3 dna evaluate \
     --model autosklearn \
     --problem rank \
     --k $k \
+    --model-config-path ./model_configs/autosklearn_config.json \
     --metafeature-subset $metafeature_subset \
     --scores top-k-count top-1-regret top-k-regret \
     --train-path $train_path \
