@@ -157,12 +157,12 @@ def evaluate_handler(
         problem = problem_resolver(problem_name)
         if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
-            train_predictions, test_predictions, train_scores, test_scores = problem.run(
+            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
                 train_data, test_data, model, k, getattr(arguments, 'scores'), model_config=model_config,
                 re_fit_model=False, verbose=arguments.verbose, output_dir=model_output_dir
             )
         else:
-            train_predictions, test_predictions, train_scores, test_scores = problem.run(
+            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
                 train_data, test_data, model, model_config=model_config, re_fit_model=False,
                 verbose=arguments.verbose, output_dir=model_output_dir
             )
@@ -170,11 +170,13 @@ def evaluate_handler(
             'problem_name': problem_name,
             'model_name': model_name,
             'train_scores': train_scores,
-            'test_scores': test_scores
+            'test_scores': test_scores,
+            **timings,
         })
         if arguments.verbose:
             print('train scores:\n{}'.format(train_scores))
             print('test scores:\n{}'.format(test_scores))
+            print('model runtimes (s):\n{}'.format(timings))
             print()
 
     record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -220,7 +222,8 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
 
 
 def record_run(
-    run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,  scores: typing.Dict = None
+    run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
+    scores: typing.Dict = None
 ):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
