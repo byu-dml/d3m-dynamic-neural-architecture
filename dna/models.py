@@ -776,7 +776,7 @@ class MedianBaseline(RegressionModelBase):
 class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
-        super().__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.primitive_scores = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
