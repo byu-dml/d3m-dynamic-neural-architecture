@@ -1,0 +1,8 @@
+{
+    "__init__": {
+        "rank_distance_metric": "inverse"
+    },
+    "predict_rank": {
+        "top_k_only": false
+    }
+}
