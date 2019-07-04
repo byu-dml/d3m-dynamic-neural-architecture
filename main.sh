@@ -65,6 +65,7 @@ python3 dna evaluate \
 python3 dna evaluate \
     --model per_primitive_regression \
     --problem regression rank \
+    --k $k \
     --scores top-k-count top-1-regret spearman top-k-regret pearson \
     --train-path $train_path \
     --test-size $validation_size \
