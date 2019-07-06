@@ -1170,14 +1170,14 @@ class PMF(nn.Module):
         self.device = device
         assert type(n_pipelines) == int and type(n_datasets) == int and type(n_factors) == int, "given wrong input for PMF: expected int"
 
-        # TODO: do something with the seed
-        self.pipeline_factors = torch.nn.Embedding(n_pipelines, 
-                                               n_factors,
-                                               sparse=True).to(self.device)
+        with PyTorchRandomStateContext(seed):
+            self.pipeline_factors = torch.nn.Embedding(n_pipelines, 
+                                                n_factors,
+                                                sparse=True).to(self.device)
 
-        self.dataset_factors = torch.nn.Embedding(n_datasets, 
-                                               n_factors,
-                                               sparse=True).to(self.device)
+            self.dataset_factors = torch.nn.Embedding(n_datasets, 
+                                                n_factors,
+                                                sparse=True).to(self.device)
 
     def forward(self, args):
         pipeline_id, pipeline, x = args
