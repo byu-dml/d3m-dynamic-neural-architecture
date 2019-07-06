@@ -138,3 +138,16 @@ python3 dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose
+
+
+python3 dna evaluate \
+    --model probabilistic_matrix_factorization \
+    --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
+    --problem regression rank \
+    --k $k \
+    --scores top-k-count top-1-regret spearman top-k-regret pearson \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
