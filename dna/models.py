@@ -336,7 +336,7 @@ class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
         predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
         ranks = utils.rank(predictions)
         return {
-            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
 
@@ -827,9 +827,8 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
     def predict_rank(self, data, *, verbose=False):
         predictions = self.predict_regression(data)
         ranks = utils.rank(predictions)
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
         return {
-            'pipeline_id': pipeline_ids,
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
 
@@ -846,10 +845,9 @@ class RandomBaseline(RankModelBase):
 
     def predict_rank(self, data, *, verbose=False):
         predictions = list(range(len(data)))
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
         self._random_state.shuffle(predictions)
         return {
-            'pipeline_id': pipeline_ids,
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': predictions,
         }
 
@@ -885,9 +883,8 @@ class SklearnBase(RegressionModelBase, RankModelBase):
 
         predictions = self.predict_regression(data)
         ranks = utils.rank(predictions)
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
         return {
-            'pipeline_id': pipeline_ids,
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
 
@@ -969,7 +966,7 @@ class AutoSklearnMetalearner(RankModelBase):
     def __init__(self, seed=0):
         RankModelBase.__init__(self, seed=seed)
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, runs, current_dataset_name):
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures):
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         # this should aready be done by the time it gets here
@@ -993,10 +990,8 @@ class AutoSklearnMetalearner(RankModelBase):
         # they all should have the same dataset and metafeatures so take it from the first row
         dataset_metafeatures = data["metafeatures"].iloc[0]
         dataset_name = data["dataset_id"].iloc[0]
-        all_other_metafeatures = self.metafeatures
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, all_other_metafeatures, self.runs, dataset_name)
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures)
         return pipelines
-
 
     def predict_rank(self, data, *, verbose=False):
         """
@@ -1019,29 +1014,10 @@ class AutoSklearnMetalearner(RankModelBase):
         :param metric: what kind of metric we're using in our metalearning
         :param maximize_metric: whether to maximize or minimize that metric.  Defaults to Maximize
         """
-        # if metadata_path is None:
-        self.runs = None
-        self.test_runs = None
-        self.metafeatures = None
-        self.datasets = []
-        self.testset = []
-        self.pipeline_descriptions = {}
-        self.metric = metric
         self.maximize_metric = maximize_metric
-        self.opt = np.nanmax
-        if training_dataset is None:
-            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
-            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="test")
-            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="train")
-        else:
-            self.metadata = training_dataset
-            self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
-            self.runs = pd.DataFrame(self.metadata)[['dataset_id', 'pipeline', 'test_f1_macro']]
-            self.run_lookup = self.process_runs()
+        self.metadata = training_dataset
+        self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
+        self.run_lookup = self.process_runs()
 
     def process_runs(self):
         """
@@ -1050,12 +1026,12 @@ class AutoSklearnMetalearner(RankModelBase):
         :return:
         """
         new_runs = {}
-        for index, row in self.runs.iterrows():
-            dataset_name = row["dataset_id"]
+        for index, row in enumerate(self.metadata):
+            dataset_name = row['dataset_id']
             if dataset_name not in new_runs:
                 new_runs[dataset_name] = {}
             else:
-                new_runs[dataset_name][row["pipeline"]['id']] = row['test_f1_macro']
+                new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
         final_new = pd.DataFrame(new_runs)
         return final_new
 
@@ -1069,8 +1045,8 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'autosklearn': AutoSklearnMetalearner,
         'dagrnn_regression': DAGRNNRegressionModel,
         'linear_regression': LinearRegressionBaseline,
-        "random": RandomBaseline,
-        "meta_autosklearn": MetaAutoSklearn,
+        'random': RandomBaseline,
+        'meta_autosklearn': MetaAutoSklearn,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
