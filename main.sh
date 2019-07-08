@@ -23,13 +23,13 @@ metafeature_subset=all
 results_dir=./dev_results
 
 
-python3 dna split-data \
+python3 -m dna split-data \
     --data-path $raw_data_path \
     --test-size $test_size \
     --split-seed $test_split_seed
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model autosklearn \
     --problem rank \
     --k $k \
@@ -42,7 +42,7 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model mean_regression \
     --problem regression \
     --train-path $train_path \
@@ -52,7 +52,7 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model median_regression \
     --problem regression \
     --train-path $train_path \
@@ -62,7 +62,7 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model per_primitive_regression \
     --problem regression rank \
     --k $k \
@@ -74,7 +74,7 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model linear_regression \
     --problem regression rank \
     --k $k \
@@ -87,7 +87,7 @@ python3 dna evaluate \
     --verbose
 
 
-# python3 dna evaluate \
+# python3 -m dna evaluate \
 #     --model meta_autosklearn \
 #     --model-config-path ./model_configs/meta_autosklearn_config.json \
 #     --problem regression rank \
@@ -101,7 +101,7 @@ python3 dna evaluate \
 #     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model random \
     --problem rank \
     --k $k \
@@ -114,7 +114,7 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
     --problem regression rank \
@@ -128,7 +128,7 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model dagrnn_regression \
     --model-config-path ./model_configs/dagrnn_regression_config.json \
     --problem regression rank \

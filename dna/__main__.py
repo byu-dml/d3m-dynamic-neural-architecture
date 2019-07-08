@@ -6,9 +6,9 @@ import sys
 import typing
 import uuid
 
-from data import get_data, preprocess_data, split_data
-from models import get_model
-from problems import get_problem
+from dna.data import get_data, preprocess_data, split_data
+from dna.models import get_model
+from dna.problems import get_problem
 
 
 def configure_split_parser(parser):

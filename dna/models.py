@@ -2,18 +2,19 @@ import json
 import os
 import typing
 
+# import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
+from sklearn import linear_model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
-from kND import KNearestDatasets
-from sklearn import linear_model
-import utils
-# import autosklearn.regression as autosklearn
+from dna.data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
+from dna.kND import KNearestDatasets
+from dna import utils
+
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
