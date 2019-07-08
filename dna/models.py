@@ -781,10 +781,10 @@ class MedianBaseline(RegressionModelBase):
         return [self.median] * len(data)
 
 
-class PerPrimitiveBaseline(RegressionModelBase):
+class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.primitive_scores = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
@@ -822,6 +822,15 @@ class PerPrimitiveBaseline(RegressionModelBase):
             predictions.append(prediction)
 
         return predictions
+
+    def predict_rank(self, data, *, verbose=False):
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': ranks,
+        }
 
 
 class RandomBaseline(RankModelBase):
