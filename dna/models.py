@@ -9,10 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
-from kND import KNearestDatasets
+from dna.data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
+from dna.kND import KNearestDatasets
 from sklearn import linear_model
-import utils
+from dna import utils
 import autosklearn.regression as autosklearn
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}

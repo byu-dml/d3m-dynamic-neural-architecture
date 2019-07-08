@@ -4,7 +4,7 @@ import pandas as pd
 import scipy.stats
 from sklearn.metrics import accuracy_score, mean_squared_error
 
-import utils
+from dna import utils
 
 
 def accuracy(y_hat, y):

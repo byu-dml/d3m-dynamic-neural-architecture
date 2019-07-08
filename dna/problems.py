@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import time
 
-from data import group_json_objects
-from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna.data import group_json_objects
+from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
 class ProblemBase:
 
