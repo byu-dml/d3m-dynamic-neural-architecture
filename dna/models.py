@@ -830,9 +830,7 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
         return {
             'pipeline_id': pipeline_ids,
             'rank': ranks,
-        } 
-
-    
+        }
 
 
 class RandomBaseline(RankModelBase):
