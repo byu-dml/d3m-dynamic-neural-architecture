@@ -13,7 +13,7 @@ from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from kND import KNearestDatasets
 from sklearn import linear_model
 import utils
-import autosklearn.regression as autosklearn
+# import autosklearn.regression as autosklearn
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
