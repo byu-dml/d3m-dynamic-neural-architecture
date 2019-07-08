@@ -11,7 +11,9 @@ from tqdm import tqdm
 
 from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from kND import KNearestDatasets
+from sklearn import linear_model
 import utils
+import autosklearn.regression as autosklearn
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
@@ -393,79 +395,23 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
         )
 
 
-class DAGRNN(nn.Module):
-    """
-    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
-    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
-    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
-    The primitives are one hot encoded. This DAG RNN initializes the hidden state with zeros.
-    """
+class DAGRNNModule(nn.Module):
+    def __init__(self, bidirectional: bool, lstm_n_layers: int, rnn_input_size: int, hidden_state_size: int,
+                 lstm_dropout: float, device: str):
+        super().__init__()
 
-    def __init__(
-        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float,
-        bidirectional: bool, output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float,
-        use_batch_norm: bool, use_skip: bool, rnn_input_size: int, output_size: int, device: str, seed: int, *,
-        output_submodule_in_layer_extra_size: int=None
-    ):
-        super(DAGRNN, self).__init__()
-
-        self.activation_name = activation_name
-        self.use_batch_norm = use_batch_norm
-        self.use_skip = use_skip
-        self.output_size = output_size
-        self.device = device
-        self._output_seed = seed + 2
-        self.hidden_state_size = hidden_state_size
-
-        n_directions = 2 if bidirectional else 1
-        self.hidden_state_dim0_size = lstm_n_layers * n_directions
         self.lstm = nn.LSTM(
             input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
             bidirectional=bidirectional, batch_first=True
         )
-        self.lstm.to(device=self.device)
-
-        lstm_output_size = hidden_state_size * n_directions
-        output_submodule_input_size = lstm_output_size
-        if output_submodule_in_layer_extra_size is not None:
-            output_submodule_input_size += output_submodule_in_layer_extra_size
-
-        self.output_n_hidden_layers = output_n_hidden_layers
-        self.output_hidden_layer_size = output_hidden_layer_size
-        self.output_dropout = output_dropout
-        self._output_submodule = self._get_output_submodule(input_size=output_submodule_input_size)
+        self.lstm.to(device=device)
 
         self.NULL_INPUTS = ['inputs.0']
 
-    def _get_output_submodule(self, input_size):
-        layer_sizes = [input_size] + [self.output_hidden_layer_size] * self.output_n_hidden_layers
-        layer_sizes += [self.output_size]
-        return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._output_seed, dropout=self.output_dropout
-        )
-
-    def forward(self, args):
-        (pipeline_structure, pipelines, metafeatures) = args
-
-        batch_size = pipelines.shape[0]
+    def forward(self, pipelines, pipeline_structure, lstm_start_state):
         seq_len = pipelines.shape[1]
+        assert len(pipeline_structure) == seq_len, 'Pipeline sequence length does not match length of pipeline structure'
 
-        assert len(metafeatures) == batch_size
-        assert len(pipeline_structure) == seq_len
-
-        hidden_state = torch.zeros(self.hidden_state_dim0_size, batch_size, self.hidden_state_size, device=self.device)
-        cell_state = hidden_state
-        lstm_start_state = (hidden_state, cell_state)
-
-
-        dag_rnn_output = self.parse_DAG(seq_len, pipelines, pipeline_structure, lstm_start_state)
-        fc_input = torch.cat((dag_rnn_output, metafeatures), dim=1)
-
-        fc_output = self._output_submodule(fc_input)
-        return fc_output.squeeze()
-
-    def parse_DAG(self, seq_len, pipelines, pipeline_structure, lstm_start_state):
         # Keep track of the previous hidden and cell states as we traverse the pipeline
         prev_lstm_states = []
 
@@ -497,7 +443,7 @@ class DAGRNN(nn.Module):
             prev_lstm_states.append(lstm_output_state)
 
         # Since we're doing 1 primitive at a time, the sequence length in the LSTM output is 1
-        # Squeeze so the fully connected input is of shape batch size by num_directions*hidden_size
+        # Squeeze so the dag rnn module's output is of shape batch size by num_directions*hidden_size
         return lstm_output.squeeze(dim=1)
 
     @staticmethod
@@ -517,6 +463,73 @@ class DAGRNN(nn.Module):
         mean_cell_state = torch.mean(input_cell_states, dim=0)
 
         return (mean_hidden_state, mean_cell_state)
+
+class DAGRNN(nn.Module):
+    """
+    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
+    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
+    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
+    The primitives are one hot encoded. This DAG RNN initializes the hidden state with zeros.
+    """
+
+    def __init__(
+        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float,
+        bidirectional: bool, output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float,
+        use_batch_norm: bool, use_skip: bool, rnn_input_size: int, output_size: int, device: str, seed: int, *,
+        output_submodule_in_layer_extra_size: int=None
+    ):
+        super(DAGRNN, self).__init__()
+
+        self.activation_name = activation_name
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
+        self.output_size = output_size
+        self.device = device
+        self._output_seed = seed + 2
+        self.hidden_state_size = hidden_state_size
+
+        self.dag_rnn_module = DAGRNNModule(bidirectional, lstm_n_layers, rnn_input_size, hidden_state_size,
+                                           lstm_dropout, self.device)
+
+        n_directions = 2 if bidirectional else 1
+        self.hidden_state_dim0_size = lstm_n_layers * n_directions
+        lstm_output_size = hidden_state_size * n_directions
+        output_submodule_input_size = lstm_output_size
+        if output_submodule_in_layer_extra_size is not None:
+            output_submodule_input_size += output_submodule_in_layer_extra_size
+
+        self.output_n_hidden_layers = output_n_hidden_layers
+        self.output_hidden_layer_size = output_hidden_layer_size
+        self.output_dropout = output_dropout
+        self._output_submodule = self._get_output_submodule(input_size=output_submodule_input_size)
+
+    def _get_output_submodule(self, input_size):
+        layer_sizes = [input_size] + [self.output_hidden_layer_size] * self.output_n_hidden_layers
+        layer_sizes += [self.output_size]
+        return Submodule(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            seed=self._output_seed, dropout=self.output_dropout
+        )
+
+    def init_hidden_and_cell_state(self, batch_size):
+        hidden_state = torch.zeros(self.hidden_state_dim0_size, batch_size, self.hidden_state_size, device=self.device)
+        cell_state = hidden_state
+        lstm_start_state = (hidden_state, cell_state)
+        return lstm_start_state
+
+    def forward(self, args):
+        (pipeline_structure, pipelines, metafeatures) = args
+
+        batch_size = pipelines.shape[0]
+        assert len(metafeatures) == batch_size, 'Pipeline batch size does not match metafeatures batch size'
+
+        lstm_start_state = self.init_hidden_and_cell_state(batch_size)
+
+        dag_rnn_output = self.dag_rnn_module(pipelines, pipeline_structure, lstm_start_state)
+        fc_input = torch.cat((dag_rnn_output, metafeatures), dim=1)
+
+        fc_output = self._output_submodule(fc_input)
+        return fc_output.squeeze()
 
 
 class MetaHiddenDAGRNN(DAGRNN):
@@ -567,11 +580,16 @@ class MetaHiddenDAGRNN(DAGRNN):
         (pipeline_structure, pipelines, metafeatures) = args
 
         batch_size = pipelines.shape[0]
-        seq_len = pipelines.shape[1]
-
         assert len(metafeatures) == batch_size
-        assert len(pipeline_structure) == seq_len
 
+        lstm_start_state = self.init_hidden_and_cell_state(metafeatures)
+
+        fc_input = self.dag_rnn_module(pipelines, pipeline_structure, lstm_start_state)
+
+        fc_output = self._output_submodule(fc_input)
+        return fc_output.squeeze()
+
+    def init_hidden_and_cell_state(self, metafeatures):
         # Pass the metafeatures through the input layer
         metafeatures = self._input_submodule(metafeatures)
         metafeatures = self.activation(metafeatures)
@@ -593,11 +611,7 @@ class MetaHiddenDAGRNN(DAGRNN):
 
         cell_state = hidden_state
         lstm_start_state = (hidden_state, cell_state)
-
-        fc_input = self.parse_DAG(seq_len, pipelines, pipeline_structure, lstm_start_state)
-
-        fc_output = self._output_submodule(fc_input)
-        return fc_output.squeeze()
+        return lstm_start_state
 
 
 class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
@@ -881,6 +895,136 @@ class PerPrimitiveBaseline(RegressionModelBase):
         return predictions
 
 
+class RandomBaseline(RankModelBase):
+
+    def __init__(self, seed=0):
+        RankModelBase.__init__(self, seed=seed)
+        self._random_state = np.random.RandomState(seed)
+        self.fitted = True
+
+    def fit(self, *args, **kwargs):
+        pass
+
+    def predict_rank(self, data, *, verbose=False):
+        predictions = list(range(len(data)))
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        self._random_state.shuffle(predictions)
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': predictions,
+        }
+
+
+class SklearnBase(RegressionModelBase, RankModelBase):
+
+    def __init__(self, seed=0):
+        RegressionModelBase.__init__(self, seed=seed)
+        RankModelBase.__init__(self, seed=seed)
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
+
+    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+        self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
+        data = pd.DataFrame(data)
+        y = data['test_f1_macro']
+        X_data = self.prepare_data(data)
+        self.regressor.fit(X_data, y)
+        self.fitted = True
+
+    def predict_regression(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        data = pd.DataFrame(data)
+        X_data = self.prepare_data(data)
+        return self.regressor.predict(X_data)
+
+    def predict_rank(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        pipeline_ids = [instance['pipeline']['id'] for instance in data]
+        return {
+            'pipeline_id': pipeline_ids,
+            'rank': ranks,
+        }
+
+    def prepare_data(self, data):
+        # expand the column of lists of metafeatures into a full dataframe
+        metafeature_df = pd.DataFrame(data.metafeatures.values.tolist()).reset_index(drop=True)
+        assert np.isnan(metafeature_df.values).sum() == 0, 'metafeatures should not contain nans'
+        assert np.isinf(metafeature_df.values).sum() == 0, 'metafeatures should not contain infs'
+
+        encoded_pipelines = self.one_hot_encode_pipelines(data)
+        assert np.isnan(encoded_pipelines.values).sum() == 0, 'pipeline encodings should not contain nans'
+        assert np.isinf(encoded_pipelines.values).sum() == 0, 'pipeline encodings should not contain infs'
+
+        # concatenate the parts together and validate
+        assert metafeature_df.shape[0] == encoded_pipelines.shape[0], 'number of metafeature instances does not match number of pipeline instances'
+        X_data = pd.concat([encoded_pipelines, metafeature_df], axis=1, ignore_index=True)
+        assert X_data.shape[1] == (encoded_pipelines.shape[1] + metafeature_df.shape[1]), 'dataframe was combined incorrectly'
+        return X_data
+
+    def _one_hot_encode_mapping(self, data):
+        primitive_names = set()
+
+        # Get a set of all the primitives in the train set
+        for instance in data:
+            primitives = instance[self.pipeline_key][self.steps_key]
+            for primitive in primitives:
+                primitive_name = primitive[self.prim_name_key]
+                primitive_names.add(primitive_name)
+
+        primitive_names = sorted(primitive_names)
+
+        # Get one hot encodings of all the primitives
+        self.n_primitives = len(primitive_names)
+        encoding = np.identity(n=self.n_primitives)
+
+        # Create a mapping of primitive names to one hot encodings
+        primitive_name_to_enc = {}
+        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+            primitive_name_to_enc[primitive_name] = primitive_encoding
+
+        return primitive_name_to_enc
+
+    def one_hot_encode_pipelines(self, data):
+        return pd.DataFrame([self.encode_pipeline(pipeline) for pipeline in data[self.pipeline_key]])
+
+    def encode_pipeline(self, pipeline):
+        """
+        Encodes a pipeline by OR-ing the one-hot encoding of the primitives.
+        """
+        encoding = np.zeros(self.n_primitives)
+        for primitive in pipeline[self.steps_key]:
+            primitive_name = primitive[self.prim_name_key]
+            # get the position of the one hot encoding
+            primitive_index = np.argmax(self.one_hot_primitives_map[primitive_name])
+            encoding[primitive_index] = 1
+        return encoding
+
+
+class LinearRegressionBaseline(SklearnBase):
+
+    def __init__(self, seed=0):
+        SklearnBase.__init__(self, seed=seed)
+        self.regressor = linear_model.LinearRegression()
+        self.fitted = False
+
+
+class MetaAutoSklearn(SklearnBase):
+
+    def __init__(self, time_left_for_this_task=60, per_run_time_limit=10, seed=0):
+        SklearnBase.__init__(self, seed=seed)
+        self.regressor = autosklearn.AutoSklearnRegressor(
+            time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit, seed=seed
+        )
+        self.fitted = False
+
+
 class AutoSklearnMetalearner(RankModelBase):
 
     def __init__(self, seed=0):
@@ -985,7 +1129,10 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
         'dagrnn_regression': DAGRNNRegressionModel,
-        'meta_hidden_dagrnn_regression': MetaHiddenDAGRNNRegressionModel
+        'meta_hidden_dagrnn_regression': MetaHiddenDAGRNNRegressionModel,
+        'linear_regression': LinearRegressionBaseline,
+        "random": RandomBaseline,
+        "meta_autosklearn": MetaAutoSklearn,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
