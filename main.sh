@@ -87,18 +87,18 @@ python3 dna evaluate \
     --verbose
 
 
-python3 dna evaluate \
-    --model meta_autosklearn \
-    --model-config-path ./model_configs/meta_autosklearn_config.json \
-    --problem regression rank \
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --scores top-k-count top-1-regret spearman top-k-regret pearson \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 dna evaluate \
+#     --model meta_autosklearn \
+#     --model-config-path ./model_configs/meta_autosklearn_config.json \
+#     --problem regression rank \
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --scores top-k-count top-1-regret spearman top-k-regret pearson \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose
 
 
 python3 dna evaluate \

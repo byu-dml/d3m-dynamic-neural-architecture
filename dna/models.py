@@ -13,7 +13,7 @@ from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from kND import KNearestDatasets
 from sklearn import linear_model
 import utils
-import autosklearn.regression as autosklearn
+# import autosklearn.regression as autosklearn
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
@@ -82,8 +82,8 @@ class DNAModule(nn.Module):
 
     def __init__(
         self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
-        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
-        device: str = 'cuda:0', seed: int = 0
+        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
+        *, device: str = 'cuda:0', seed: int = 0
     ):
         super(DNAModule, self).__init__()
         self.submodule_input_sizes = submodule_input_sizes
@@ -95,6 +95,7 @@ class DNAModule(nn.Module):
         self._activation = F_ACTIVATIONS[activation_name]
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
+        self.dropout = dropout
         self.device = device
         self.seed = seed
         self._input_seed = seed + 1
@@ -107,14 +108,14 @@ class DNAModule(nn.Module):
     def _get_input_submodule(self):
         layer_sizes = [self.input_layer_size] + [self.hidden_layer_size] * (self.n_layers - 1)
         return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
             seed=self._input_seed
         )
 
     def _get_output_submodule(self):
         layer_sizes = [self.hidden_layer_size] * (self.n_layers - 1) + [self.output_layer_size]
         return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
             seed=self._output_seed
         )
 
@@ -123,7 +124,7 @@ class DNAModule(nn.Module):
         for i, (submodule_id, submodule_input_size) in enumerate(sorted(self.submodule_input_sizes.items())):
             layer_sizes = [self.hidden_layer_size * submodule_input_size] + [self.hidden_layer_size] * (self.n_layers - 1)
             dynamic_submodules[submodule_id] = Submodule(
-                layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+                layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
                 seed=self._dna_base_seed + i
             )
         return dynamic_submodules
@@ -343,7 +344,7 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
-        use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+        use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
         RegressionModelBase.__init__(self, seed=seed)
@@ -354,6 +355,7 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
         self.activation_name = activation_name
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
+        self.dropout = dropout
         self.output_layer_size = 1
         self._model_seed = self.seed + 1
 
@@ -366,8 +368,8 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
 
         return DNAModule(
             submodule_input_sizes, self.n_hidden_layers + 1, self.input_layer_size, self.hidden_layer_size,
-            self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._model_seed
+            self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout,
+            device=self.device, seed=self._model_seed
         )
 
     def _get_loss_function(self):
@@ -431,17 +433,21 @@ class DAGRNN(nn.Module):
             self.input_dropout_layer = nn.Dropout(p=input_dropout)
             self.input_dropout_layer.to(device=device)
 
-        if use_batch_norm:
-            self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-            self.batch_norm.to(device=self.device)
+        with PyTorchRandomStateContext(seed=seed):
+            if use_batch_norm:
+                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+                self.batch_norm.to(device=self.device)
 
-        n_directions = 2 if bidirectional else 1
-        self.hidden_state_dim0_size = lstm_n_layers * n_directions
-        self.lstm = nn.LSTM(
-            input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
-            bidirectional=bidirectional, batch_first=True
-        )
-        self.lstm.to(device=self.device)
+            n_directions = 2 if bidirectional else 1
+            self.hidden_state_dim0_size = lstm_n_layers * n_directions
+            if lstm_dropout > 0 and bidirectional:
+                # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
+                torch.backends.cudnn.enabled = False
+            self.lstm = nn.LSTM(
+                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers,
+                dropout=lstm_dropout, bidirectional=bidirectional, batch_first=True
+            )
+            self.lstm.to(device=self.device)
 
         lstm_output_size = hidden_state_size * n_directions
         self.output_n_hidden_layers = output_n_hidden_layers
@@ -523,6 +529,7 @@ class DAGRNN(nn.Module):
                 lstm_input_state = self.get_lstm_input_state(prev_lstm_states=prev_lstm_states,
                                                              primitive_inputs=primitive_inputs)
 
+            # Get the output of the LSTM and the next hidden state and cell state
             (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
 
             prev_lstm_states.append(lstm_output_state)
@@ -634,6 +641,7 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
 
         # Create a mapping of primitive names to one hot encodings
         primitive_name_to_enc = {}
+        primitive_names = sorted(primitive_names)
         for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
             primitive_name_to_enc[primitive_name] = primitive_encoding
 
