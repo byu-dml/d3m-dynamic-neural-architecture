@@ -13,9 +13,8 @@ class MetricsTestCase(unittest.TestCase):
         """
         A helper function for the top k tests.
         """
-        pipeline_dicts = [{"id": id} for id in ids]
-        actual_data = pd.DataFrame({"test_f1_macro": scores, "pipeline": pipeline_dicts})
-        ranked_data = pd.DataFrame({"rank": rank, "pipeline_id": ids})
+        actual_data = pd.DataFrame({'test_f1_macro': scores, 'pipeline_id': ids})
+        ranked_data = pd.DataFrame({'rank': rank, 'pipeline_id': ids})
         return ranked_data, actual_data
 
     def format_and_get_top_k(self, scores, ids, rank, k, top_k_function):
@@ -36,8 +35,8 @@ class MetricsTestCase(unittest.TestCase):
         :param ranked_data: a list of the ranked predictions
         """
         actual_data.reverse() # our rank function in spearman will reverse this back
-        actual_data = pd.DataFrame({"test_f1_macro": actual_data})
-        ranked_data = pd.DataFrame({"rank": ranked_data})
+        actual_data = pd.DataFrame({'test_f1_macro': actual_data})
+        ranked_data = pd.DataFrame({'rank': ranked_data})
         metric = metrics.spearman_correlation(ranked_data, actual_data)
         return metric
 
@@ -113,7 +112,7 @@ class MetricsTestCase(unittest.TestCase):
         true_metric = 0
         np.testing.assert_almost_equal(metric[0], true_metric, decimal=3,
                                        err_msg='failed to get spearman from random example, was {}, shouldve been {}'.format(metric, true_metric))
-        assert metric[1] > .1, "pvalue for random was too significant for random: {}".format(metric[1])
+        assert metric[1] > .1, 'pvalue for random was too significant for random: {}'.format(metric[1])
 
 
     def test_pearson_correlation(self):
