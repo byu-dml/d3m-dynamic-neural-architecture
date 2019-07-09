@@ -2,9 +2,9 @@ import json
 import os
 import typing
 
+import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
-import autosklearn.regression as autosklearn
 from sklearn import linear_model
 import torch
 import torch.nn as nn
