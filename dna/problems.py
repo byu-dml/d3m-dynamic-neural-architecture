@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
 import time
+import os
+import matplotlib.pyplot as plt
 
 from dna.data import group_json_objects
 from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna import utils
 
 class ProblemBase:
 
@@ -45,8 +48,12 @@ class ProblemBase:
         test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
         test_predict_time = time.time() - start_timestamp
 
-        train_scores = self._score(train_predictions, train_data, graph_name='train', graph_directory=output_dir)
-        test_scores = self._score(test_predictions, test_data, graph_name='validation', graph_directory=output_dir)
+        train_scores = self._score(train_predictions, train_data)
+        self._plot(train_predictions, train_data, plot_name='train', plot_directory=output_dir, scores=train_scores,
+                   problem_name=str(type(self)))
+        test_scores = self._score(test_predictions, test_data)
+        self._plot(test_predictions, test_data, plot_name='validation', plot_directory=output_dir, scores=test_scores,
+                   problem_name=str(type(self)))
 
         timings = {
             'fit_time': fit_time,
@@ -57,12 +64,48 @@ class ProblemBase:
         return train_predictions, test_predictions, train_scores, test_scores, timings
 
     @staticmethod
-    def _score(predictions, data, graph_name: str = None, graph_directory: str = None):
+    def _score(predictions, data):
         raise NotImplementedError()
 
     @staticmethod
     def _structure_data(data):
         return data
+
+    def _plot(self, predictions, data, plot_name: str, plot_directory: str, scores: dict, problem_name: str):
+        actuals = [item['test_f1_macro'] for item in data]
+        actuals = np.array(actuals)
+        self._plot_base(predictions, actuals, plot_name, plot_directory, scores, problem_name)
+
+    @staticmethod
+    def _plot_base(predictions, actuals, plot_name: str, plot_directory: str, scores: dict, problem_name: str):
+        # Create the title
+        title = ''
+        for (score_name, score_value) in scores.items():
+            title += score_name + ': ' + str(score_value) + '\n'
+        plt.title(title)
+
+        # Set the min and max value on the x and y axis
+        predictions_min = predictions.min()
+        actuals_min = actuals.min()
+        axis_min = min(actuals_min, predictions_min)
+        predictions_max = predictions.max()
+        actuals_max = actuals.max()
+        axis_max = max(actuals_max, predictions_max)
+        plt.xlim(axis_min, axis_max)
+        plt.ylim(axis_min, axis_max)
+
+        # Create the plot
+        plt.xlabel('Predictions')
+        plt.ylabel('Actuals')
+        plt.scatter(predictions, actuals)
+
+        # Save the plot
+        new_dir = os.path.join(plot_directory, problem_name)
+        if not os.path.isdir(new_dir):
+            os.makedirs(new_dir)
+        file_name = os.path.join(new_dir, plot_name)
+        plt.savefig(fname=file_name)
+        plt.clf()
 
 
 class RegressionProblem(ProblemBase):
@@ -70,13 +113,12 @@ class RegressionProblem(ProblemBase):
     _predict_method_name = 'predict_regression'
 
     @staticmethod
-    def _score(predictions, data, graph_name: str = None, graph_directory: str = None):
+    def _score(predictions, data):
         targets = []
         for instance in data:
             targets.append(instance['test_f1_macro'])
 
         correlation, p_value = pearson_correlation(predictions, targets)
-        utils.plot_pearson(y_hat=predictions, y=targets, directory=graph_directory, name=graph_name, score=correlation)
 
         return {'RMSE': rmse(predictions, targets), 'PearsonCorrelation': {'correlation_coefficient': correlation, 'p_value': p_value}}
 
@@ -117,8 +159,12 @@ class RankProblem(ProblemBase):
         test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
         test_predict_time = time.time() - start_timestamp
 
-        train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k, output_dir)
-        test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k, output_dir)
+        train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k)
+        self._plot(train_predicted_ranks, train_data_by_dataset, plot_name='train', plot_directory=output_dir,
+                   scores=train_scores, problem_name=str(type(self)))
+        test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k)
+        self._plot(test_predicted_ranks, test_data_by_dataset, plot_name='validation', plot_directory=output_dir,
+                   scores=test_scores, problem_name=str(type(self)))
 
         timings = {
             'fit_time': fit_time,
@@ -147,7 +193,7 @@ class RankProblem(ProblemBase):
         return predictions_by_dataset
 
     @staticmethod
-    def _score(scores, predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k, output_dir):
+    def _score(scores, predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k):
         if not scores:
             return {}
 
@@ -170,8 +216,6 @@ class RankProblem(ProblemBase):
                 spearman_ps.append(p_value)
             if 'pearson' in scores:
                 coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'])
-                utils.plot_pearson(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'],
-                                                           name=dataset_id, directory=output_dir, score=coefficient)
                 pearson_coefs.append(coefficient)
                 pearson_ps.append(p_value)
             if 'top-1-regret' in scores:
@@ -213,6 +257,17 @@ class RankProblem(ProblemBase):
             }
 
         return results
+
+    def _plot(self, predictions, data, plot_name: str, plot_directory: str, scores: dict, problem_name: str):
+        for (dataset_id, predicted_ranks) in predictions.items():
+            predicted_ranks = pd.DataFrame(predicted_ranks)
+            predicted_ranks = predicted_ranks['rank'].tolist()
+            predicted_ranks = np.array(predicted_ranks)
+            actuals_by_dataset = pd.DataFrame(data[dataset_id])
+            actuals = actuals_by_dataset['test_f1_macro'].tolist()
+            actual_ranks = utils.rank(actuals)
+            plot_name = plot_name + '_' + dataset_id
+            ProblemBase._plot_base(predicted_ranks, actual_ranks, plot_name, plot_directory, scores, problem_name)
 
 
 def get_problem(problem_name):
