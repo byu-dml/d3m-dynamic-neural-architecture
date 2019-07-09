@@ -399,6 +399,12 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
 
 
 class DAGRNNModule(nn.Module):
+    """
+    The DAG RNN module parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
+    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
+    The primitives are one hot encoded.
+    """
+
     def __init__(self, bidirectional: bool, lstm_n_layers: int, rnn_input_size: int, hidden_state_size: int,
                  lstm_dropout: float, device: str, seed: int):
         super().__init__()
@@ -470,10 +476,8 @@ class DAGRNNModule(nn.Module):
 
 class DAGRNN(nn.Module):
     """
-    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
-    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
-    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
-    The primitives are one hot encoded. This DAG RNN initializes the hidden state with zeros.
+    This DAG RNN initializes the hidden state with zeros. It encodes pipelines using the DAG RNN module.
+    It then concatenates the encoded pipelines with the metafeatures and passes that through an output submodule.
     """
 
     def __init__(
@@ -546,8 +550,9 @@ class DAGRNN(nn.Module):
 class MetaHiddenDAGRNN(DAGRNN):
     """
     This DAG RNN, unlike the one that it extends, initializes the hidden state by mapping the metafeatures to a new
-    feature space using a submodule. Then those mapped metafeatures are duplicated and concatenated to form an
-    initial hidden state.
+    feature space using an input submodule. Then those mapped metafeatures are duplicated and concatenated to form an
+    initial hidden state. The pipeline is encoded using this initial hidden state and the encoding is passed though
+    an output submodule.
     """
 
     def __init__(
