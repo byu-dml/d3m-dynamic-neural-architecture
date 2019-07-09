@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
+import time
 
-from data import group_json_objects
-from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
-import utils
+from dna.data import group_json_objects
+from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
 class ProblemBase:
 
@@ -26,19 +26,35 @@ class ProblemBase:
         fit_model_config = model_config.get('fit', {})
         predict_regression_model_config = model_config.get(self._predict_method_name, {})
 
+        fit_time = None
         if not model.fitted or re_fit_model:
+            start_time = time.time()
             model.fit(
                 train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
             )
+            fit_time = time.time() - start_time
+
 
         model_predict_method = getattr(model, self._predict_method_name)
+
+        start_timestamp = time.time()
         train_predictions = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
+        train_predict_time = time.time() - start_timestamp
+
+        start_timestamp = time.time()
         test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
+        test_predict_time = time.time() - start_timestamp
 
         train_scores = self._score(train_predictions, train_data, graph_name='train', graph_directory=output_dir)
         test_scores = self._score(test_predictions, test_data, graph_name='validation', graph_directory=output_dir)
 
-        return train_predictions, test_predictions, train_scores, test_scores
+        timings = {
+            'fit_time': fit_time,
+            'train_predict_time': train_predict_time,
+            'test_predict_time': test_predict_time,
+        }
+
+        return train_predictions, test_predictions, train_scores, test_scores, timings
 
     @staticmethod
     def _score(predictions, data, graph_name: str = None, graph_directory: str = None):
@@ -82,21 +98,35 @@ class RankProblem(ProblemBase):
         fit_model_config = model_config.get('fit', {})
         predict_rank_model_config = model_config.get('predict_rank', {})
 
+        fit_time = None
         if not model.fitted or re_fit_model:
+            start_timestamp = time.time()
             model.fit(
                 train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
             )
+            fit_time = time.time() - start_timestamp
 
         train_data_by_dataset = self._group_data(train_data)
         test_data_by_dataset = self._group_data(test_data)
 
+        start_timestamp = time.time()
         train_predicted_ranks = self._predict_rank(train_data_by_dataset, model, verbose, predict_rank_model_config)
+        train_predict_time = time.time() - start_timestamp
+
+        start_timestamp = time.time()
         test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
+        test_predict_time = time.time() - start_timestamp
 
         train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k, output_dir)
         test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k, output_dir)
 
-        return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores
+        timings = {
+            'fit_time': fit_time,
+            'train_predict_time': train_predict_time,
+            'test_predict_time': test_predict_time,
+        }
+
+        return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores, timings
 
     @staticmethod
     def _group_data(data):
@@ -122,7 +152,8 @@ class RankProblem(ProblemBase):
             return {}
 
         top_k_counts = []
-        spearmans = []
+        spearman_coefs = []
+        spearman_ps = []
         pearson_coefs = []
         pearson_ps = []
         top_1_regrets = []
@@ -134,10 +165,9 @@ class RankProblem(ProblemBase):
             if 'top-k-count' in scores:
                 top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
-                correlation = spearman_correlation(predicted_ranks, actual_ranks)
-                spearmans.append(correlation)
-                utils.plot_spearman(predicted_ranks, actual_ranks, name=dataset_id, directory=output_dir,
-                                    score=correlation)
+                correlation, p_value = spearman_correlation(predicted_ranks, actual_ranks)
+                spearman_coefs.append(correlation)
+                spearman_ps.append(p_value)
             if 'pearson' in scores:
                 coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'])
                 utils.plot_pearson(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'],
@@ -158,8 +188,10 @@ class RankProblem(ProblemBase):
             }
         if 'spearman' in scores:
             results['spearman_correlation'] = {
-                'mean': np.mean(spearmans),
-                'std_dev': np.std(spearmans, ddof=1),
+                'mean': np.mean(spearman_coefs),
+                'std_dev': np.std(spearman_coefs, ddof=1),
+                'mean_p_value': np.mean(spearman_ps),
+                'std_dev_p_value': np.std(spearman_ps, ddof=1),
             }
         if 'top-1-regret' in scores:
             results['top_1_regret'] = {
