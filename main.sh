@@ -141,7 +141,7 @@ python3 -m dna evaluate \
     --output-dir $results_dir \
     --verbose
 
-python3 dna evaluate \
+python3 -m dna evaluate \
     --model meta_hidden_dagrnn_regression \
     --model-config-path ./model_configs/meta_hidden_dagrnn_regression_config.json \
     --problem regression rank \
