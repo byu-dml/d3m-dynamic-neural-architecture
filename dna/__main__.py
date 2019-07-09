@@ -6,9 +6,9 @@ import sys
 import typing
 import uuid
 
-from data import get_data, preprocess_data, split_data
-from models import get_model
-from problems import get_problem
+from dna.data import get_data, preprocess_data, split_data
+from dna.models import get_model
+from dna.problems import get_problem
 
 
 def configure_split_parser(parser):
@@ -133,54 +133,53 @@ def evaluate_handler(
 ):
     run_id = str(uuid.uuid4())
 
-    train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
-
-    model_name = getattr(arguments, 'model')
     model_config_path = getattr(arguments, 'model_config_path', None)
     if model_config_path is None:
         model_config = {}
     else:
         with open(model_config_path) as f:
             model_config = json.load(f)
-    model_seed = getattr(arguments, 'model_seed')
-    model = model_resolver(model_name, model_config, seed=model_seed)
 
-    verbose = getattr(arguments, 'verbose')
-    output_dir = getattr(arguments, 'output_dir')
-    output_dir = os.path.join(output_dir, run_id)
+    output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
     model_output_dir = os.path.join(output_dir, 'model')
     os.makedirs(model_output_dir)
 
-    scores = getattr(arguments, 'scores')
+    record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
+
+    train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
+    model_name = getattr(arguments, 'model')
+    model = model_resolver(model_name, model_config, seed=getattr(arguments, 'model_seed'))
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
-        if verbose:
+        if arguments.verbose:
             print('{} {} {}'.format(model_name, problem_name, run_id))
         problem = problem_resolver(problem_name)
         if problem_name == 'rank':  # todo fix this hack to allow problem args
             k = getattr(arguments, 'k')
-            train_predictions, test_predictions, train_scores, test_scores = problem.run(
-                train_data, test_data, model, k, scores, model_config=model_config,
-                re_fit_model=False, verbose=verbose, output_dir=model_output_dir
+            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
+                train_data, test_data, model, k, getattr(arguments, 'scores'), model_config=model_config,
+                re_fit_model=False, verbose=arguments.verbose, output_dir=model_output_dir
             )
         else:
-            train_predictions, test_predictions, train_scores, test_scores = problem.run(
-                train_data, test_data, model, model_config=model_config,
-                re_fit_model=False, verbose=verbose, output_dir=model_output_dir
+            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
+                train_data, test_data, model, model_config=model_config, re_fit_model=False,
+                verbose=arguments.verbose, output_dir=model_output_dir
             )
         result_scores.append({
             'problem_name': problem_name,
             'model_name': model_name,
             'train_scores': train_scores,
-            'test_scores': test_scores
+            'test_scores': test_scores,
+            **timings,
         })
-        if verbose:
-            print('train scores: {}'.format(train_scores))
-            print('test scores: {}'.format(test_scores))
+        if arguments.verbose:
+            print('train scores:\n{}'.format(train_scores))
+            print('test scores:\n{}'.format(test_scores))
+            print('model runtimes (s):\n{}'.format(timings))
             print()
 
-    evaluate_serializer(arguments, parser, result_scores, output_dir, model_config)
+    record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
 
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
@@ -222,21 +221,24 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
     return train_data, test_data
 
 
-def evaluate_serializer(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, scores: typing.Dict, output_dir: str,
-    model_config: typing.Dict
+def record_run(
+    run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
+    scores: typing.Dict = None
 ):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
-    path = os.path.join(output_dir, 'run_results.json')
+    path = os.path.join(output_dir, 'run.json')
+
+    run = {
+        'id': run_id,
+        'arguments': arguments.__dict__,
+        'model_config': model_config,
+    }
+    if scores is not None:
+        run['scores'] = scores
+
     with open(path, 'w') as f:
-        json.dump(
-            {
-                'arguments': arguments.__dict__,
-                'scores': scores,
-                'model_config': model_config
-            }, f, indent=4, sort_keys=True
-        )
+        json.dump(run, f, indent=4, sort_keys=True)
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
@@ -249,7 +251,7 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
         evaluate_handler(arguments, subparser)
 
     else:
-        raise ValueError('A suitable command handler could not be found.')
+        raise ValueError('Unknown command: {}'.format(arguments.command))
 
 
 def main(argv: typing.Sequence):

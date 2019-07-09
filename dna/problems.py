@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
+import time
 
-from data import group_json_objects
-from metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna.data import group_json_objects
+from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
 class ProblemBase:
 
@@ -25,19 +26,35 @@ class ProblemBase:
         fit_model_config = model_config.get('fit', {})
         predict_regression_model_config = model_config.get(self._predict_method_name, {})
 
+        fit_time = None
         if not model.fitted or re_fit_model:
+            start_time = time.time()
             model.fit(
                 train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
             )
+            fit_time = time.time() - start_time
+
 
         model_predict_method = getattr(model, self._predict_method_name)
+
+        start_timestamp = time.time()
         train_predictions = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
+        train_predict_time = time.time() - start_timestamp
+
+        start_timestamp = time.time()
         test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
+        test_predict_time = time.time() - start_timestamp
 
         train_scores = self._score(train_predictions, train_data)
         test_scores = self._score(test_predictions, test_data)
 
-        return train_predictions, test_predictions, train_scores, test_scores
+        timings = {
+            'fit_time': fit_time,
+            'train_predict_time': train_predict_time,
+            'test_predict_time': test_predict_time,
+        }
+
+        return train_predictions, test_predictions, train_scores, test_scores, timings
 
     @staticmethod
     def _score(predictions, data):
@@ -79,21 +96,35 @@ class RankProblem(ProblemBase):
         fit_model_config = model_config.get('fit', {})
         predict_rank_model_config = model_config.get('predict_rank', {})
 
+        fit_time = None
         if not model.fitted or re_fit_model:
+            start_timestamp = time.time()
             model.fit(
                 train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
             )
+            fit_time = time.time() - start_timestamp
 
         train_data_by_dataset = self._group_data(train_data)
         test_data_by_dataset = self._group_data(test_data)
 
+        start_timestamp = time.time()
         train_predicted_ranks = self._predict_rank(train_data_by_dataset, model, verbose, predict_rank_model_config)
+        train_predict_time = time.time() - start_timestamp
+
+        start_timestamp = time.time()
         test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
+        test_predict_time = time.time() - start_timestamp
 
         train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k)
         test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k)
 
-        return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores
+        timings = {
+            'fit_time': fit_time,
+            'train_predict_time': train_predict_time,
+            'test_predict_time': test_predict_time,
+        }
+
+        return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores, timings
 
     @staticmethod
     def _group_data(data):

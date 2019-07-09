@@ -2,18 +2,19 @@ import json
 import os
 import typing
 
+# import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
+from sklearn import linear_model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
-from kND import KNearestDatasets
-from sklearn import linear_model
-import utils
-import autosklearn.regression as autosklearn
+from dna.data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
+from dna.kND import KNearestDatasets
+from dna import utils
+
 
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
@@ -82,8 +83,8 @@ class DNAModule(nn.Module):
 
     def __init__(
         self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
-        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, *,
-        device: str = 'cuda:0', seed: int = 0
+        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
+        *, device: str = 'cuda:0', seed: int = 0
     ):
         super(DNAModule, self).__init__()
         self.submodule_input_sizes = submodule_input_sizes
@@ -95,6 +96,7 @@ class DNAModule(nn.Module):
         self._activation = F_ACTIVATIONS[activation_name]
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
+        self.dropout = dropout
         self.device = device
         self.seed = seed
         self._input_seed = seed + 1
@@ -107,14 +109,14 @@ class DNAModule(nn.Module):
     def _get_input_submodule(self):
         layer_sizes = [self.input_layer_size] + [self.hidden_layer_size] * (self.n_layers - 1)
         return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
             seed=self._input_seed
         )
 
     def _get_output_submodule(self):
         layer_sizes = [self.hidden_layer_size] * (self.n_layers - 1) + [self.output_layer_size]
         return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
             seed=self._output_seed
         )
 
@@ -123,7 +125,7 @@ class DNAModule(nn.Module):
         for i, (submodule_id, submodule_input_size) in enumerate(sorted(self.submodule_input_sizes.items())):
             layer_sizes = [self.hidden_layer_size * submodule_input_size] + [self.hidden_layer_size] * (self.n_layers - 1)
             dynamic_submodules[submodule_id] = Submodule(
-                layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
+                layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
                 seed=self._dna_base_seed + i
             )
         return dynamic_submodules
@@ -334,7 +336,7 @@ class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
         predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
         ranks = utils.rank(predictions)
         return {
-            'pipeline_id': [instance['pipeline']['id'] for instance in data],
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
 
@@ -343,7 +345,7 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
-        use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+        use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
         RegressionModelBase.__init__(self, seed=seed)
@@ -354,6 +356,7 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
         self.activation_name = activation_name
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
+        self.dropout = dropout
         self.output_layer_size = 1
         self._model_seed = self.seed + 1
 
@@ -366,8 +369,8 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
 
         return DNAModule(
             submodule_input_sizes, self.n_hidden_layers + 1, self.input_layer_size, self.hidden_layer_size,
-            self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._model_seed
+            self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout,
+            device=self.device, seed=self._model_seed
         )
 
     def _get_loss_function(self):
@@ -431,17 +434,21 @@ class DAGRNN(nn.Module):
             self.input_dropout_layer = nn.Dropout(p=input_dropout)
             self.input_dropout_layer.to(device=device)
 
-        if use_batch_norm:
-            self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-            self.batch_norm.to(device=self.device)
+        with PyTorchRandomStateContext(seed=seed):
+            if use_batch_norm:
+                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+                self.batch_norm.to(device=self.device)
 
-        n_directions = 2 if bidirectional else 1
-        self.hidden_state_dim0_size = lstm_n_layers * n_directions
-        self.lstm = nn.LSTM(
-            input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers, dropout=lstm_dropout,
-            bidirectional=bidirectional, batch_first=True
-        )
-        self.lstm.to(device=self.device)
+            n_directions = 2 if bidirectional else 1
+            self.hidden_state_dim0_size = lstm_n_layers * n_directions
+            if lstm_dropout > 0 and bidirectional:
+                # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
+                torch.backends.cudnn.enabled = False
+            self.lstm = nn.LSTM(
+                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers,
+                dropout=lstm_dropout, bidirectional=bidirectional, batch_first=True
+            )
+            self.lstm.to(device=self.device)
 
         lstm_output_size = hidden_state_size * n_directions
         self.output_n_hidden_layers = output_n_hidden_layers
@@ -523,6 +530,7 @@ class DAGRNN(nn.Module):
                 lstm_input_state = self.get_lstm_input_state(prev_lstm_states=prev_lstm_states,
                                                              primitive_inputs=primitive_inputs)
 
+            # Get the output of the LSTM and the next hidden state and cell state
             (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
 
             prev_lstm_states.append(lstm_output_state)
@@ -634,6 +642,7 @@ class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
 
         # Create a mapping of primitive names to one hot encodings
         primitive_name_to_enc = {}
+        primitive_names = sorted(primitive_names)
         for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
             primitive_name_to_enc[primitive_name] = primitive_encoding
 
@@ -773,10 +782,10 @@ class MedianBaseline(RegressionModelBase):
         return [self.median] * len(data)
 
 
-class PerPrimitiveBaseline(RegressionModelBase):
+class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.primitive_scores = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
@@ -815,6 +824,14 @@ class PerPrimitiveBaseline(RegressionModelBase):
 
         return predictions
 
+    def predict_rank(self, data, *, verbose=False):
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        return {
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
+            'rank': ranks,
+        }
+
 
 class RandomBaseline(RankModelBase):
 
@@ -828,10 +845,9 @@ class RandomBaseline(RankModelBase):
 
     def predict_rank(self, data, *, verbose=False):
         predictions = list(range(len(data)))
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
         self._random_state.shuffle(predictions)
         return {
-            'pipeline_id': pipeline_ids,
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': predictions,
         }
 
@@ -867,9 +883,8 @@ class SklearnBase(RegressionModelBase, RankModelBase):
 
         predictions = self.predict_regression(data)
         ranks = utils.rank(predictions)
-        pipeline_ids = [instance['pipeline']['id'] for instance in data]
         return {
-            'pipeline_id': pipeline_ids,
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
 
@@ -951,7 +966,7 @@ class AutoSklearnMetalearner(RankModelBase):
     def __init__(self, seed=0):
         RankModelBase.__init__(self, seed=seed)
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, runs, current_dataset_name):
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures):
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         # this should aready be done by the time it gets here
@@ -975,10 +990,8 @@ class AutoSklearnMetalearner(RankModelBase):
         # they all should have the same dataset and metafeatures so take it from the first row
         dataset_metafeatures = data["metafeatures"].iloc[0]
         dataset_name = data["dataset_id"].iloc[0]
-        all_other_metafeatures = self.metafeatures
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, all_other_metafeatures, self.runs, dataset_name)
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures)
         return pipelines
-
 
     def predict_rank(self, data, *, verbose=False):
         """
@@ -1001,29 +1014,10 @@ class AutoSklearnMetalearner(RankModelBase):
         :param metric: what kind of metric we're using in our metalearning
         :param maximize_metric: whether to maximize or minimize that metric.  Defaults to Maximize
         """
-        # if metadata_path is None:
-        self.runs = None
-        self.test_runs = None
-        self.metafeatures = None
-        self.datasets = []
-        self.testset = []
-        self.pipeline_descriptions = {}
-        self.metric = metric
         self.maximize_metric = maximize_metric
-        self.opt = np.nanmax
-        if training_dataset is None:
-            # these are in this order so the metadata holds the train and self.datasets and self.testsets get filled
-            with open(os.path.join(os.getcwd(), "dna/data", "test_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="test")
-            with open(os.path.join(os.getcwd(), "dna/data", "train_data.json"), 'r') as f:
-                self.metadata = json.load(f)
-            self.process_metadata(data_type="train")
-        else:
-            self.metadata = training_dataset
-            self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
-            self.runs = pd.DataFrame(self.metadata)[['dataset_id', 'pipeline', 'test_f1_macro']]
-            self.run_lookup = self.process_runs()
+        self.metadata = training_dataset
+        self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
+        self.run_lookup = self.process_runs()
 
     def process_runs(self):
         """
@@ -1032,12 +1026,12 @@ class AutoSklearnMetalearner(RankModelBase):
         :return:
         """
         new_runs = {}
-        for index, row in self.runs.iterrows():
-            dataset_name = row["dataset_id"]
+        for index, row in enumerate(self.metadata):
+            dataset_name = row['dataset_id']
             if dataset_name not in new_runs:
                 new_runs[dataset_name] = {}
             else:
-                new_runs[dataset_name][row["pipeline"]['id']] = row['test_f1_macro']
+                new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
         final_new = pd.DataFrame(new_runs)
         return final_new
 
@@ -1051,8 +1045,8 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'autosklearn': AutoSklearnMetalearner,
         'dagrnn_regression': DAGRNNRegressionModel,
         'linear_regression': LinearRegressionBaseline,
-        "random": RandomBaseline,
-        "meta_autosklearn": MetaAutoSklearn,
+        'random': RandomBaseline,
+        'meta_autosklearn': MetaAutoSklearn,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
