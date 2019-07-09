@@ -488,6 +488,10 @@ class DAGRNN(nn.Module):
     ):
         super(DAGRNN, self).__init__()
 
+        if lstm_dropout > 0 and bidirectional:
+            # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
+            torch.backends.cudnn.enabled = False
+
         self.activation_name = activation_name
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
@@ -498,13 +502,6 @@ class DAGRNN(nn.Module):
 
         self.dag_rnn_module = DAGRNNModule(bidirectional, lstm_n_layers, rnn_input_size, hidden_state_size,
                                            lstm_dropout, self.device, seed)
-
-        self.activation = ACTIVATIONS[activation_name]()
-
-        with PyTorchRandomStateContext(seed=seed):
-            if use_batch_norm:
-                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-                self.batch_norm.to(device=self.device)
 
         n_directions = 2 if bidirectional else 1
         self.hidden_state_dim0_size = lstm_n_layers * n_directions
@@ -568,9 +565,17 @@ class MetaHiddenDAGRNN(DAGRNN):
         self.input_layer_size = metafeatures_length
         self._input_seed = seed + 1
 
+        self.activation = ACTIVATIONS[activation_name]()
+
         if input_dropout > 0.0:
             self.input_dropout_layer = nn.Dropout(p=input_dropout)
             self.input_dropout_layer.to(device=device)
+
+        with PyTorchRandomStateContext(seed=seed):
+            if use_batch_norm:
+                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
+                self.batch_norm.to(device=self.device)
+
 
         self.input_n_hidden_layers = input_n_hidden_layers
         self.input_hidden_layer_size = input_hidden_layer_size
