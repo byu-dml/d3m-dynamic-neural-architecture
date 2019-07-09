@@ -42,7 +42,6 @@ def top_k_regret(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, k: int):
 
 
 def spearman_correlation(ranked_data: pd.DataFrame, actual_data: pd.DataFrame):
-    actual_data = pd.DataFrame(actual_data)
     ranked_actual = utils.rank(actual_data.test_f1_macro)
     score = scipy.stats.spearmanr(ranked_data['rank'], ranked_actual)
     return score.correlation, score.pvalue
