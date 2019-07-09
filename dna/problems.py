@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import time
 
+from dna import utils
 from dna.data import group_json_objects
 from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
@@ -160,14 +161,15 @@ class RankProblem(ProblemBase):
         for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
             predicted_ranks = pd.DataFrame(predicted_ranks)
             actual_ranks = pd.DataFrame(actual_ranks_by_dataset[dataset_id])
+            merged_data = actual_ranks.merge(predicted_ranks, on='pipeline_id')
             if 'top-k-count' in scores:
                 top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
             if 'spearman' in scores:
-                correlation, p_value = spearman_correlation(predicted_ranks, actual_ranks)
+                correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
                 spearman_coefs.append(correlation)
                 spearman_ps.append(p_value)
             if 'pearson' in scores:
-                coefficient, p_value = pearson_correlation(pd.DataFrame(predicted_ranks)['rank'], pd.DataFrame(actual_ranks)['test_f1_macro'])
+                coefficient, p_value = pearson_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
                 pearson_coefs.append(coefficient)
                 pearson_ps.append(p_value)
             if 'top-1-regret' in scores:
