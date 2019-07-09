@@ -1046,14 +1046,20 @@ class AutoSklearnMetalearner(RankModelBase):
 
 class ProbabilisticMatrixFactorization(PyTorchRegressionRankModelBase):
     """
-    Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
+    Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
     Adapted from traditional Probabilitistic Matrix Factorization but instead of `Users` and `Items`, we have `Pipelines` and `Datasets`
     """
-    def __init__(self, latent_features, *, device: str = 'cuda:0', seed=0):
+    def __init__(self, latent_features, lam_u, lam_v, probabilitistic, *, device: str = 'cuda:0', seed=0):
         PyTorchRegressionRankModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
         self.latent_features = latent_features
         self.device = device
         self.fitted = False
+
+        # regularization terms to make it Probabilitistic
+        self.lam_u = lam_u
+        self.lam_v = lam_v
+        self.mse_loss = torch.nn.MSELoss(reduction="mean")
+        self.probabilitistic = probabilitistic
 
         self.target_key = 'test_f1_macro'
         self.batch_group_key = 'pipeline_structure'
@@ -1063,12 +1069,22 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankModelBase):
         self.prim_inputs_key = 'inputs'
         self.features_key = 'metafeatures'
 
+    def PMFLoss(self, y_hat, y):
+        final_loss = torch.sqrt(self.mse_loss(y_hat, y))
+        # PMF loss includes two extra regularlization 
+        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated loss)
+        if self.probabilitistic:
+            u_regularization = self.lam_u * torch.sum(self.model.dataset_factors.weight.norm(dim=1))
+            v_regularization = self.lam_v * torch.sum(self.model.pipeline_factors.weight.norm(dim=1))
+            final_loss += u_regularization + v_regularization
+
+        return final_loss
+
     def _get_loss_function(self):
-        objective = torch.nn.MSELoss(reduction="mean")
-        return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+        return lambda y_hat, y: self.PMFLoss(y_hat, y)
 
     def _get_optimizer(self, learning_rate):
-        return torch.optim.SparseAdam(self._model.parameters(), lr=learning_rate)
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
     def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
         return GroupDataLoader(
@@ -1089,7 +1105,8 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankModelBase):
         )
 
     def _get_model(self, train_data):
-        return PMF(self.n_pipelines, self.n_datasets, self.latent_features, device=self.device, seed=self.seed)
+        self.model = PMF(self.n_pipelines, self.n_datasets, self.latent_features, device=self.device, seed=self.seed)
+        return self.model
 
     def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
         verbose=False):
@@ -1173,11 +1190,11 @@ class PMF(nn.Module):
         with PyTorchRandomStateContext(seed):
             self.pipeline_factors = torch.nn.Embedding(n_pipelines, 
                                                 n_factors,
-                                                sparse=True).to(self.device)
+                                                sparse=False).to(self.device)
 
             self.dataset_factors = torch.nn.Embedding(n_datasets, 
                                                 n_factors,
-                                                sparse=True).to(self.device)
+                                                sparse=False).to(self.device)
 
     def forward(self, args):
         pipeline_id, pipeline, x = args
