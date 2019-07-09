@@ -11,7 +11,7 @@
 
         "output_n_hidden_layers": 0,
         "output_hidden_layer_size": null,
-        "output_dropout": 0.0
+        "output_dropout": 0
     },
     "fit": {
         "n_epochs": 1,
