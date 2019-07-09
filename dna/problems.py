@@ -78,11 +78,18 @@ class ProblemBase:
 
     @staticmethod
     def _plot_base(predictions, actuals, plot_name: str, plot_directory: str, scores: dict, problem_name: str):
-        # Create the title
-        title = ''
-        for (score_name, score_value) in scores.items():
-            title += score_name + ': ' + str(score_value) + '\n'
-        plt.title(title)
+        if type(predictions) == list:
+            predictions = np.array(predictions)
+        if type(actuals) == list:
+            actuals = np.array(actuals)
+
+        if(len(predictions) != len(actuals)):
+            print('The length of the predictions must match the length of the actuals')
+            return
+
+        # Create the title with the scores on it
+        title = ProblemBase._make_plot_title('', scores)
+        plt.title(title, fontsize=6)
 
         # Set the min and max value on the x and y axis
         predictions_min = predictions.min()
@@ -98,6 +105,7 @@ class ProblemBase:
         plt.xlabel('Predictions')
         plt.ylabel('Actuals')
         plt.scatter(predictions, actuals)
+        plt.tight_layout()
 
         # Save the plot
         new_dir = os.path.join(plot_directory, problem_name)
@@ -106,6 +114,19 @@ class ProblemBase:
         file_name = os.path.join(new_dir, plot_name)
         plt.savefig(fname=file_name)
         plt.clf()
+
+    @staticmethod
+    def _make_plot_title(title, scores):
+        for (score_name, score_value) in scores.items():
+            if type(score_value) == dict:
+                title += score_name.upper() + ':' + '\n'
+                title = ProblemBase._make_plot_title(title, score_value)
+            elif type(score_value) == np.float64 or type(score_value) == float:
+                score_value = '{0:.5f}'.format(score_value)
+                title += score_name + ': ' + score_value + '\n'
+            else:
+                title += score_name + ': ' + str(score_value) + '\n'
+        return title
 
 
 class RegressionProblem(ProblemBase):
@@ -254,6 +275,7 @@ class RankProblem(ProblemBase):
             actuals = actuals_by_dataset['test_f1_macro'].tolist()
             actual_ranks = utils.rank(actuals)
             plot_name = plot_name + '_' + dataset_id
+
             ProblemBase._plot_base(predicted_ranks, actual_ranks, plot_name, plot_directory, scores, problem_name)
 
 
