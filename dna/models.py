@@ -1070,15 +1070,15 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankModelBase):
         self.features_key = 'metafeatures'
 
     def PMFLoss(self, y_hat, y):
-        final_loss = torch.sqrt(self.mse_loss(y_hat, y))
+        rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
         # PMF loss includes two extra regularlization 
-        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated loss)
+        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated)
         if self.probabilitistic:
             u_regularization = self.lam_u * torch.sum(self.model.dataset_factors.weight.norm(dim=1))
             v_regularization = self.lam_v * torch.sum(self.model.pipeline_factors.weight.norm(dim=1))
-            final_loss += u_regularization + v_regularization
+            return rmse_loss + u_regularization + v_regularization
 
-        return final_loss
+        return rmse_loss
 
     def _get_loss_function(self):
         return lambda y_hat, y: self.PMFLoss(y_hat, y)
