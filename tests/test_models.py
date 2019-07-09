@@ -3,8 +3,8 @@ import unittest
 import argparse
 import json
 
-from main import configure_evaluate_parser
-from main import get_train_and_test_data
+from dna.__main__ import configure_evaluate_parser
+from dna.__main__ import get_train_and_test_data
 from dna.data import get_data
 from dna.models import get_model
 from dna.problems import get_problem
