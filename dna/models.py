@@ -423,67 +423,36 @@ class DAGLSTM(nn.Module):
             )
         self.lstm.to(device=device)
 
-        # TODO: use a more standardized/general DAG format
-        self.NULL_INPUTS = ['inputs.0']
+    def forward(self, dags, dag_structure, lstm_start_state):
+        assert len(dag_structure) > 0
+        assert len(dag_structure) == dags.shape[1]
 
-    def forward(self, pipelines, pipeline_structure, lstm_start_state):
-        # TODO: generalize naming so that any DAG could be used
-        seq_len = pipelines.shape[1]
-        assert len(pipeline_structure) == seq_len, 'Pipeline sequence length does not match length of pipeline structure'
+        prev_lstm_states = {'inputs.0': lstm_start_state}  # TODO: use something better than 'inputs.0'
+        for i, node_inputs in enumerate(dag_structure):
+            # TODO: use LSTMCell
+            # uses lstm with sequence of len 1
+            nodes_i = dags[:, i, :].unsqueeze(dim=1)  # sequence of len 1
+            lstm_input_state = self._get_lstm_state(prev_lstm_states, node_inputs)
+            lstm_output, lstm_output_state = self.lstm(nodes_i, lstm_input_state)
+            prev_lstm_states[i] = lstm_output_state
 
-        # Keep track of the previous hidden and cell states as we traverse the pipeline
-        prev_lstm_states = []
-
-        lstm_output = None
-
-        # For each batch of primitives coming from the batch of pipelines
-        for i in range(seq_len):
-            # Get the one hot encoded primitives from the batch at index i in the pipeline
-            encoded_primitives = pipelines[:, i, :]
-
-            # Add a dimension in the middle of the shape so it is batch size by sequence length by input size
-            # Note that the sequence length (middle) is 1 because we're doing 1 (batch of) primitive(s) at a time
-            # Also note that the batch size is first in the shape because we selected batch first
-            encoded_primitives = encoded_primitives.unsqueeze(dim=1)
-
-            # Get the list of indices of input primitives coming into the current primitive
-            primitive_inputs = pipeline_structure[i]
-
-            # TODO: generalize so that a node could have the "null" input and inputs from other nodes
-            # If this is the first primitive
-            if primitive_inputs == self.NULL_INPUTS:
-                lstm_input_state = lstm_start_state
-            else:
-                # Otherwise get the mean of the hidden states of the input primitives
-                lstm_input_state = self.get_lstm_input_state(
-                    prev_lstm_states=prev_lstm_states, primitive_inputs=primitive_inputs
-                )
-
-            (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
-
-            prev_lstm_states.append(lstm_output_state)
-
-        # Since we're doing 1 primitive at a time, the sequence length in the LSTM output is 1
-        # Squeeze so the dag rnn module's output is of shape batch size by num_directions*hidden_size
         return lstm_output.squeeze(dim=1)
 
     @staticmethod
-    def get_lstm_input_state(prev_lstm_states, primitive_inputs):
-        # Get the hidden and cell states produced by primitives connected to the current primitive as input
-        input_hidden_states = []
-        input_cell_states = []
-        for primitive_input in primitive_inputs:
-            (hidden_state, cell_state) = prev_lstm_states[primitive_input]
-            input_hidden_states.append(hidden_state.unsqueeze(dim=0))
-            input_cell_states.append(cell_state.unsqueeze(dim=0))
-
-        # Average the input hidden and cell states each into a single state
-        input_hidden_states = torch.cat(input_hidden_states, dim=0)
-        input_cell_states = torch.cat(input_cell_states, dim=0)
-        # TODO: add hidden state aggregation function argument in __init__
-        mean_hidden_state = torch.mean(input_hidden_states, dim=0)
-        mean_cell_state = torch.mean(input_cell_states, dim=0)
-
+    def _get_lstm_state(prev_lstm_states, node_inputs):
+        """
+        Computes the aggregate hidden state for a node in the DAG.
+        """
+        mean_hidden_state = torch.mean(
+            torch.stack(
+                [prev_lstm_states[i][0] for i in node_inputs]
+            ), dim=0
+        )
+        mean_cell_state = torch.mean(
+            torch.stack(
+                [prev_lstm_states[i][1] for i in node_inputs]
+            ), dim=0
+        )
         return (mean_hidden_state, mean_cell_state)
 
 
@@ -615,6 +584,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False, *,
         device: str = 'cuda:0', seed: int = 0
     ):
+        # TODO: clean up supers
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
         RegressionModelBase.__init__(self, seed=seed)
         RankModelBase.__init__(self, seed=seed)
@@ -765,13 +735,14 @@ class MetaHiddenDAGRNNRegressionModel(DAGLSTMRegressionModel):
         self.input_hidden_layer_size = input_hidden_layer_size
 
     def _get_model(self, train_data):
+        n_features = len(train_data[0][self.features_key])
         return HiddenMLPDAGLSTMMLP(
             lstm_input_size=self.num_primitives,
             lstm_hidden_state_size=self.hidden_state_size,
             lstm_n_layers=self.lstm_n_layers,
             dropout=self.dropout,
             bidirectional=self.bidirectional,
-            input_mlp_input_size=len(train_data[0][self.features_key]),
+            input_mlp_input_size=n_features,
             mlp_hidden_layer_size=self.output_hidden_layer_size,
             mlp_n_hidden_layers=self.output_n_hidden_layers,
             mlp_activation_name=self.activation_name,
