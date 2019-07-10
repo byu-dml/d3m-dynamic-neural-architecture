@@ -129,8 +129,8 @@ python3 -m dna evaluate \
 
 
 python3 -m dna evaluate \
-    --model dagrnn_regression \
-    --model-config-path ./model_configs/dagrnn_regression_config.json \
+    --model daglstm_regression \
+    --model-config-path ./model_configs/daglstm_regression_config.json \
     --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
