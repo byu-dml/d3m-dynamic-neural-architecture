@@ -405,13 +405,12 @@ class DAGLSTM(nn.Module):
     """
 
     def __init__(
-        self, input_size: int, hidden_size: int, n_layers: int, dropout: float, bidirectional: bool, *, device: str,
-        seed: int
+        self, input_size: int, hidden_size: int, n_layers: int, dropout: float, *, device: str, seed: int
     ):
         # TODO: add hidden state aggregation function argument
         super().__init__()
 
-        if dropout > 0 and bidirectional:
+        if dropout > 0:
             # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
             torch.backends.cudnn.enabled = False
 
@@ -419,7 +418,7 @@ class DAGLSTM(nn.Module):
             # TODO: use LSTMCell
             self.lstm = nn.LSTM(
                 input_size=input_size, hidden_size=hidden_size, num_layers=n_layers, bias=True, batch_first=True,
-                dropout=dropout, bidirectional=bidirectional
+                dropout=dropout
             )
         self.lstm.to(device=device)
 
@@ -464,9 +463,8 @@ class DAGLSTMMLP(nn.Module):
 
     def __init__(
         self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
-        bidirectional: bool, mlp_extra_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int,
-        mlp_activation_name: str, output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str,
-        seed: int,
+        mlp_extra_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
+        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int,
     ):
         super().__init__()
 
@@ -476,14 +474,12 @@ class DAGLSTMMLP(nn.Module):
         self._mlp_seed = seed + 2
 
         self._dag_lstm = DAGLSTM(
-            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, bidirectional, device=self.device,
-            seed=self._lstm_seed
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, device=self.device, seed=self._lstm_seed
         )
         self.lstm_hidden_state_size = lstm_hidden_state_size
         self.lstm_n_layers = lstm_n_layers
-        self.n_directions = 2 if bidirectional else 1
 
-        mlp_input_size = lstm_hidden_state_size * self.n_directions + mlp_extra_input_size
+        mlp_input_size = lstm_hidden_state_size + mlp_extra_input_size
         mlp_layer_sizes = [mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
         self._mlp = Submodule(
             mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=self.device,
@@ -497,7 +493,7 @@ class DAGLSTMMLP(nn.Module):
         assert len(features) == batch_size, 'DAG batch size does not match features batch size'
 
         hidden_state = torch.zeros(
-            self.lstm_n_layers * self.n_directions, batch_size, self.lstm_hidden_state_size, device=self.device
+            self.lstm_n_layers, batch_size, self.lstm_hidden_state_size, device=self.device
         )
 
         dag_rnn_output = self._dag_lstm(dags, dag_structure, (hidden_state, hidden_state))
@@ -515,9 +511,8 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
 
     def __init__(
         self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
-        bidirectional: bool, input_mlp_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int,
-        mlp_activation_name: str, output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str,
-        seed: int,
+        input_mlp_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
+        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int,
     ):
         super().__init__()
 
@@ -547,14 +542,12 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
         self._input_mlp = nn.Sequential(*input_layers)
 
         self._dag_lstm = DAGLSTM(
-            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, bidirectional, device=self.device,
-            seed=self._lstm_seed
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, device=self.device, seed=self._lstm_seed
         )
         self.lstm_hidden_state_size = lstm_hidden_state_size
         self.lstm_n_layers = lstm_n_layers
-        self.n_directions = 2 if bidirectional else 1
 
-        output_mlp_input_size = lstm_hidden_state_size * self.n_directions
+        output_mlp_input_size = lstm_hidden_state_size
         output_mlp_layer_sizes = [output_mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
         self._output_mlp = Submodule(
             output_mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=self.device,
@@ -573,14 +566,14 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
 
     def init_hidden_and_cell_state(self, features):
         single_hidden_state = self._input_mlp(features)
-        hidden_state = single_hidden_state.unsqueeze(dim=0).expand(self.lstm_n_layers * self.n_directions, *single_hidden_state.shape)
+        hidden_state = single_hidden_state.unsqueeze(dim=0).expand(self.lstm_n_layers, *single_hidden_state.shape)
         return (hidden_state, hidden_state)
 
 
 class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
-        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float, bidirectional: bool,
+        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False, *,
         device: str = 'cuda:0', seed: int = 0
     ):
@@ -593,7 +586,6 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
         self.hidden_state_size = hidden_state_size
         self.lstm_n_layers = lstm_n_layers
         self.dropout = dropout
-        self.bidirectional = bidirectional
         self.output_n_hidden_layers = output_n_hidden_layers
         self.output_hidden_layer_size = output_hidden_layer_size
         self.use_batch_norm = use_batch_norm
@@ -681,7 +673,6 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
             lstm_hidden_state_size=self.hidden_state_size,
             lstm_n_layers=self.lstm_n_layers,
             dropout=self.dropout,
-            bidirectional=self.bidirectional,
             mlp_extra_input_size=len(train_data[0][self.features_key]),
             mlp_hidden_layer_size=self.output_hidden_layer_size,
             mlp_n_hidden_layers=self.output_n_hidden_layers,
@@ -721,13 +712,12 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
 class MetaHiddenDAGRNNRegressionModel(DAGLSTMRegressionModel):
 
     def __init__(
-            self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int,
-            hidden_state_size: int, lstm_n_layers: int, dropout: float, bidirectional: bool,
-            output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
-            *, device: str = 'cuda:0', seed: int = 0
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, hidden_state_size: int,
+        lstm_n_layers: int, dropout: float, output_n_hidden_layers: int, output_hidden_layer_size: int,
+        use_batch_norm: bool, use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
-            activation_name, hidden_state_size, lstm_n_layers, dropout, bidirectional, output_n_hidden_layers,
+            activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,
             output_hidden_layer_size, use_batch_norm, use_skip, device=device, seed=seed
         )
 
@@ -741,7 +731,6 @@ class MetaHiddenDAGRNNRegressionModel(DAGLSTMRegressionModel):
             lstm_hidden_state_size=self.hidden_state_size,
             lstm_n_layers=self.lstm_n_layers,
             dropout=self.dropout,
-            bidirectional=self.bidirectional,
             input_mlp_input_size=n_features,
             mlp_hidden_layer_size=self.output_hidden_layer_size,
             mlp_n_hidden_layers=self.output_n_hidden_layers,
