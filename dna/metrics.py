@@ -1,3 +1,4 @@
+import typing
 import warnings
 
 import pandas as pd
@@ -41,7 +42,6 @@ def top_k_regret(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, k: int):
     return min_regret
 
 
-def spearman_correlation(ranked_data: pd.DataFrame, actual_data: pd.DataFrame):
-    ranked_actual = utils.rank(actual_data.test_f1_macro)
-    score = scipy.stats.spearmanr(ranked_data['rank'], ranked_actual)
-    return score.correlation, score.pvalue
+def spearman_correlation(x: typing.Sequence, y: typing.Sequence):
+    spearman = scipy.stats.spearmanr(x, y)
+    return spearman.correlation, spearman.pvalue
