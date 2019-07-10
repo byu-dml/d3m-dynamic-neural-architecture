@@ -15,6 +15,7 @@ from dna.data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
 from dna.kND import KNearestDatasets
 from dna import utils
 
+
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
 

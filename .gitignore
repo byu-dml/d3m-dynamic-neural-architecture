@@ -4,4 +4,3 @@ data/*.json
 env/
 dev_results/
 .cache
-dna.egg-info/
