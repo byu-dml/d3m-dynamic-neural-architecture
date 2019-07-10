@@ -417,8 +417,7 @@ class DAGLSTM(nn.Module):
         with PyTorchRandomStateContext(seed=seed):
             # TODO: use LSTMCell
             self.lstm = nn.LSTM(
-                input_size=input_size, hidden_size=hidden_size, num_layers=n_layers, bias=True, batch_first=True,
-                dropout=dropout
+                input_size=input_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True, dropout=dropout
             )
         self.lstm.to(device=device)
 
