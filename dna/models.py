@@ -966,7 +966,7 @@ class AutoSklearnMetalearner(RankModelBase):
     def __init__(self, seed=0):
         RankModelBase.__init__(self, seed=seed)
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures):
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, k):
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         # this should aready be done by the time it gets here
@@ -982,18 +982,18 @@ class AutoSklearnMetalearner(RankModelBase):
         kND = KNearestDatasets(metric='l1', random_state=3)
         kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
         # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-        best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=all_other_metafeatures.shape[0])
+        best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
         k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         return k_best_pipelines
 
-    def get_k_best_pipelines_per_dataset(self, data):
+    def get_k_best_pipelines_per_dataset(self, data, k):
         # they all should have the same dataset and metafeatures so take it from the first row
         dataset_metafeatures = data["metafeatures"].iloc[0]
         dataset_name = data["dataset_id"].iloc[0]
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures)
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, k)
         return pipelines
 
-    def predict_rank(self, data, *, verbose=False):
+    def predict_subset(self, data, *, k, verbose=False):
         """
         A wrapper for all the other functions so that this is organized
         :data: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
@@ -1001,7 +1001,7 @@ class AutoSklearnMetalearner(RankModelBase):
         :return:
         """
         data = pd.DataFrame(data)
-        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(data)
+        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(data, k)
         return {
             'pipeline_id': k_best_pipelines_per_dataset,
             'rank': list(range(len(k_best_pipelines_per_dataset))),
