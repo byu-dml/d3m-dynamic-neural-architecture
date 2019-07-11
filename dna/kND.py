@@ -1,4 +1,4 @@
-# Code taken from https://github.com/automl/auto-sklearn/blob/master/autosklearn/metalearning/metalearning/kNearestDatasets/kND.py
+# Code adapted from https://github.com/automl/auto-sklearn/blob/master/autosklearn/metalearning/metalearning/kNearestDatasets/kND.py
 
 import numpy as np
 import pandas as pd
@@ -8,6 +8,7 @@ import sklearn.utils
 
 
 class KNearestDatasets(object):
+
     def __init__(self, metric='l1', random_state=None, metric_params=None, rank_distance_metric=None):
 
         self.metric = metric
@@ -168,26 +169,19 @@ class KNearestDatasets(object):
             k = len(kbest)
         return kbest[:k]
 
-    def allBestSuggestions(self, x, exclude_double_configurations=True):
+    def allBestSuggestions(self, x):
         """
-        This is our implementation of nearest neighbors to grab the ranking of pipelines.
+        Rank all pipelines in the training set using the rank_distance_metric, a function of dataset distance from x
+        and pipeline performance.
         """
         assert type(x) == pd.Series
 
-        
-        nearest_datasets, distances = self.kNearestDatasets(x, -1, return_distance=True)
-        kbest = []
+        nearest_datasets, distances = self.kNearestDatasets(x, k=-1, return_distance=True)
 
-        added_configurations = set()
-        initialized = False
+        all_pipelines_ranked = pd.DataFrame(columns=['pipeline', 'rank'])
         # add the distance ranking to each dataset scores
         for dataset_name, distance in zip(nearest_datasets, distances):
             all_configurations = self.all_configuration_per_dataset[dataset_name]
-            if initialized == False:
-                # create the empty dataframe
-                all_pipelines_ranked = pd.DataFrame(columns=["pipeline", "rank"])
-                initialized = True
-
             # weight the scores by the distance
             all_configurations[dataset_name] = self.rank_distance_metric(all_configurations[dataset_name], distance)
             all_configurations.columns = all_pipelines_ranked.columns

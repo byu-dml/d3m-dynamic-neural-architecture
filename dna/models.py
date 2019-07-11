@@ -1069,6 +1069,7 @@ class AutoSklearnMetalearner(RankModelBase):
         self.metadata = training_dataset
         self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
         self.run_lookup = self.process_runs()
+        self.fitted = True
 
     def process_runs(self):
         """
