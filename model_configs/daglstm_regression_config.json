@@ -4,18 +4,13 @@
         "use_batch_norm": true,
         "use_skip": false,
 
-        "input_n_hidden_layers": 1,
-        "input_hidden_layer_size": 8,
-        "input_dropout": 0.5,
-
         "hidden_state_size": 16,
         "lstm_n_layers": 2,
-        "lstm_dropout": 0.5,
-        "bidirectional": true,
+        "dropout": 0.5,
+        "reduction": "mean",
 
         "output_n_hidden_layers": 1,
-        "output_hidden_layer_size": 8,
-        "output_dropout": 0.5
+        "output_hidden_layer_size": 8
     },
     "fit": {
         "n_epochs": 1,
