@@ -44,7 +44,7 @@ class Submodule(nn.Module):
         self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False,
         dropout: float = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
-        super(Submodule, self).__init__()
+        super().__init__()
 
         with PyTorchRandomStateContext(seed):
             n_layers = len(layer_sizes) - 1
@@ -86,7 +86,7 @@ class DNAModule(nn.Module):
         output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
         *, device: str = 'cuda:0', seed: int = 0
     ):
-        super(DNAModule, self).__init__()
+        super().__init__()
         self.submodule_input_sizes = submodule_input_sizes
         self.n_layers = n_layers
         self.input_layer_size = input_layer_size
@@ -328,6 +328,11 @@ class PyTorchModelBase:
 
 class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
 
+    def __init__(self, y_dtype, device, seed):
+        # different arguments means different function calls
+        PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
+        RegressionModelBase.__init__(self, seed=seed)
+
     def predict_regression(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
@@ -363,10 +368,7 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
         use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
-        # TODO: clean up supers
-        PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
 
         self.n_hidden_layers = n_hidden_layers
         self.hidden_layer_size = hidden_layer_size
@@ -601,10 +603,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
         reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
-        # TODO: clean up supers
-        PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(y_dtype=torch.float32, seed=seed, device=device)
 
         self.activation_name = activation_name
         self.hidden_state_size = hidden_state_size
@@ -773,7 +772,7 @@ class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
 class DNASiameseModule(nn.Module):
 
     def __init__(self, input_model, submodules, output_model):
-        super(DNASiameseModule, self).__init__()
+        super().__init__()
         self.input_model = input_model
         self.submodules = submodules
         self.output_model = output_model
@@ -820,7 +819,7 @@ class DNASiameseModule(nn.Module):
 class MeanBaseline(RegressionModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.mean = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
@@ -839,7 +838,7 @@ class MeanBaseline(RegressionModelBase):
 class MedianBaseline(RegressionModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.median = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
@@ -914,7 +913,7 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase, SubsetModelBase):
 class RandomBaseline(RankModelBase):
 
     def __init__(self, seed=0):
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self._random_state = np.random.RandomState(seed)
         self.fitted = True
 
@@ -937,8 +936,7 @@ class RandomBaseline(RankModelBase):
 class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.pipeline_key = 'pipeline'
         self.steps_key = 'steps'
         self.prim_name_key = 'name'
@@ -1036,7 +1034,7 @@ class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
 class LinearRegressionBaseline(SklearnBase):
 
     def __init__(self, seed=0):
-        SklearnBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.regressor = linear_model.LinearRegression()
         self.fitted = False
 
@@ -1044,17 +1042,17 @@ class LinearRegressionBaseline(SklearnBase):
 class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, time_left_for_this_task=60, per_run_time_limit=10, seed=0):
-        SklearnBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.regressor = autosklearn.AutoSklearnRegressor(
             time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit, seed=seed
         )
         self.fitted = False
 
 
-class AutoSklearnMetalearner(RankModelBase):
+class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
 
     def __init__(self, rank_distance_metric, seed=0):
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         if rank_distance_metric == "inverse":
             self.rank_distance_metric = lambda x, y: x / y
         else:
