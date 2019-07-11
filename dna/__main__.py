@@ -7,8 +7,8 @@ import typing
 import uuid
 
 from dna.data import get_data, preprocess_data, split_data
-from dna.models import get_model
-from dna.problems import get_problem
+from dna.models import get_model, ModelBase
+from dna.problems import get_problem, ProblemBase
 
 
 def configure_split_parser(parser):
@@ -82,7 +82,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--problem', nargs='+', required=True,
-        choices=['regression', 'rank', 'binary-classification'],
+        choices=['regression', 'rank', 'subset'],  # TODO: 'binary-classification'],
         help='the type of problem'
     )
     parser.add_argument(
@@ -109,11 +109,6 @@ def configure_evaluate_parser(parser):
         help='directory path to write outputs for this model run'
     )
     parser.add_argument(
-        '--scores', nargs='+',
-        choices=['rmse', 'spearman', 'top-k-count', 'top-1-regret', 'top-k-regret', 'pearson'],
-        help='the type of problem'
-    )
-    parser.add_argument(
         '--cache-dir', type=str, default='.cache',
         help='directory path to write outputs for this model run'
     )
@@ -123,6 +118,44 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--metafeature-subset', type=str, default='all', choices=['all', 'landmarkers', 'non-landmarkers']
+    )
+
+
+class EvaluateResult:
+
+    def __init__(
+        self, train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
+        test_scores
+    ):
+        self.train_predictions = train_predictions
+        self.fit_time = fit_time
+        self.train_predict_time = train_predict_time
+        self.train_scores = train_scores
+        self.test_predictions = test_predictions
+        self.test_predict_time = test_predict_time
+        self.test_scores = test_scores
+
+
+def evaluate(
+    problem: ProblemBase, train_data: typing.Dict, test_data: typing.Dict, model: ModelBase, model_config: typing.Dict,
+    *, verbose: bool = False, model_output_dir: str = None,
+):
+    train_predictions, fit_time, train_predict_time = problem.fit_predict(
+        train_data, test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+    )
+    train_scores = problem.score(train_predictions, train_data)
+    # TODO
+    # problem.plot(train_predictions, train_data, train_scores, plot_dir)
+
+    test_predictions, test_predict_time = problem.predict(
+        test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+    )
+    test_scores = problem.score(test_predictions, test_data)
+    # TODO
+    # problem.plot(test_predictions, test_data, test_scores, plot_dir)
+
+    return EvaluateResult(
+        train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time, test_scores
     )
 
 
@@ -154,29 +187,20 @@ def evaluate_handler(
     for problem_name in getattr(arguments, 'problem'):
         if arguments.verbose:
             print('{} {} {}'.format(model_name, problem_name, run_id))
-        problem = problem_resolver(problem_name)
-        if problem_name == 'rank':  # todo fix this hack to allow problem args
-            k = getattr(arguments, 'k')
-            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
-                train_data, test_data, model, k, getattr(arguments, 'scores'), model_config=model_config,
-                re_fit_model=False, verbose=arguments.verbose, output_dir=model_output_dir
-            )
-        else:
-            train_predictions, test_predictions, train_scores, test_scores, timings = problem.run(
-                train_data, test_data, model, model_config=model_config, re_fit_model=False,
-                verbose=arguments.verbose, output_dir=model_output_dir
-            )
+        problem = problem_resolver(problem_name, arguments)
+        evaluate_result = evaluate(
+            problem, train_data, test_data, model, model_config, verbose=arguments.verbose, model_output_dir=model_output_dir
+        )
         result_scores.append({
             'problem_name': problem_name,
             'model_name': model_name,
-            'train_scores': train_scores,
-            'test_scores': test_scores,
-            **timings,
+            **evaluate_result.__dict__,
         })
         if arguments.verbose:
-            print('train scores:\n{}'.format(train_scores))
-            print('test scores:\n{}'.format(test_scores))
-            print('model runtimes (s):\n{}'.format(timings))
+            results = evaluate_result.__dict__
+            del results['train_predictions']
+            del results['test_predictions']
+            print(json.dumps(results, indent=4))
             print()
 
     record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
