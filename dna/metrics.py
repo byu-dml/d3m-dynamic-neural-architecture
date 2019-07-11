@@ -25,19 +25,17 @@ def pearson_correlation(y_hat, y):
         return scipy.stats.pearsonr(y_hat, y)
 
 
-def top_k_correct(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, k: int):
+def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
     top_actual = actual_data.nlargest(k, columns='test_f1_macro')['pipeline_id']
-    top_predicted = ranked_data.nsmallest(k, columns="rank").pipeline_id
-    return len(set(top_actual).intersection(set(top_predicted)))
+    return len(set(top_actual).intersection(set(top_k_predicted)))
 
 
-def top_k_regret(ranked_data: pd.DataFrame, actual_data: pd.DataFrame, k: int):
+def top_k_regret(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
     actual_best_score = actual_data['test_f1_macro'].max()
-
-    top_k_ranked = ranked_data.nsmallest(k, columns="rank").pipeline_id
     min_regret = float('inf')
-    for index, pipeline_id in top_k_ranked.iteritems():
-        regret = actual_best_score - actual_data[actual_data['pipeline_id'] == pipeline_id]['test_f1_macro'].iloc[0]
+    for pipeline_id in top_k_predicted:
+        pipeline_score = actual_data[actual_data['pipeline_id'] == pipeline_id]['test_f1_macro'].iloc[0]
+        regret = actual_best_score - pipeline_score
         min_regret = min(min_regret, regret)
     return min_regret
 
