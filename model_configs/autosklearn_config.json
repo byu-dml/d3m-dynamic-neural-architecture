@@ -1,0 +1,5 @@
+{
+    "__init__": {
+        "rank_distance_metric": "inverse"
+    }
+}

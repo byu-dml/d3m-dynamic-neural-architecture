@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 import time
@@ -6,203 +8,221 @@ from dna import utils
 from dna.data import group_json_objects
 from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
 
+
 class ProblemBase:
 
-    _predict_method_name = None
+    def __init__(self):
+        self._fit_method_name = 'fit'
+        self._predict_method_name = None
 
-    def run(
-        self, train_data, test_data, model, *, model_config=None, re_fit_model=False, verbose=False, output_dir=None
+    def _validate_model_has_method(self, model, method_name):
+        if not hasattr(model, method_name):
+            raise ValueError(
+                '{} is not designed for the {} problem. It is missing a {} method'.format(
+                    model, type(self).__name__, method_name
+                )
+            )
+
+    def fit(
+        self, train_data, test_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
     ):
-        if self._predict_method_name is None:
-            raise NotImplementedError('problem has not been implemented or is not implemented properly')
+        self._validate_model_has_method(model, self._fit_method_name)
 
-        if not hasattr(model, 'fit'):
-            raise ValueError('The given model is not suited for this problem, it is missing a `fit` method')
-        if not hasattr(model, self._predict_method_name):
-            raise ValueError('The given model is not suited for this problem, it is missing a `predict_regression` method')
-
-        train_data = self._structure_data(train_data)
-        test_data = self._structure_data(test_data)
-
-        fit_model_config = model_config.get('fit', {})
-        predict_regression_model_config = model_config.get(self._predict_method_name, {})
+        model_fit_config = model_config.get(self._fit_method_name, {})
+        model_fit_method = getattr(model, self._fit_method_name)
 
         fit_time = None
-        if not model.fitted or re_fit_model:
+        if not model.fitted or refit_model:
             start_time = time.time()
-            model.fit(
-                train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
+            model_fit_method(
+                train_data, validation_data=test_data, verbose=verbose, output_dir=model_output_dir, **model_fit_config
             )
             fit_time = time.time() - start_time
 
+        return fit_time
 
+    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        self._validate_model_has_method(model, self._predict_method_name)
+
+        model_predict_config = model_config.get(self._predict_method_name, {})
         model_predict_method = getattr(model, self._predict_method_name)
 
         start_timestamp = time.time()
-        train_predictions = model_predict_method(train_data, verbose=verbose, **predict_regression_model_config)
-        train_predict_time = time.time() - start_timestamp
+        predictions = model_predict_method(data, verbose=verbose, **model_predict_config)
+        predict_time = time.time() - start_timestamp
 
-        start_timestamp = time.time()
-        test_predictions = model_predict_method(test_data, verbose=verbose, **predict_regression_model_config)
-        test_predict_time = time.time() - start_timestamp
+        return predictions, predict_time
 
-        train_scores = self._score(train_predictions, train_data)
-        test_scores = self._score(test_predictions, test_data)
+    def fit_predict(
+        self, train_data, test_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
+    ):
+        fit_time = self.fit(
+            train_data, test_data, model, model_config, refit_model=refit_model, verbose=verbose, model_output_dir=model_output_dir
+        )
 
-        timings = {
-            'fit_time': fit_time,
-            'train_predict_time': train_predict_time,
-            'test_predict_time': test_predict_time,
-        }
+        train_predictions, predict_time = self.predict(
+            train_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+        )
 
-        return train_predictions, test_predictions, train_scores, test_scores, timings
+        return train_predictions, fit_time, predict_time
 
-    @staticmethod
-    def _score(predictions, data):
+    def score(self, predictions, targets):
         raise NotImplementedError()
 
-    @staticmethod
-    def _structure_data(data):
-        return data
+    def plot(self, predictions, targets, scores):
+        raise NotImplementedError()
 
 
 class RegressionProblem(ProblemBase):
 
-    _predict_method_name = 'predict_regression'
+    def __init__(self):
+        super().__init__()
+        self._predict_method_name = 'predict_regression'
 
-    @staticmethod
-    def _score(predictions, data):
+    def score(self, predictions, data):
+        # TODO: just pass in targets
         targets = []
         for instance in data:
             targets.append(instance['test_f1_macro'])
 
         correlation, p_value = pearson_correlation(predictions, targets)
-        return {'RMSE': rmse(predictions, targets), 'PearsonCorrelation': {'correlation_coefficient': correlation, 'p_value': p_value}}
-
-
-class RankProblem(ProblemBase):
-
-    def run(
-        self, train_data, test_data, model, k, scores, *, model_config=None, re_fit_model=False, verbose=False, output_dir=None
-    ):
-        # todo multiple k_s
-        if not hasattr(model, 'fit'):
-            raise ValueError('The given model is not suited for this problem, it is missing a `fit` method')
-        if not hasattr(model, 'predict_rank'):
-            raise ValueError('The given model is not suited for this problem, it is missing a `predict_regression` method')
-
-        train_data = self._structure_data(train_data)
-        test_data = self._structure_data(test_data)
-
-        fit_model_config = model_config.get('fit', {})
-        predict_rank_model_config = model_config.get('predict_rank', {})
-
-        fit_time = None
-        if not model.fitted or re_fit_model:
-            start_timestamp = time.time()
-            model.fit(
-                train_data, validation_data=test_data, verbose=verbose, output_dir=output_dir, **fit_model_config
-            )
-            fit_time = time.time() - start_timestamp
-
-        train_data_by_dataset = self._group_data(train_data)
-        test_data_by_dataset = self._group_data(test_data)
-
-        start_timestamp = time.time()
-        train_predicted_ranks = self._predict_rank(train_data_by_dataset, model, verbose, predict_rank_model_config)
-        train_predict_time = time.time() - start_timestamp
-
-        start_timestamp = time.time()
-        test_predicted_ranks = self._predict_rank(test_data_by_dataset, model, verbose, predict_rank_model_config)
-        test_predict_time = time.time() - start_timestamp
-
-        train_scores = self._score(scores, train_predicted_ranks, train_data_by_dataset, k)
-        test_scores = self._score(scores, test_predicted_ranks, test_data_by_dataset, k)
-
-        timings = {
-            'fit_time': fit_time,
-            'train_predict_time': train_predict_time,
-            'test_predict_time': test_predict_time,
+        return {
+            'RMSE': rmse(predictions, targets),
+            'PearsonCorrelation': {
+                'correlation_coefficient': correlation,
+                'p_value': p_value
+            }
         }
 
-        return train_predicted_ranks, test_predicted_ranks, train_scores, test_scores, timings
 
-    @staticmethod
-    def _group_data(data):
+class PredictByGroupProblemBase(ProblemBase):
+
+    def __init__(self, group_key):
+        super().__init__()
+        self.group_key = group_key
+
+    def _group_data(self, data):
         grouped_data = {}
-        for dataset_id, group_indices in group_json_objects(data, 'dataset_id').items():
+        for group, group_indices in group_json_objects(data, self.group_key).items():
             for i in group_indices:
-                if dataset_id not in grouped_data:
-                    grouped_data[dataset_id] = []
-                grouped_data[dataset_id].append(data[i])
+                if group not in grouped_data:
+                    grouped_data[group] = []
+                grouped_data[group].append(data[i])
         return grouped_data
 
-    @staticmethod
-    def _predict_rank(data_by_dataset, model, verbose, predict_rank_model_config):
-        predictions_by_dataset = {}
-        for dataset_id, data_subset in data_by_dataset.items():
-            predicted_ranks = model.predict_rank(data_subset, verbose=verbose, **predict_rank_model_config)
-            predictions_by_dataset[dataset_id] = predicted_ranks
-        return predictions_by_dataset
+    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        self._validate_model_has_method(model, self._predict_method_name)
 
-    @staticmethod
-    def _score(scores, predicted_ranks_by_dataset: dict, actual_ranks_by_dataset: dict, k):
-        if not scores:
-            return {}
+        model_predict_config = model_config.get(self._predict_method_name, {})
+        model_predict_method = getattr(model, self._predict_method_name)
 
-        top_k_counts = []
+        grouped_data = self._group_data(data)
+
+        start_timestamp = time.time()
+
+        predictions_by_group = {
+            group: model_predict_method(group_data, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
+        }
+
+        predict_time = time.time() - start_timestamp
+
+        return predictions_by_group, predict_time
+
+
+class RankProblem(PredictByGroupProblemBase):
+
+    def __init__(self, group_key):
+        super().__init__(group_key)
+        self._predict_method_name = 'predict_rank'
+
+    def score(self, predictions_by_group, targets):
+        targets_by_group = self._group_data(targets)
         spearman_coefs = []
         spearman_ps = []
-        top_1_regrets = []
-        top_k_regrets = []
 
-        for dataset_id, predicted_ranks in predicted_ranks_by_dataset.items():
-            predicted_ranks = pd.DataFrame(predicted_ranks)
-            actual_ranks = pd.DataFrame(actual_ranks_by_dataset[dataset_id])
-            merged_data = actual_ranks.merge(predicted_ranks, on='pipeline_id')
-            if 'top-k-count' in scores:
-                top_k_counts.append(top_k_correct(predicted_ranks, actual_ranks, k))
-            if 'spearman' in scores:
-                correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
-                spearman_coefs.append(correlation)
-                spearman_ps.append(p_value)
-            if 'top-1-regret' in scores:
-                top_1_regrets.append(top_k_regret(predicted_ranks, actual_ranks, 1))
-            if 'top-k-regret' in scores:
-                top_k_regrets.append(top_k_regret(predicted_ranks, actual_ranks, k))
+        for group, group_predictions in predictions_by_group.items():
+            group_predictions = pd.DataFrame(group_predictions)
+            group_targets = pd.DataFrame(targets_by_group[group])
 
-        results = {}
-        if 'top-k-count' in scores:
-            results['top_k_count'] = {
-                'k': k,
-                'mean': np.mean(top_k_counts),
-                'std_dev': np.std(top_k_counts, ddof=1),
-            }
-        if 'spearman' in scores:
-            results['spearman_correlation'] = {
+            # TODO: remove hard-coded values
+            merged_data = group_targets.merge(group_predictions, on='pipeline_id')
+            correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
+            spearman_coefs.append(correlation)
+            spearman_ps.append(p_value)
+
+        return {
+            'spearman_correlation': {
                 'mean': np.mean(spearman_coefs),
                 'std_dev': np.std(spearman_coefs, ddof=1),
                 'mean_p_value': np.mean(spearman_ps),
                 'std_dev_p_value': np.std(spearman_ps, ddof=1),
             }
-        if 'top-1-regret' in scores:
-            results['top_1_regret'] = {
+        }
+
+
+class SubsetProblem(PredictByGroupProblemBase):
+
+    def __init__(self, group_key, k):
+        super().__init__(group_key)
+        self._predict_method_name = 'predict_subset'
+        self.k = k
+
+    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        # TODO: the only difference between this method and PredictByGroupProblemBase's is the use of k
+        # How can we remove the duplicate code?
+        self._validate_model_has_method(model, self._predict_method_name)
+
+        model_predict_config = model_config.get(self._predict_method_name, {})
+        model_predict_method = getattr(model, self._predict_method_name)
+
+        grouped_data = self._group_data(data)
+
+        start_timestamp = time.time()
+
+        predictions_by_group = {
+            group: model_predict_method(group_data, k=self.k, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
+        }
+
+        predict_time = time.time() - start_timestamp
+
+        return predictions_by_group, predict_time
+
+    def score(self, predictions_by_group, targets):
+        targets_by_group = self._group_data(targets)
+        top_1_regrets = []
+        top_k_regrets = []
+        top_k_counts = []
+
+        for group, group_predictions in predictions_by_group.items():
+            group_targets = pd.DataFrame(targets_by_group[group])
+
+            top_1_regrets.append(top_k_regret(group_predictions, group_targets, 1))
+            top_k_regrets.append(top_k_regret(group_predictions, group_targets, self.k))
+            top_k_counts.append(top_k_correct(group_predictions, group_targets, self.k))
+
+        return {
+            'top_1_regret': {
                 'mean': np.mean(top_1_regrets),
                 'std_dev': np.std(top_1_regrets, ddof=1),
-            }
-        if 'top-k-regret' in scores:
-            results['top_k_regret'] = {
-                'k': k,
+            },
+            'top_k_regret': {
+                'k': self.k,
                 'mean': np.mean(top_k_regrets),
                 'std_dev': np.std(top_k_regrets, ddof=1),
-            }
+            },
+            'top_k_count': {
+                'k': self.k,
+                'mean': np.mean(top_k_counts),
+                'std_dev': np.std(top_k_counts, ddof=1),
+            },
+        }
 
-        return results
 
-
-def get_problem(problem_name):
-    problem_class = {
-        'regression': RegressionProblem,
-        'rank': RankProblem,
-    }[problem_name]
-    return problem_class()
+def get_problem(problem_name: str, arguments: argparse.Namespace):
+    group_key = 'dataset_id'
+    if problem_name == 'regression':
+        return RegressionProblem()
+    if problem_name == 'rank':
+        return RankProblem(group_key)
+    if problem_name == 'subset':
+        return SubsetProblem(group_key, arguments.k)
