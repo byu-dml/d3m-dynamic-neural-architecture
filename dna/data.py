@@ -180,6 +180,12 @@ def filter_metafeatures(metafeatures: dict, metafeature_subset: str):
 
 
 def preprocess_data(train_data, test_data, metafeature_subset: str):
+    for instance in train_data:
+        instance['pipeline_id'] = instance['pipeline']['id']
+
+    for instance in test_data:
+        instance['pipeline_id'] = instance['pipeline']['id']
+
     train_metafeatures = []
     for instance in train_data:
         metafeatures = filter_metafeatures(instance['metafeatures'], metafeature_subset)
