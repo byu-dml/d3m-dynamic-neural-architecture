@@ -194,7 +194,6 @@ class SubsetProblem(PredictByGroupProblemBase):
         top_k_counts = []
 
         for group, group_predictions in predictions_by_group.items():
-            group_predictions = pd.DataFrame(group_predictions)
             group_targets = pd.DataFrame(targets_by_group[group])
 
             top_1_regrets.append(top_k_regret(group_predictions, group_targets, 1))
