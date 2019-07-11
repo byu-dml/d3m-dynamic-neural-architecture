@@ -142,8 +142,8 @@ python3 -m dna evaluate \
     --verbose
 
 python3 -m dna evaluate \
-    --model meta_hidden_dagrnn_regression \
-    --model-config-path ./model_configs/meta_hidden_dagrnn_regression_config.json \
+    --model hidden_daglstm_regression \
+    --model-config-path ./model_configs/hidden_daglstm_regression_config.json \
     --problem regression rank \
     --k $k \
     --scores top-k-count top-1-regret spearman \

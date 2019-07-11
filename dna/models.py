@@ -405,10 +405,18 @@ class DAGLSTM(nn.Module):
     """
 
     def __init__(
-        self, input_size: int, hidden_size: int, n_layers: int, dropout: float, *, device: str, seed: int
+        self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction: str, *, device: str,
+        seed: int
     ):
-        # TODO: add hidden state aggregation function argument
         super().__init__()
+
+        if reduction == 'mean':
+            self.reduction = torch.mean
+        elif reduction == 'sum':
+            self.reduction = torch.sum
+        else:
+            raise Exception('No valid hidden state reduction was provided to the DAG LSTM\n'
+                            'Got \"' + reduction + '\"')
 
         if dropout > 0:
             # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
@@ -436,17 +444,16 @@ class DAGLSTM(nn.Module):
 
         return lstm_output.squeeze(dim=1)
 
-    @staticmethod
-    def _get_lstm_state(prev_lstm_states, node_inputs):
+    def _get_lstm_state(self, prev_lstm_states, node_inputs):
         """
         Computes the aggregate hidden state for a node in the DAG.
         """
-        mean_hidden_state = torch.mean(
+        mean_hidden_state = self.reduction(
             torch.stack(
                 [prev_lstm_states[i][0] for i in node_inputs]
             ), dim=0
         )
-        mean_cell_state = torch.mean(
+        mean_cell_state = self.reduction(
             torch.stack(
                 [prev_lstm_states[i][1] for i in node_inputs]
             ), dim=0
@@ -463,7 +470,7 @@ class DAGLSTMMLP(nn.Module):
     def __init__(
         self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
         mlp_extra_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
-        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int,
+        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, reduction: str, *, device: str, seed: int,
     ):
         super().__init__()
 
@@ -473,7 +480,8 @@ class DAGLSTMMLP(nn.Module):
         self._mlp_seed = seed + 2
 
         self._dag_lstm = DAGLSTM(
-            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, device=self.device, seed=self._lstm_seed
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction, device=self.device,
+            seed=self._lstm_seed
         )
         self.lstm_hidden_state_size = lstm_hidden_state_size
         self.lstm_n_layers = lstm_n_layers
@@ -511,7 +519,7 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
     def __init__(
         self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
         input_mlp_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
-        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int,
+        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, reduction: str, *, device: str, seed: int,
     ):
         super().__init__()
 
@@ -541,7 +549,8 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
         self._input_mlp = nn.Sequential(*input_layers)
 
         self._dag_lstm = DAGLSTM(
-            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, device=self.device, seed=self._lstm_seed
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction, device=self.device,
+            seed=self._lstm_seed
         )
         self.lstm_hidden_state_size = lstm_hidden_state_size
         self.lstm_n_layers = lstm_n_layers
@@ -573,8 +582,8 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
-        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False, *,
-        device: str = 'cuda:0', seed: int = 0
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
+        reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
         # TODO: clean up supers
         PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
@@ -589,6 +598,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
         self.output_hidden_layer_size = output_hidden_layer_size
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
+        self.reduction = reduction
         self.device = device
         self.seed = seed
         self._data_loader_seed = seed + 1
@@ -679,6 +689,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
             mlp_activation_name=self.activation_name,
             mlp_use_batch_norm=self.use_batch_norm,
             mlp_use_skip=self.use_skip,
+            reduction=self.reduction,
             device=self.device,
             seed=self._model_seed,
         )
@@ -708,16 +719,16 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankModelBase):
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
 
-class MetaHiddenDAGRNNRegressionModel(DAGLSTMRegressionModel):
+class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
 
     def __init__(
         self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, hidden_state_size: int,
         lstm_n_layers: int, dropout: float, output_n_hidden_layers: int, output_hidden_layer_size: int,
-        use_batch_norm: bool, use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+        use_batch_norm: bool, use_skip: bool = False, reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
             activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,
-            output_hidden_layer_size, use_batch_norm, use_skip, device=device, seed=seed
+            output_hidden_layer_size, use_batch_norm, use_skip, reduction, device=device, seed=seed
         )
 
         self.input_n_hidden_layers = input_n_hidden_layers
@@ -737,6 +748,7 @@ class MetaHiddenDAGRNNRegressionModel(DAGLSTMRegressionModel):
             output_size=1,
             mlp_use_batch_norm=self.use_batch_norm,
             mlp_use_skip=self.use_skip,
+            reduction=self.reduction,
             device=self.device,
             seed=self._model_seed,
         )
@@ -1086,7 +1098,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
         'daglstm_regression': DAGLSTMRegressionModel,
-        'meta_hidden_dagrnn_regression': MetaHiddenDAGRNNRegressionModel,
+        'hidden_daglstm_regression': HiddenDAGLSTMRegressionModel,
         'linear_regression': LinearRegressionBaseline,
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,
