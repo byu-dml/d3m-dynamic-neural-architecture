@@ -135,6 +135,14 @@ class EvaluateResult:
         self.test_predict_time = test_predict_time
         self.test_scores = test_scores
 
+    def __eq__(self, other):
+        result = True
+        result &= self.train_predictions == other.train_predictions
+        result &= self.train_scores == other.train_scores
+        result &= self.test_predictions == other.test_predictions
+        result &= self.test_scores == other.test_scores
+        return result
+
 
 def evaluate(
     problem: ProblemBase, train_data: typing.Dict, test_data: typing.Dict, model: ModelBase, model_config: typing.Dict,
@@ -173,11 +181,14 @@ def evaluate_handler(
         with open(model_config_path) as f:
             model_config = json.load(f)
 
-    output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
-    model_output_dir = os.path.join(output_dir, 'model')
-    os.makedirs(model_output_dir)
+    output_dir = arguments.output_dir
+    model_output_dir = None
+    if output_dir is not None:
+        output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
+        model_output_dir = os.path.join(output_dir, 'model')
+        os.makedirs(model_output_dir)
 
-    record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
+        record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
     model_name = getattr(arguments, 'model')
@@ -203,7 +214,8 @@ def evaluate_handler(
             print(json.dumps(results, indent=4))
             print()
 
-    record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
+    if output_dir is not None:
+        record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
 
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):

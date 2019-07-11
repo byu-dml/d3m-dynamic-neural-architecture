@@ -213,14 +213,16 @@ class PyTorchModelBase:
 
             train_predictions, train_targets = self._predict_epoch(train_data_loader, self._model, verbose=verbose)
             train_loss_score = self._loss_function(train_predictions, train_targets)
-            self._save_outputs(output_dir, 'train', e, train_predictions, train_targets, train_loss_score)
+            if output_dir is not None:
+                self._save_outputs(output_dir, 'train', e, train_predictions, train_targets, train_loss_score)
             if verbose:
                 print('train loss: {}'.format(train_loss_score))
 
             if validation_data_loader is not None:
                 validation_predictions, validation_targets = self._predict_epoch(validation_data_loader, self._model, verbose=verbose)
                 validation_loss_score = self._loss_function(validation_predictions, validation_targets)
-                self._save_outputs(output_dir, 'validation', e, validation_predictions, validation_targets, validation_loss_score)
+                if output_dir is not None:
+                    self._save_outputs(output_dir, 'validation', e, validation_predictions, validation_targets, validation_loss_score)
                 if verbose:
                     print('validation loss: {}'.format(validation_loss_score))
                 if validation_loss_score < min_loss_score:
