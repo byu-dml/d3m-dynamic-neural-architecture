@@ -31,8 +31,9 @@ python3 -m dna split-data \
 
 python3 -m dna evaluate \
     --model autosklearn \
-    --problem subset \
+    --problem rank subset \
     --k $k \
+    --model-config-path ./model_configs/autosklearn_config.json \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
     --test-size $validation_size \

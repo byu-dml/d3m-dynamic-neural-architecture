@@ -997,10 +997,14 @@ class MetaAutoSklearn(SklearnBase):
 
 class AutoSklearnMetalearner(RankModelBase):
 
-    def __init__(self, seed=0):
+    def __init__(self, rank_distance_metric, seed=0):
         RankModelBase.__init__(self, seed=seed)
+        if rank_distance_metric == "inverse":
+            self.rank_distance_metric = lambda x, y: x / y
+        else:
+            raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, k):
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, rank_type, k=None):
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         # this should aready be done by the time it gets here
@@ -1013,20 +1017,46 @@ class AutoSklearnMetalearner(RankModelBase):
         # get the ids for pipelines that we have real values for
         current_validation_ids = set(pipeline['id'] for pipeline in data.pipeline)
 
-        kND = KNearestDatasets(metric='l1', random_state=3)
+        kND = KNearestDatasets(metric='l1', random_state=3, rank_distance_metric=self.rank_distance_metric)
         kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
-        # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-        best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
-        k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
+        if rank_type == "k":
+            # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
+            best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
+            k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
+        elif rank_type == "all":
+            k_best_pipelines = kND.allBestSuggestions(pd.Series(dataset_metafeatures))
+        else:
+            raise Exception("Not a valid ranking option for KND")
         return k_best_pipelines
 
-    def predict_subset(self, data, k, *, verbose=False):
+    def predict_subset(self, data, k, **kwargs):
         # they all should have the same dataset and metafeatures so take it from the first row
         data = pd.DataFrame(data)
         dataset_metafeatures = data["metafeatures"].iloc[0]
         dataset_name = data["dataset_id"].iloc[0]
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, k)
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, k=k, rank_type='k')
         return pipelines
+
+    def predict_rank(self, data, **kwargs):
+        """
+        Predict a total ranking of the input pipelines.
+        :data: a list of dictionaries containing pipelines and pipeline_ids to rank for a single dataset.
+        :return:
+        """
+
+        data = pd.DataFrame(data)
+        dataset_metafeatures = data['metafeatures'].iloc[0]
+        k_best_pipelines_per_dataset = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, rank_type='all')
+        test_pipelines = [value[1]["pipeline"]["id"] for value in data.iterrows()]
+
+        # don't rank "training set only" pipelines
+        for pipeline_id in set(k_best_pipelines_per_dataset).difference(set(test_pipelines)):
+            k_best_pipelines_per_dataset.remove(pipeline_id)
+
+        return {
+            'pipeline_id': k_best_pipelines_per_dataset,
+            'rank': list(range(len(k_best_pipelines_per_dataset))),
+        }
 
     def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True, *, validation_data=None, output_dir=None, verbose=False):
         """
@@ -1039,6 +1069,7 @@ class AutoSklearnMetalearner(RankModelBase):
         self.metadata = training_dataset
         self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
         self.run_lookup = self.process_runs()
+        self.fitted = True
 
     def process_runs(self):
         """
