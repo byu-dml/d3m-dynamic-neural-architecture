@@ -159,7 +159,13 @@ class RegressionModelBase(ModelBase):
 
 class RankModelBase(ModelBase):
 
-    def predict_rank(self, data, k=None, *, verbose=False):
+    def predict_rank(self, data, *, verbose=False):
+        raise NotImplementedError()
+
+
+class SubsetModelBase(ModelBase):
+
+    def predict_subset(self, data, k, **kwargs):
         raise NotImplementedError()
 
 
@@ -318,7 +324,7 @@ class PyTorchModelBase:
             json.dump(outputs, f, separators=(',',':'))
 
 
-class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
+class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
 
     def predict_regression(self, data, *, batch_size, verbose):
         if self._model is None:
@@ -327,7 +333,7 @@ class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
         data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
         reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
-        return reordered_predictions
+        return reordered_predictions.tolist()
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
@@ -340,8 +346,16 @@ class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase):
             'rank': ranks,
         }
 
+    def predict_subset(self, data, k, *, batch_size, verbose=False):
+        if self._model is None:
+            raise Exception('model not fit')
 
-class DNARegressionModel(PyTorchRegressionRankModelBase):
+        ranked_data = self.predict_rank(data, batch_size=batch_size, verbose=verbose)
+        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
+        return top_k.tolist()
+
+
+class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
@@ -561,7 +575,7 @@ class DAGRNN(nn.Module):
         return (mean_hidden_state, mean_cell_state)
 
 
-class DAGRNNRegressionModel(PyTorchRegressionRankModelBase):
+class DAGRNNRegressionModel(PyTorchRegressionRankSubsetModelBase):
 
     def __init__(
         self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
@@ -782,7 +796,7 @@ class MedianBaseline(RegressionModelBase):
         return [self.median] * len(data)
 
 
-class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
+class PerPrimitiveBaseline(RegressionModelBase, RankModelBase, SubsetModelBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
@@ -810,7 +824,7 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
         self.fitted = True
 
-    def predict_regression(self, data, *, verbose=False):
+    def predict_regression(self, data, **kwargs):
         if self.primitive_scores is None:
             raise ModelNotFitError('PerPrimitiveBaseline not fit')
 
@@ -824,13 +838,21 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
         return predictions
 
-    def predict_rank(self, data, *, verbose=False):
-        predictions = self.predict_regression(data)
-        ranks = utils.rank(predictions)
+    def predict_rank(self, data, **kwargs):
+        predictions = self.predict_regression(data, **kwargs)
+        ranks = list(utils.rank(predictions))
         return {
             'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
+
+    def predict_subset(self, data, k, **kwargs):
+        if not self.fitted:
+            raise Exception('model not fit')
+
+        ranked_data = self.predict_rank(data, **kwargs)
+        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
+        return top_k.tolist()
 
 
 class RandomBaseline(RankModelBase):
@@ -851,8 +873,12 @@ class RandomBaseline(RankModelBase):
             'rank': predictions,
         }
 
+    def predict_subset(self, data, k, **kwargs):
+        predictions = self._random_state.choice(data, k)
+        return [instance['pipeline_id'] for instance in predictions]
 
-class SklearnBase(RegressionModelBase, RankModelBase):
+
+class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
 
     def __init__(self, seed=0):
         RegressionModelBase.__init__(self, seed=seed)
@@ -875,7 +901,7 @@ class SklearnBase(RegressionModelBase, RankModelBase):
 
         data = pd.DataFrame(data)
         X_data = self.prepare_data(data)
-        return self.regressor.predict(X_data)
+        return self.regressor.predict(X_data).tolist()
 
     def predict_rank(self, data, *, verbose=False):
         if not self.fitted:
@@ -887,6 +913,14 @@ class SklearnBase(RegressionModelBase, RankModelBase):
             'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
+
+    def predict_subset(self, data, k, **kwargs):
+        if not self.fitted:
+            raise Exception('model not fit')
+
+        ranked_data = self.predict_rank(data, **kwargs)
+        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
+        return top_k.tolist()
 
     def prepare_data(self, data):
         # expand the column of lists of metafeatures into a full dataframe
@@ -970,7 +1004,7 @@ class AutoSklearnMetalearner(RankModelBase):
         else:
             raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, rank_type):
+    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, rank_type, k=None):
         # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
         all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
         # this should aready be done by the time it gets here
@@ -987,7 +1021,7 @@ class AutoSklearnMetalearner(RankModelBase):
         kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
         if rank_type == "k":
             # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-            best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=all_other_metafeatures.shape[0])
+            best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
             k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
         elif rank_type == "all":
             k_best_pipelines = kND.allBestSuggestions(pd.Series(dataset_metafeatures))
@@ -995,40 +1029,24 @@ class AutoSklearnMetalearner(RankModelBase):
             raise Exception("Not a valid ranking option for KND")
         return k_best_pipelines
 
-    def get_k_best_pipelines_per_dataset(self, data, rank_type="k"):
+    def predict_subset(self, data, k, **kwargs):
         # they all should have the same dataset and metafeatures so take it from the first row
+        data = pd.DataFrame(data)
         dataset_metafeatures = data["metafeatures"].iloc[0]
         dataset_name = data["dataset_id"].iloc[0]
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, rank_type)
+        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, k=k, rank_type='k')
         return pipelines
 
-    def predict_rank_k_only(self, data, *, verbose=False):
+    def predict_rank(self, data, **kwargs):
         """
-        A wrapper for all the other functions so that this is organized.  This follows the original code so it only returns the top k max (often less than k)
-        :data: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
-        from each dataset being passed in.  This is used for the rankings
+        Predict a total ranking of the input pipelines.
+        :data: a list of dictionaries containing pipelines and pipeline_ids to rank for a single dataset.
         :return:
         """
-        data = pd.DataFrame(data)
-        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(data)
-        return {
-            'pipeline_id': k_best_pipelines_per_dataset,
-            'rank': list(range(len(k_best_pipelines_per_dataset))),
-        }
-
-    def predict_rank(self, data, top_k_only, *, verbose=False):
-        """
-        A wrapper for all the other functions that includes all pipelines ranked instead of just the top k
-        :data: a dictionary containing pipelines, ids, and real f1 scores. MUST CONTAIN PIPELINE IDS
-        from each dataset being passed in.  This is used for the rankings
-        :return:
-        """
-        # if we are using top k only to stay true to their code
-        if top_k_only == True:
-            return self.predict_rank_k_only(data, verbose=verbose)
 
         data = pd.DataFrame(data)
-        k_best_pipelines_per_dataset = self.get_k_best_pipelines_per_dataset(data, rank_type="all")
+        dataset_metafeatures = data['metafeatures'].iloc[0]
+        k_best_pipelines_per_dataset = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, rank_type='all')
         test_pipelines = [value[1]["pipeline"]["id"] for value in data.iterrows()]
 
         # don't rank "training set only" pipelines
@@ -1039,7 +1057,6 @@ class AutoSklearnMetalearner(RankModelBase):
             'pipeline_id': k_best_pipelines_per_dataset,
             'rank': list(range(len(k_best_pipelines_per_dataset))),
         }
-
 
     def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True, *, validation_data=None, output_dir=None, verbose=False):
         """
