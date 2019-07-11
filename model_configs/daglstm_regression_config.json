@@ -23,5 +23,8 @@
     },
     "predict_rank": {
         "batch_size": 2
+    },
+    "predict_subset": {
+        "batch_size": 2
     }
 }
