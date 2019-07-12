@@ -17,7 +17,6 @@ class KNearestDatasets(object):
         self.metric_params = metric_params
         self.metafeatures = None
         self.runs = None
-        self.best_configuration_per_dataset = None
         self.random_state = sklearn.utils.check_random_state(random_state)
 
         if self.metric_params is None:
@@ -48,34 +47,20 @@ class KNearestDatasets(object):
         """
 
         self.metafeatures = metafeatures
-        runs = pipeline_runs.copy(deep=True)
-        self.runs = runs.copy(deep=True)
-        self.num_datasets = runs.shape[1]
+        self.num_datasets = pipeline_runs.shape[1]
 
         # for each dataset, sort the runs according to their result
-        best_configuration_per_dataset = {}
         all_configuration_per_dataset = {}
-
         if maximize_metric:
             opt = np.nanargmax
         else:
             opt = np.nanargmin
-        for dataset_name in runs:
-            if not np.isfinite(runs[dataset_name]).any():
-                best_configuration_per_dataset[dataset_name] = None
+        for dataset_name in pipeline_runs:
+            if not np.isfinite(pipeline_runs[dataset_name]).any():
                 all_configuration_per_dataset[dataset_name] = None
             else:
-                configuration_idx = ""
-                # TODO: I added this.  Should I take it out?
-                while configuration_idx not in validation_set_pipelines:
-                    opt_index = opt(runs[dataset_name].values)
-                    configuration_idx = runs[dataset_name].index[opt_index]
-                    runs[dataset_name].iloc[opt_index] = np.nan
+                all_configuration_per_dataset[dataset_name] = pipeline_runs[dataset_name].reset_index()
 
-                best_configuration_per_dataset[dataset_name] = configuration_idx
-                all_configuration_per_dataset[dataset_name] = runs[dataset_name].reset_index()
-
-        self.best_configuration_per_dataset = best_configuration_per_dataset
         self.all_configuration_per_dataset = all_configuration_per_dataset
 
         if callable(self.metric):
@@ -149,7 +134,9 @@ class KNearestDatasets(object):
         added_configurations = set()
         # get the top 25 best pipelines from each dataset
         for dataset_name, distance in zip(nearest_datasets, distances):
-            best_configuration = self.best_configuration_per_dataset[dataset_name]
+            # get the best configuration from all the configurations by sorting them and taking the first one
+            best_configuration = self.all_configuration_per_dataset[dataset_name]\
+                                        .sort_values([dataset_name, "index"], ascending=False).iloc[0]["index"]
 
             if best_configuration is None:
                 continue
@@ -173,6 +160,7 @@ class KNearestDatasets(object):
         """
         Rank all pipelines in the training set using the rank_distance_metric, a function of dataset distance from x
         and pipeline performance.
+        :param x: the metafeatures for the dataset being predicted on
         """
         assert type(x) == pd.Series
 
@@ -194,7 +182,8 @@ class KNearestDatasets(object):
             row_list.append({"pipeline": pipeline, "rank": rank_score})
 
         final_df = pd.DataFrame(row_list)
-        final_df.sort_values("rank", inplace=True)
+        final_df.sort_values(["rank", "pipeline"], ascending=False, inplace=True)
+        assert len(all_pipelines_ranked.pipeline.unique()) == len(final_df["pipeline"].tolist()), "should have returned all {} pipelines but returned {}".format(len(x), len(final_df["pipeline"].tolist()))
         return final_df["pipeline"].tolist()
 
     """

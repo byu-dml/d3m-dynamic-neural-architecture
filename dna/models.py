@@ -1054,7 +1054,7 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
     def __init__(self, rank_distance_metric, seed=0):
         super().__init__(seed=seed)
         if rank_distance_metric == "inverse":
-            self.rank_distance_metric = lambda x, y: x / y
+            self.rank_distance_metric = lambda x, y: x / (y + 1)
         else:
             raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
 
@@ -1101,7 +1101,7 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
         data = pd.DataFrame(data)
         dataset_metafeatures = data['metafeatures'].iloc[0]
         k_best_pipelines_per_dataset = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, rank_type='all')
-        test_pipelines = [value[1]["pipeline"]["id"] for value in data.iterrows()]
+        test_pipelines = data["pipeline_id"]
 
         # don't rank "training set only" pipelines
         for pipeline_id in set(k_best_pipelines_per_dataset).difference(set(test_pipelines)):

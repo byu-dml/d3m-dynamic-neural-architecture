@@ -142,7 +142,9 @@ class RankProblem(PredictByGroupProblemBase):
 
         for group, group_predictions in predictions_by_group.items():
             group_predictions = pd.DataFrame(group_predictions)
-            group_targets = pd.DataFrame(targets_by_group[group])
+            # have to sort by id in cases of ties
+            group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
+            group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
 
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
@@ -195,6 +197,9 @@ class SubsetProblem(PredictByGroupProblemBase):
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = pd.DataFrame(targets_by_group[group])
+            # have to sort by id in cases of ties
+            group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
+            group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
 
             top_1_regrets.append(top_k_regret(group_predictions, group_targets, 1))
             top_k_regrets.append(top_k_regret(group_predictions, group_targets, self.k))
