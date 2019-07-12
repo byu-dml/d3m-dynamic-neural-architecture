@@ -9,18 +9,16 @@ from dna import metrics
 
 class MetricsTestCase(unittest.TestCase):
 
-    def format_and_get_top_k(self, scores, ids, rank, k, top_k_function):
+    def format_and_get_top_k(self, predicted_top_k, target_ids, target_scores, k, top_k_function):
         """
-        :param scores: the `scores` of the pipelines in a list
-        :param ids: a list of the pipeline ids
-        :param rank: a list of the pipeline rankings
+        :param predicted_top_k: the top-k ids
+        :param target_ids: a list of the pipeline ids
+        :param target_scores: a list of the pipeline scores
         :param k: the number of pipelines to get
         :param top_k_function: the top k function to evaluate, top_k_regret or top_k_correct
         """
-        actual_data = pd.DataFrame({'test_f1_macro': scores, 'pipeline_id': ids})
-        ranked_data = pd.DataFrame({'rank': rank, 'pipeline_id': ids})
-        metric = top_k_function(ranked_data, actual_data, k)
-        return metric
+        targets = pd.DataFrame({'pipeline_id': target_ids, 'test_f1_macro': target_scores})
+        return top_k_function(predicted_top_k, targets, k)
 
     def format_and_get_spearman(self, actual_data, ranked_data):
         """
@@ -144,7 +142,7 @@ class MetricsTestCase(unittest.TestCase):
     def test_top_k_correct(self):
         k = 1
         metric = self.format_and_get_top_k(
-            scores=[0, .5, 1], ids=[0, 1, 2], rank=[1, 2, 3], k=k, top_k_function=metrics.top_k_correct
+            predicted_top_k=[1], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_correct
         )
         true_metric = 0
         np.testing.assert_almost_equal(
@@ -153,9 +151,8 @@ class MetricsTestCase(unittest.TestCase):
             )
         )
 
-
         metric = self.format_and_get_top_k(
-            scores=[0, .5, 1], ids=[0, 1, 2], rank=[3, 2, 1], k=k, top_k_function=metrics.top_k_correct
+            predicted_top_k=[2], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_correct
         )
         true_metric = 1
         np.testing.assert_almost_equal(
@@ -167,7 +164,7 @@ class MetricsTestCase(unittest.TestCase):
 
         k = 3
         metric = self.format_and_get_top_k(
-            scores=[0, .5, 1], ids=[0, 1, 2], rank=[3, 2, 1], k=k, top_k_function=metrics.top_k_correct
+            predicted_top_k=[1, 2, 0], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_correct
         )
         true_metric = 3
         np.testing.assert_almost_equal(
@@ -180,17 +177,17 @@ class MetricsTestCase(unittest.TestCase):
     def test_top_k_regret(self):
         k = 1
         metric = self.format_and_get_top_k(
-            scores=[0, .5, 1], ids=[0, 1, 2], rank=[1, 2, 3], k=k, top_k_function=metrics.top_k_regret
+            predicted_top_k=[1], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_regret
         )
-        true_metric = 1
+        true_metric = .5
         np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get top_1 regret: was {}, shouldve been {}'.format(
+            metric, true_metric, err_msg='failed to get top_1 ranking from 0 example: was {}, shouldve been {}'.format(
                 metric, true_metric
             )
         )
 
         metric = self.format_and_get_top_k(
-            scores=[0, .5, 1], ids=[0, 1, 2], rank=[3, 2, 1], k=k, top_k_function=metrics.top_k_regret
+            predicted_top_k=[2], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_regret
         )
         true_metric = 0
         np.testing.assert_almost_equal(
@@ -200,13 +197,14 @@ class MetricsTestCase(unittest.TestCase):
             )
         )
 
-        k = 2
+        k = 3
         metric = self.format_and_get_top_k(
-            scores=[0, .5, 1], ids=[0, 1, 2], rank=[1, 2, 3], k=k, top_k_function=metrics.top_k_regret
+            predicted_top_k=[1, 2, 0], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_regret
         )
-        true_metric = .5  # the smallest difference between the highest actual one f1_macro and the highest predicted k
+        true_metric = 0
         np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get top_3 ranking from example: was {}, shouldve been {}'.format(
+            metric, true_metric,
+            err_msg='failed to get top_3 ranking from perfect example: was {}, shouldve been {}'.format(
                 metric, true_metric
             )
         )
