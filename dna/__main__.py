@@ -2,11 +2,12 @@ import argparse
 import hashlib
 import json
 import os
+import random
 import sys
 import typing
 import uuid
 
-from dna.data import get_data, preprocess_data, split_data
+from dna.data import get_data, preprocess_data, split_data, group_json_objects
 from dna.models import get_model, ModelBase
 from dna.problems import get_problem, ProblemBase
 
@@ -119,6 +120,14 @@ def configure_evaluate_parser(parser):
     parser.add_argument(
         '--metafeature-subset', type=str, default='all', choices=['all', 'landmarkers', 'non-landmarkers']
     )
+    parser.add_argument(
+        '--out-of-training-set-pipelines', default=False, action='store_true',
+        help='when set, test on out of training set pipelines'
+    )
+    parser.add_argument(
+        '--out-of-training-set-pipelines-split-size', type=float, default=0.5,
+        help='Used with --out-of-training-set-pipelines to set the percentage of pipelines that will be in the training set'
+    )
 
 
 class EvaluateResult:
@@ -191,6 +200,9 @@ def evaluate_handler(
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
+    if arguments.out_of_training_set_pipelines:
+        train_data, test_data, out_of_training_test_data = get_out_of_training_set_pipeline_data(train_data, test_data, arguments)
+
     model_name = getattr(arguments, 'model')
     model = model_resolver(model_name, model_config, seed=getattr(arguments, 'model_seed'))
 
@@ -207,12 +219,28 @@ def evaluate_handler(
             'model_name': model_name,
             **evaluate_result.__dict__,
         })
+        # if we have a special out-of-training-set, use that here
+        if arguments.out_of_training_set_pipelines:
+            if model == "autosklearn": 
+                continue
+            evaluate_result_out_of_training_set = evaluate(
+                problem, train_data, out_of_training_test_data, model, model_config, verbose=arguments.verbose, model_output_dir=model_output_dir
+            )
+            result_scores.append({
+                'out_of_training_set_problem_name': problem_name,
+                'out_of_training_set_model_name': model_name,
+                "out_of_training_set_scores": evaluate_result.__dict__,
+            })
         if arguments.verbose:
             results = evaluate_result.__dict__
             del results['train_predictions']
             del results['test_predictions']
             print(json.dumps(results, indent=4))
-            print()
+            if arguments.out_of_training_set_pipelines:
+                results_out_of_training_set = evaluate_result_out_of_training_set.__dict__
+                del results_out_of_training_set['train_predictions']
+                del results_out_of_training_set['test_predictions']
+                print(json.dumps({"out_of_training_set_scores": results_out_of_training_set}, indent=4), "\n")
 
     if output_dir is not None:
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -255,6 +283,23 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
                 json.dump(test_data, f, separators=(',',':'))
 
     return train_data, test_data
+
+
+def get_out_of_training_set_pipeline_data(train_data, test_data, arguments):
+    full_data = train_data + test_data
+    grouped_data_indices = group_json_objects(full_data, "pipeline_id")
+    groups = list(grouped_data_indices.keys())
+
+    rnd = random.Random()
+    rnd.seed(arguments.split_seed)
+    rnd.shuffle(groups)
+
+    # make the split into in-training set pipeline ids and out-of-training-set pipeline ids
+    in_training_set_pipelines = groups[:int(len(groups) * arguments.out_of_training_set_pipelines_split_size)]
+    train_data_split = [instance for instance in train_data if instance["pipeline_id"] in in_training_set_pipelines]
+    test_data_split = [instance for instance in test_data if instance["pipeline_id"] in in_training_set_pipelines]
+    out_of_training_test_data = [instance for instance in train_data if instance["pipeline_id"] not in in_training_set_pipelines]
+    return train_data_split, test_data_split, out_of_training_test_data 
 
 
 def record_run(
