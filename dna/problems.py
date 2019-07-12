@@ -90,16 +90,6 @@ class ProblemBase:
         title = ProblemBase._make_plot_title('', scores)
         plt.title(title, fontsize=6)
 
-        # Set the min and max value on the x and y axis
-        predictions_min = predictions.min()
-        actuals_min = actuals.min()
-        axis_min = min(actuals_min, predictions_min)
-        predictions_max = predictions.max()
-        actuals_max = actuals.max()
-        axis_max = max(actuals_max, predictions_max)
-        plt.xlim(axis_min, axis_max)
-        plt.ylim(axis_min, axis_max)
-
         # Create the plot
         plt.xlabel('Predictions')
         plt.ylabel('Actuals')
