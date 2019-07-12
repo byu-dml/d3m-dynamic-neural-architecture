@@ -8,6 +8,8 @@
 # validation_size=25
 # validation_split_seed=3101978347
 # k=25
+# metafeature_subset=all
+
 
 # small has 11 datasets
 raw_data_path=./data/small_classification.tar.xz
@@ -26,20 +28,21 @@ results_dir=./dev_results
 python3 -m dna split-data \
     --data-path $raw_data_path \
     --test-size $test_size \
-    --split-seed $test_split_seed
+    --split-seed $test_split_seed 
 
 
-python3 -m dna evaluate \
-    --model autosklearn \
-    --problem rank subset \
-    --k $k \
-    --model-config-path ./model_configs/autosklearn_config.json \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 -m dna evaluate \
+#     --model autosklearn \
+#     --problem rank subset \
+#     --k $k \
+#     --model-config-path ./model_configs/autosklearn_config.json \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -49,7 +52,9 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
+
 
 
 python3 -m dna evaluate \
@@ -59,7 +64,9 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
+
 
 
 python3 -m dna evaluate \
@@ -70,7 +77,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -82,7 +90,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -95,7 +104,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -107,7 +117,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -120,7 +131,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -133,7 +145,9 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
+
 
 python3 -m dna evaluate \
     --model hidden_daglstm_regression \
@@ -144,4 +158,5 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines
