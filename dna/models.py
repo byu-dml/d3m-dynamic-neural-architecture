@@ -1070,9 +1070,9 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
         all_other_metafeatures = all_other_metafeatures.set_index('dataset_id')
         # get the ids for pipelines that we have real values for
         current_validation_ids = set(pipeline['id'] for pipeline in data.pipeline)
-
         kND = KNearestDatasets(metric='l1', random_state=3, rank_distance_metric=self.rank_distance_metric)
         kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
+
         if rank_type == "k":
             # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
             best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
@@ -1107,6 +1107,7 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
         for pipeline_id in set(k_best_pipelines_per_dataset).difference(set(test_pipelines)):
             k_best_pipelines_per_dataset.remove(pipeline_id)
 
+        assert len(k_best_pipelines_per_dataset) == len(data), '{} {}, missing {}'.format(len(k_best_pipelines_per_dataset), len(data), set(test_pipelines).difference(set(k_best_pipelines_per_dataset)))
         return {
             'pipeline_id': k_best_pipelines_per_dataset,
             'rank': list(range(len(k_best_pipelines_per_dataset))),
@@ -1136,8 +1137,7 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
             dataset_name = row['dataset_id']
             if dataset_name not in new_runs:
                 new_runs[dataset_name] = {}
-            else:
-                new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
+            new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
         final_new = pd.DataFrame(new_runs)
         return final_new
 
