@@ -415,7 +415,7 @@ class PMFDataset(Dataset):
         self.dataset_encoding_function = encoding_function
 
     def __getitem__(self, item: int):
-        x = torch.tensor(self.dataset_encoding_function(self.data[item][self.features_key]), dtype=torch.float32, device=self.device)
+        x = self.dataset_encoding_function(self.data[item][self.features_key]).to(self.device)
         y = torch.tensor(self.data[item][self.target_key], dtype=self.y_dtype, device=self.device)
         return x, y
 
