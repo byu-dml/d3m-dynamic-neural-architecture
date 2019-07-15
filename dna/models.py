@@ -150,6 +150,11 @@ class ModelBase:
     def fit(self, data, *, verbose=False):
         raise NotImplementedError()
 
+class GroupRegressionModel:
+    @staticmethod
+    def get_pipeline_ids(data):
+        return [instance['pipeline_id'] for instance in data]
+
 
 class RegressionModelBase(ModelBase):
 
@@ -326,7 +331,8 @@ class PyTorchModelBase:
             json.dump(outputs, f, separators=(',',':'))
 
 
-class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
+class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase,
+                                           GroupRegressionModel):
 
     def __init__(self, y_dtype, device, seed):
         # different arguments means different function calls
@@ -340,16 +346,21 @@ class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase
         data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
         predictions, targets = self._predict_epoch(data_loader, self._model, verbose=verbose)
         reordered_predictions = predictions.numpy()[data_loader.get_group_ordering()]
-        return reordered_predictions.tolist()
+        reordered_predictions = reordered_predictions.tolist()
+
+        return {
+            'pipeline_id': self.get_pipeline_ids(data),
+            'predictions': reordered_predictions
+        }
 
     def predict_rank(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
 
         predictions = self.predict_regression(data, batch_size=batch_size, verbose=verbose)
-        ranks = utils.rank(predictions)
+        ranks = utils.rank(predictions['predictions'])
         return {
-            'pipeline_id': [instance['pipeline_id'] for instance in data],
+            'pipeline_id': predictions['pipeline_id'],
             'rank': ranks,
         }
 

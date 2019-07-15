@@ -7,6 +7,7 @@ import time
 from dna import utils
 from dna.data import group_json_objects
 from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna.models import GroupRegressionModel
 
 
 class ProblemBase:
@@ -41,18 +42,6 @@ class ProblemBase:
 
         return fit_time
 
-    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
-        self._validate_model_has_method(model, self._predict_method_name)
-
-        model_predict_config = model_config.get(self._predict_method_name, {})
-        model_predict_method = getattr(model, self._predict_method_name)
-
-        start_timestamp = time.time()
-        predictions = model_predict_method(data, verbose=verbose, **model_predict_config)
-        predict_time = time.time() - start_timestamp
-
-        return predictions, predict_time
-
     def fit_predict(
         self, train_data, test_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
     ):
@@ -71,28 +60,6 @@ class ProblemBase:
 
     def plot(self, predictions, targets, scores):
         raise NotImplementedError()
-
-
-class RegressionProblem(ProblemBase):
-
-    def __init__(self):
-        super().__init__()
-        self._predict_method_name = 'predict_regression'
-
-    def score(self, predictions, data):
-        # TODO: just pass in targets
-        targets = []
-        for instance in data:
-            targets.append(instance['test_f1_macro'])
-
-        correlation, p_value = pearson_correlation(predictions, targets)
-        return {
-            'RMSE': rmse(predictions, targets),
-            'PearsonCorrelation': {
-                'correlation_coefficient': correlation,
-                'p_value': p_value
-            }
-        }
 
 
 class PredictByGroupProblemBase(ProblemBase):
@@ -127,6 +94,90 @@ class PredictByGroupProblemBase(ProblemBase):
         predict_time = time.time() - start_timestamp
 
         return predictions_by_group, predict_time
+
+
+class RegressionProblem(PredictByGroupProblemBase):
+
+    def __init__(self, group_key):
+        super().__init__(group_key)
+        self._predict_method_name = 'predict_regression'
+
+    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        if isinstance(model, GroupRegressionModel):
+            return self.predict_by_group(data, model, model_config, verbose=verbose, model_output_dir=model_output_dir)
+        else:
+            return self.predict_all(data, model, model_config, verbose=verbose, model_output_dir=model_output_dir)
+
+    def predict_by_group(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        return super().predict(data, model, model_config, verbose=verbose, model_output_dir=model_output_dir)
+
+    def predict_all(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        self._validate_model_has_method(model, self._predict_method_name)
+
+        model_predict_config = model_config.get(self._predict_method_name, {})
+        model_predict_method = getattr(model, self._predict_method_name)
+
+        start_timestamp = time.time()
+        predictions = model_predict_method(data, verbose=verbose, **model_predict_config)
+        predict_time = time.time() - start_timestamp
+
+        return predictions, predict_time
+
+    def score(self, predictions, data):
+        if type(predictions) == dict:
+            return self.score_by_group(predictions, data)
+        else:
+            return self.score_all(predictions, data)
+
+    def score_by_group(self, predictions_by_group, targets):
+        targets_by_group = self._group_data(targets)
+        RMSEs = []
+        pearson_coefs = []
+        pearson_ps = []
+
+        for group, group_predictions in predictions_by_group.items():
+            group_predictions = pd.DataFrame(group_predictions)
+            group_targets = pd.DataFrame(targets_by_group[group])
+
+            # Make sure no pipelines are being excluded in the merge
+            num_pipelines = len(group_targets.pipeline_id)
+            assert num_pipelines == len(group_predictions.pipeline_id)
+            merged_data = group_targets.merge(group_predictions, on='pipeline_id')
+            assert len(merged_data) == num_pipelines
+
+            # TODO: remove hard-coded values
+            predictions = merged_data['predictions'].tolist()
+            actuals = merged_data['test_f1_macro'].tolist()
+            RMSEs.append(rmse(predictions, actuals))
+            correlation, p_value = pearson_correlation(predictions, actuals)
+            pearson_coefs.append(correlation)
+            pearson_ps.append(p_value)
+
+        return {
+            'pearson_correlation': {
+                'RMSE': np.mean(RMSEs),
+                'mean': np.mean(pearson_coefs),
+                'std_dev': np.std(pearson_coefs, ddof=1),
+                'mean_p_value': np.mean(pearson_ps),
+                'std_dev_p_value': np.std(pearson_ps, ddof=1),
+            }
+        }
+
+    @staticmethod
+    def score_all(predictions, data):
+        # TODO: just pass in targets
+        targets = []
+        for instance in data:
+            targets.append(instance['test_f1_macro'])
+
+        correlation, p_value = pearson_correlation(predictions, targets)
+        return {
+            'RMSE': rmse(predictions, targets),
+            'PearsonCorrelation': {
+                'correlation_coefficient': correlation,
+                'p_value': p_value
+            }
+        }
 
 
 class RankProblem(PredictByGroupProblemBase):
@@ -221,7 +272,7 @@ class SubsetProblem(PredictByGroupProblemBase):
 def get_problem(problem_name: str, arguments: argparse.Namespace):
     group_key = 'dataset_id'
     if problem_name == 'regression':
-        return RegressionProblem()
+        return RegressionProblem(group_key)
     if problem_name == 'rank':
         return RankProblem(group_key)
     if problem_name == 'subset':
