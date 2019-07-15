@@ -7,7 +7,7 @@ import typing
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader, Dataset, Sampler
+import torch.utils.data
 
 
 def group_json_objects(json_objects, group_key):
@@ -226,7 +226,7 @@ def preprocess_data(train_data, test_data, metafeature_subset: str):
     return train_data, test_data
 
 
-class Dataset(Dataset):
+class Dataset(torch.utils.data.Dataset):
     """
     A subclass of torch.utils.data.Dataset for handling simple JSON structed
     data.
@@ -260,7 +260,7 @@ class Dataset(Dataset):
         return len(self.data)
 
 
-class RandomSampler(Sampler):
+class RandomSampler(torch.utils.data.Sampler):
     """
     Samples indices uniformly without replacement.
 
@@ -309,7 +309,7 @@ class GroupDataLoader(object):
 
     def __init__(
         self, data: typing.List[typing.Dict], group_key: str,
-        dataset_class: typing.Type[Dataset], dataset_params: dict,
+        dataset_class: typing.Type[torch.utils.data.Dataset], dataset_params: dict,
         batch_size: int, drop_last: bool, shuffle: bool, seed: int
     ):
         self.data = data
@@ -352,7 +352,7 @@ class GroupDataLoader(object):
             sampler = RandomSampler(len(data), self._randint())
         else:
             sampler = None
-        dataloader = DataLoader(
+        dataloader = torch.utils.data.DataLoader(
             dataset = data,
             sampler =  sampler,
             batch_size = self.batch_size,
@@ -403,10 +403,27 @@ class GroupDataLoader(object):
         return len(self._group_batches)
 
 
+class PMFDataset(Dataset):
+    # needed to encode the pipelines and datasets for the embeded layers.  Used with GroupDataLoader.
+    def  __init__(
+        self, data: typing.List[typing.Dict], features_key: str,
+        target_key: str, y_dtype: typing.Any, device: str, encoding_function
+    ):
+        super().__init__(
+            data, features_key, target_key, y_dtype, device
+        )
+        self.dataset_encoding_function = encoding_function
+
+    def __getitem__(self, item: int):
+        x = self.dataset_encoding_function(self.data[item][self.features_key]).to(self.device)
+        y = torch.tensor(self.data[item][self.target_key], dtype=self.y_dtype, device=self.device)
+        return x, y
+
+
 class RNNDataset(Dataset):
 
     def __init__(self, data: dict, features_key: str, target_key: str, y_dtype, device: str):
-        super(RNNDataset, self).__init__(data, features_key, target_key, y_dtype, device)
+        super().__init__(data, features_key, target_key, y_dtype, device)
         self.pipeline_key = 'pipeline'
         self.steps_key = 'steps'
 
