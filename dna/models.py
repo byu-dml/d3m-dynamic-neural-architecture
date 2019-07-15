@@ -2,7 +2,7 @@ import json
 import os
 import typing
 
-# import autosklearn.regression as autosklearn
+import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
 from sklearn import linear_model
@@ -44,7 +44,7 @@ class Submodule(nn.Module):
         self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False,
         dropout: float = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
-        super(Submodule, self).__init__()
+        super().__init__()
 
         with PyTorchRandomStateContext(seed):
             n_layers = len(layer_sizes) - 1
@@ -86,7 +86,7 @@ class DNAModule(nn.Module):
         output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
         *, device: str = 'cuda:0', seed: int = 0
     ):
-        super(DNAModule, self).__init__()
+        super().__init__()
         self.submodule_input_sizes = submodule_input_sizes
         self.n_layers = n_layers
         self.input_layer_size = input_layer_size
@@ -213,14 +213,16 @@ class PyTorchModelBase:
 
             train_predictions, train_targets = self._predict_epoch(train_data_loader, self._model, verbose=verbose)
             train_loss_score = self._loss_function(train_predictions, train_targets)
-            self._save_outputs(output_dir, 'train', e, train_predictions, train_targets, train_loss_score)
+            if output_dir is not None:
+                self._save_outputs(output_dir, 'train', e, train_predictions, train_targets, train_loss_score)
             if verbose:
                 print('train loss: {}'.format(train_loss_score))
 
             if validation_data_loader is not None:
                 validation_predictions, validation_targets = self._predict_epoch(validation_data_loader, self._model, verbose=verbose)
                 validation_loss_score = self._loss_function(validation_predictions, validation_targets)
-                self._save_outputs(output_dir, 'validation', e, validation_predictions, validation_targets, validation_loss_score)
+                if output_dir is not None:
+                    self._save_outputs(output_dir, 'validation', e, validation_predictions, validation_targets, validation_loss_score)
                 if verbose:
                     print('validation loss: {}'.format(validation_loss_score))
                 if validation_loss_score < min_loss_score:
@@ -326,6 +328,11 @@ class PyTorchModelBase:
 
 class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
 
+    def __init__(self, y_dtype, device, seed):
+        # different arguments means different function calls
+        PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
+        RegressionModelBase.__init__(self, seed=seed)
+
     def predict_regression(self, data, *, batch_size, verbose):
         if self._model is None:
             raise Exception('model not fit')
@@ -361,9 +368,7 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
         use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
-        PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
 
         self.n_hidden_layers = n_hidden_layers
         self.hidden_layer_size = hidden_layer_size
@@ -412,194 +417,203 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
         )
 
 
-class DAGRNN(nn.Module):
+class DAGLSTM(nn.Module):
     """
-    The DAGRNN can be used in both an RNN regression task or an RNN siamese task.
-    It parses a pipeline DAG by saving hidden states of previously seen primitives and combining them.
-    It passes the combined hidden states, which represent inputs into the next primitive, into an LSTM.
-    The primitives are one hot encoded.
+    A modified LSTM that handles directed acyclic graphs (DAGs) by reusing and aggregating hidden states.
     """
 
     def __init__(
-        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
-        hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
-        output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
-        use_skip: bool, rnn_input_size: int, input_layer_size: int, output_size: int, device: str, seed: int
+        self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction: str, *, device: str,
+        seed: int
     ):
-        super(DAGRNN, self).__init__()
+        super().__init__()
 
-        self.input_layer_size = input_layer_size
-        self.activation_name = activation_name
-        self.use_batch_norm = use_batch_norm
-        self.use_skip = use_skip
-        self.output_size = output_size
-        self.device = device
-        self._input_seed = seed + 1
-        self._output_seed = seed + 2
+        if reduction == 'mean':
+            self.reduction = torch.mean
+        elif reduction == 'sum':
+            self.reduction = torch.sum
+        else:
+            raise Exception('No valid hidden state reduction was provided to the DAG LSTM\n'
+                            'Got \"' + reduction + '\"')
 
-        self.input_n_hidden_layers = input_n_hidden_layers
-        self.input_hidden_layer_size = input_hidden_layer_size
-        self.input_dropout = input_dropout
-        self._input_submodule = self._get_input_submodule(output_size=hidden_state_size)
-
-        self.activation = ACTIVATIONS[activation_name]()
-
-        if input_dropout > 0.0:
-            self.input_dropout_layer = nn.Dropout(p=input_dropout)
-            self.input_dropout_layer.to(device=device)
+        if dropout > 0:
+            # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
+            torch.backends.cudnn.enabled = False
 
         with PyTorchRandomStateContext(seed=seed):
-            if use_batch_norm:
-                self.batch_norm = nn.BatchNorm1d(hidden_state_size)
-                self.batch_norm.to(device=self.device)
-
-            n_directions = 2 if bidirectional else 1
-            self.hidden_state_dim0_size = lstm_n_layers * n_directions
-            if lstm_dropout > 0 and bidirectional:
-                # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
-                torch.backends.cudnn.enabled = False
+            # TODO: use LSTMCell
             self.lstm = nn.LSTM(
-                input_size=rnn_input_size, hidden_size=hidden_state_size, num_layers=lstm_n_layers,
-                dropout=lstm_dropout, bidirectional=bidirectional, batch_first=True
+                input_size=input_size, hidden_size=hidden_size, num_layers=n_layers, batch_first=True, dropout=dropout
             )
-            self.lstm.to(device=self.device)
+        self.lstm.to(device=device)
 
-        lstm_output_size = hidden_state_size * n_directions
-        self.output_n_hidden_layers = output_n_hidden_layers
-        self.output_hidden_layer_size = output_hidden_layer_size
-        self.output_dropout = output_dropout
-        self._output_submodule = self._get_output_submodule(input_size=lstm_output_size)
+    def forward(self, dags, dag_structure, lstm_start_state):
+        assert len(dag_structure) > 0
+        assert len(dag_structure) == dags.shape[1]
 
-        self.NULL_INPUTS = ['inputs.0']
+        prev_lstm_states = {'inputs.0': lstm_start_state}  # TODO: use something better than 'inputs.0'
+        for i, node_inputs in enumerate(dag_structure):
+            # TODO: use LSTMCell
+            # uses lstm with sequence of len 1
+            nodes_i = dags[:, i, :].unsqueeze(dim=1)  # sequence of len 1
+            lstm_input_state = self._get_lstm_state(prev_lstm_states, node_inputs)
+            lstm_output, lstm_output_state = self.lstm(nodes_i, lstm_input_state)
+            prev_lstm_states[i] = lstm_output_state
 
-    def _get_input_submodule(self, output_size):
-        layer_sizes = [self.input_layer_size] + [self.input_hidden_layer_size] * self.input_n_hidden_layers
-        layer_sizes += [output_size]
-        return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._input_seed, dropout=self.input_dropout
+        return lstm_output.squeeze(dim=1)
+
+    def _get_lstm_state(self, prev_lstm_states, node_inputs):
+        """
+        Computes the aggregate hidden state for a node in the DAG.
+        """
+        mean_hidden_state = self.reduction(
+            torch.stack(
+                [prev_lstm_states[i][0] for i in node_inputs]
+            ), dim=0
         )
-
-    def _get_output_submodule(self, input_size):
-        layer_sizes = [input_size] + [self.output_hidden_layer_size] * self.output_n_hidden_layers
-        layer_sizes += [self.output_size]
-        return Submodule(
-            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, device=self.device,
-            seed=self._output_seed, dropout=self.output_dropout
+        mean_cell_state = self.reduction(
+            torch.stack(
+                [prev_lstm_states[i][1] for i in node_inputs]
+            ), dim=0
         )
-
-    def forward(self, args):
-        (pipeline_structure, pipelines, metafeatures) = args
-
-        batch_size = pipelines.shape[0]
-        seq_len = pipelines.shape[1]
-
-        assert len(metafeatures) == batch_size
-        assert len(pipeline_structure) == seq_len
-
-        # Pass the metafeatures through the input layer
-        metafeatures = self._input_submodule(metafeatures)
-        metafeatures = self.activation(metafeatures)
-
-        if self.input_dropout > 0.0:
-            metafeatures = self.input_dropout_layer(metafeatures)
-
-        if self.use_batch_norm:
-            metafeatures = self.batch_norm(metafeatures)
-
-        # Add a dimension to the metafeatures so they can be concatenated across that dimension
-        metafeatures = metafeatures.unsqueeze(dim=0)
-
-        # Initialize the hidden state and cell state using a concatenation of the metafeatures
-        hidden_state = []
-        for i in range(self.hidden_state_dim0_size):
-            hidden_state.append(metafeatures)
-        hidden_state = torch.cat(hidden_state, dim=0)
-        cell_state = hidden_state
-        lstm_start_state = (hidden_state, cell_state)
-
-        # Keep track of the previous hidden and cell states as we traverse the pipeline
-        prev_lstm_states = []
-
-        lstm_output = None
-
-        # For each batch of primitives coming from the batch of pipelines
-        for i in range(seq_len):
-            # Get the one hot encoded primitives from the batch at index i in the pipeline
-            encoded_primitives = pipelines[:, i, :]
-
-            # Add a dimension in the middle of the shape so it is batch size by sequence length by input size
-            # Note that the sequence length (middle) is 1 because we're doing 1 (batch of) primitive(s) at a time
-            # Also note that the batch size is first in the shape because we selected batch first
-            encoded_primitives = encoded_primitives.unsqueeze(dim=1)
-
-            # Get the list of indices of input primitives coming into the current primitive
-            primitive_inputs = pipeline_structure[i]
-
-            # If this is the first primitive
-            if primitive_inputs == self.NULL_INPUTS:
-                lstm_input_state = lstm_start_state
-            else:
-                # Otherwise get the mean of the hidden states of the input primitives
-                lstm_input_state = self.get_lstm_input_state(prev_lstm_states=prev_lstm_states,
-                                                             primitive_inputs=primitive_inputs)
-
-            # Get the output of the LSTM and the next hidden state and cell state
-            (lstm_output, lstm_output_state) = self.lstm(encoded_primitives, lstm_input_state)
-
-            prev_lstm_states.append(lstm_output_state)
-
-        # Since we're doing 1 primitive at a time, the sequence length in the LSTM output is 1
-        # Squeeze so the fully connected input is of shape batch size by num_directions*hidden_size
-        linear_input = lstm_output.squeeze(dim=1)
-
-        linear_output = self._output_submodule(linear_input)
-        return linear_output.squeeze()
-
-    @staticmethod
-    def get_lstm_input_state(prev_lstm_states, primitive_inputs):
-        # Get the hidden and cell states produced by primitives connected to the current primitive as input
-        input_hidden_states = []
-        input_cell_states = []
-        for primitive_input in primitive_inputs:
-            (hidden_state, cell_state) = prev_lstm_states[primitive_input]
-            input_hidden_states.append(hidden_state.unsqueeze(dim=0))
-            input_cell_states.append(cell_state.unsqueeze(dim=0))
-
-        # Average the input hidden and cell states each into a single state
-        input_hidden_states = torch.cat(input_hidden_states, dim=0)
-        input_cell_states = torch.cat(input_cell_states, dim=0)
-        mean_hidden_state = torch.mean(input_hidden_states, dim=0)
-        mean_cell_state = torch.mean(input_cell_states, dim=0)
-
         return (mean_hidden_state, mean_cell_state)
 
 
-class DAGRNNRegressionModel(PyTorchRegressionRankSubsetModelBase):
+class DAGLSTMMLP(nn.Module):
+    """
+    A DAG LSTM MLP embeds a DAG, concatenates that embedding with another feature vector, and passes the concatenated
+    features to an MLP.
+    """
 
     def __init__(
-        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, input_dropout: float,
-        hidden_state_size: int, lstm_n_layers: int, lstm_dropout: float, bidirectional: bool,
-        output_n_hidden_layers: int, output_hidden_layer_size: int, output_dropout: float, use_batch_norm: bool,
-        use_skip: bool = False, *, device: str = 'cuda:0', seed: int = 0
+        self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
+        mlp_extra_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
+        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, reduction: str, *, device: str, seed: int,
     ):
-        PyTorchModelBase.__init__(self, y_dtype=torch.float32, seed=seed, device=device)
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__()
+
+        self.device = device
+        self.seed = seed
+        self._lstm_seed = seed + 1
+        self._mlp_seed = seed + 2
+
+        self._dag_lstm = DAGLSTM(
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction, device=self.device,
+            seed=self._lstm_seed
+        )
+        self.lstm_hidden_state_size = lstm_hidden_state_size
+        self.lstm_n_layers = lstm_n_layers
+
+        mlp_input_size = lstm_hidden_state_size + mlp_extra_input_size
+        mlp_layer_sizes = [mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
+        self._mlp = Submodule(
+            mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=self.device,
+            seed=self._mlp_seed,
+        )
+
+    def forward(self, args):
+        (dag_structure, dags, features) = args
+
+        batch_size = dags.shape[0]
+        assert len(features) == batch_size, 'DAG batch size does not match features batch size'
+
+        hidden_state = torch.zeros(
+            self.lstm_n_layers, batch_size, self.lstm_hidden_state_size, device=self.device
+        )
+
+        dag_rnn_output = self._dag_lstm(dags, dag_structure, (hidden_state, hidden_state))
+        fc_input = torch.cat((dag_rnn_output, features), dim=1)
+
+        return self._mlp(fc_input).squeeze()
+
+
+class HiddenMLPDAGLSTMMLP(nn.Module):
+    """
+    The HiddenMLPDAGLSTMMLP combines a feature vector and a DAG using an MLP and a DAGLSTM and passes the final
+    embedding to an output MLP. The feature vector is first transformed using an input MLP and is then used as the
+    initial hidden state of the DAGLSTM. The DAGLSTM then creates the final embedding.
+    """
+
+    def __init__(
+        self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
+        input_mlp_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
+        output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, reduction: str, *, device: str, seed: int,
+    ):
+        super().__init__()
+
+        self.device = device
+        self.seed = seed
+        self._input_mlp_seed = seed + 1
+        self._lstm_seed = seed + 2
+        self._output_mlp_seed = seed + 3
+
+        input_mlp_layer_sizes = [input_mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [lstm_hidden_state_size]
+        input_layers = [
+            Submodule(
+                input_mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout,
+                device=self.device, seed=self._input_mlp_seed
+            ),
+            ACTIVATIONS[mlp_activation_name]()
+        ]
+        if dropout > 0.0:
+            input_dropout = nn.Dropout(p=dropout)
+            input_dropout.to(device=device)
+            input_layers.append(input_dropout)
+        if mlp_use_batch_norm:
+            with PyTorchRandomStateContext(seed=seed):
+                input_batch_norm = nn.BatchNorm1d(lstm_hidden_state_size)
+                input_batch_norm.to(device=device)
+                input_layers.append(input_batch_norm)
+        self._input_mlp = nn.Sequential(*input_layers)
+
+        self._dag_lstm = DAGLSTM(
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction, device=self.device,
+            seed=self._lstm_seed
+        )
+        self.lstm_hidden_state_size = lstm_hidden_state_size
+        self.lstm_n_layers = lstm_n_layers
+
+        output_mlp_input_size = lstm_hidden_state_size
+        output_mlp_layer_sizes = [output_mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
+        self._output_mlp = Submodule(
+            output_mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=self.device,
+            seed=self._output_mlp_seed,
+        )
+
+    def forward(self, args):
+        (dag_structure, dags, features) = args
+
+        batch_size = dags.shape[0]
+        assert len(features) == batch_size
+
+        lstm_start_state = self.init_hidden_and_cell_state(features)
+        fc_input = self._dag_lstm(dags, dag_structure, lstm_start_state)
+        return self._output_mlp(fc_input).squeeze()
+
+    def init_hidden_and_cell_state(self, features):
+        single_hidden_state = self._input_mlp(features)
+        hidden_state = single_hidden_state.unsqueeze(dim=0).expand(self.lstm_n_layers, *single_hidden_state.shape)
+        return (hidden_state, hidden_state)
+
+
+class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
+
+    def __init__(
+        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
+        reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
+    ):
+        super().__init__(y_dtype=torch.float32, seed=seed, device=device)
 
         self.activation_name = activation_name
-        self.input_n_hidden_layers = input_n_hidden_layers
-        self.input_hidden_layer_size = input_hidden_layer_size
-        self.input_dropout = input_dropout
         self.hidden_state_size = hidden_state_size
         self.lstm_n_layers = lstm_n_layers
-        self.lstm_dropout = lstm_dropout
-        self.bidirectional = bidirectional
+        self.dropout = dropout
         self.output_n_hidden_layers = output_n_hidden_layers
         self.output_hidden_layer_size = output_hidden_layer_size
-        self.output_dropout = output_dropout
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
+        self.reduction = reduction
         self.device = device
         self.seed = seed
         self._data_loader_seed = seed + 1
@@ -678,15 +692,21 @@ class DAGRNNRegressionModel(PyTorchRegressionRankSubsetModelBase):
         return encoding
 
     def _get_model(self, train_data):
-        metafeatures_length = len(train_data[0][self.features_key])
-        return DAGRNN(
-            activation_name=self.activation_name, input_n_hidden_layers=self.input_n_hidden_layers,
-            input_hidden_layer_size=self.input_hidden_layer_size, input_dropout=self.input_dropout,
-            hidden_state_size=self.hidden_state_size, lstm_n_layers=self.lstm_n_layers, lstm_dropout=self.lstm_dropout,
-            bidirectional=self.bidirectional, output_n_hidden_layers=self.output_n_hidden_layers,
-            output_hidden_layer_size=self.output_hidden_layer_size, output_dropout=self.output_dropout,
-            use_batch_norm=self.use_batch_norm, use_skip=self.use_skip, rnn_input_size=self.num_primitives,
-            input_layer_size=metafeatures_length, output_size=1, device=self.device, seed=self._model_seed
+        return DAGLSTMMLP(
+            lstm_input_size=self.num_primitives,
+            lstm_hidden_state_size=self.hidden_state_size,
+            lstm_n_layers=self.lstm_n_layers,
+            dropout=self.dropout,
+            mlp_extra_input_size=len(train_data[0][self.features_key]),
+            mlp_hidden_layer_size=self.output_hidden_layer_size,
+            mlp_n_hidden_layers=self.output_n_hidden_layers,
+            output_size=1,
+            mlp_activation_name=self.activation_name,
+            mlp_use_batch_norm=self.use_batch_norm,
+            mlp_use_skip=self.use_skip,
+            reduction=self.reduction,
+            device=self.device,
+            seed=self._model_seed,
         )
 
     def _get_optimizer(self, learning_rate):
@@ -714,10 +734,45 @@ class DAGRNNRegressionModel(PyTorchRegressionRankSubsetModelBase):
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
 
+class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
+
+    def __init__(
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, hidden_state_size: int,
+        lstm_n_layers: int, dropout: float, output_n_hidden_layers: int, output_hidden_layer_size: int,
+        use_batch_norm: bool, use_skip: bool = False, reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
+    ):
+        super().__init__(
+            activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,
+            output_hidden_layer_size, use_batch_norm, use_skip, reduction, device=device, seed=seed
+        )
+
+        self.input_n_hidden_layers = input_n_hidden_layers
+        self.input_hidden_layer_size = input_hidden_layer_size
+
+    def _get_model(self, train_data):
+        n_features = len(train_data[0][self.features_key])
+        return HiddenMLPDAGLSTMMLP(
+            lstm_input_size=self.num_primitives,
+            lstm_hidden_state_size=self.hidden_state_size,
+            lstm_n_layers=self.lstm_n_layers,
+            dropout=self.dropout,
+            input_mlp_input_size=n_features,
+            mlp_hidden_layer_size=self.output_hidden_layer_size,
+            mlp_n_hidden_layers=self.output_n_hidden_layers,
+            mlp_activation_name=self.activation_name,
+            output_size=1,
+            mlp_use_batch_norm=self.use_batch_norm,
+            mlp_use_skip=self.use_skip,
+            reduction=self.reduction,
+            device=self.device,
+            seed=self._model_seed,
+        )
+
+
 class DNASiameseModule(nn.Module):
 
     def __init__(self, input_model, submodules, output_model):
-        super(DNASiameseModule, self).__init__()
+        super().__init__()
         self.input_model = input_model
         self.submodules = submodules
         self.output_model = output_model
@@ -764,7 +819,7 @@ class DNASiameseModule(nn.Module):
 class MeanBaseline(RegressionModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.mean = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
@@ -783,7 +838,7 @@ class MeanBaseline(RegressionModelBase):
 class MedianBaseline(RegressionModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.median = None
 
     def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
@@ -858,7 +913,7 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase, SubsetModelBase):
 class RandomBaseline(RankModelBase):
 
     def __init__(self, seed=0):
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self._random_state = np.random.RandomState(seed)
         self.fitted = True
 
@@ -881,8 +936,7 @@ class RandomBaseline(RankModelBase):
 class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
 
     def __init__(self, seed=0):
-        RegressionModelBase.__init__(self, seed=seed)
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.pipeline_key = 'pipeline'
         self.steps_key = 'steps'
         self.prim_name_key = 'name'
@@ -980,7 +1034,7 @@ class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
 class LinearRegressionBaseline(SklearnBase):
 
     def __init__(self, seed=0):
-        SklearnBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.regressor = linear_model.LinearRegression()
         self.fitted = False
 
@@ -988,17 +1042,17 @@ class LinearRegressionBaseline(SklearnBase):
 class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, time_left_for_this_task=60, per_run_time_limit=10, seed=0):
-        SklearnBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         self.regressor = autosklearn.AutoSklearnRegressor(
             time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit, seed=seed
         )
         self.fitted = False
 
 
-class AutoSklearnMetalearner(RankModelBase):
+class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
 
     def __init__(self, rank_distance_metric, seed=0):
-        RankModelBase.__init__(self, seed=seed)
+        super().__init__(seed=seed)
         if rank_distance_metric == "inverse":
             self.rank_distance_metric = lambda x, y: x / y
         else:
@@ -1095,7 +1149,8 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'median_regression': MedianBaseline,
         'per_primitive_regression': PerPrimitiveBaseline,
         'autosklearn': AutoSklearnMetalearner,
-        'dagrnn_regression': DAGRNNRegressionModel,
+        'daglstm_regression': DAGLSTMRegressionModel,
+        'hidden_daglstm_regression': HiddenDAGLSTMRegressionModel,
         'linear_regression': LinearRegressionBaseline,
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,

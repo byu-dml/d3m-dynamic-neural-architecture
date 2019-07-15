@@ -85,17 +85,17 @@ python3 -m dna evaluate \
     --verbose
 
 
-# python3 -m dna evaluate \
-#     --model meta_autosklearn \
-#     --model-config-path ./model_configs/meta_autosklearn_config.json \
-#     --problem regression rank subset \
-#     --k $k \
-#     --metafeature-subset $metafeature_subset \
-#     --train-path $train_path \
-#     --test-size $validation_size \
-#     --split-seed $validation_split_seed \
-#     --output-dir $results_dir \
-#     --verbose
+python3 -m dna evaluate \
+    --model meta_autosklearn \
+    --model-config-path ./model_configs/meta_autosklearn_config.json \
+    --problem regression rank subset \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
 
 
 python3 -m dna evaluate \
@@ -124,11 +124,22 @@ python3 -m dna evaluate \
 
 
 python3 -m dna evaluate \
-    --model dagrnn_regression \
-    --model-config-path ./model_configs/dagrnn_regression_config.json \
+    --model daglstm_regression \
+    --model-config-path ./model_configs/daglstm_regression_config.json \
     --problem regression rank subset \
     --k $k \
     --metafeature-subset $metafeature_subset \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose
+
+python3 -m dna evaluate \
+    --model hidden_daglstm_regression \
+    --model-config-path ./model_configs/hidden_daglstm_regression_config.json \
+    --problem regression rank subset \
+    --k $k \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
