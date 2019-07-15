@@ -83,8 +83,7 @@ class ProblemBase:
             actuals = np.array(actuals)
 
         if(len(predictions) != len(actuals)):
-            print('The length of the predictions must match the length of the actuals')
-            return
+            raise ValueError('The length of the predictions must match the length of the actuals')
 
         # Create the title with the scores on it
         title = ProblemBase._make_plot_title('', scores)
@@ -212,12 +211,12 @@ class RankProblem(PredictByGroupProblemBase):
     def plot(self, predictions, targets, scores, plot_dir: str):
         grouped_targets = self._group_data(targets)
         for (dataset_id, predicted_ranks) in predictions.items():
-            # TODO: make sure predictions and targets are in the same order
             predicted_ranks = pd.DataFrame(predicted_ranks)
-            predicted_ranks = predicted_ranks['rank'].tolist()
-            predicted_ranks = np.array(predicted_ranks)
             actuals_by_dataset = pd.DataFrame(grouped_targets[dataset_id])
-            actuals = actuals_by_dataset['test_f1_macro'].tolist()
+            merged_data = predicted_ranks.merge(actuals_by_dataset, on='pipeline_id')
+            predicted_ranks = merged_data['rank'].tolist()
+            predicted_ranks = np.array(predicted_ranks)
+            actuals = merged_data['test_f1_macro'].tolist()
             actual_ranks = utils.rank(actuals)
             plot_name = dataset_id + '_plot'
             super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, scores, type(self).__name__)
