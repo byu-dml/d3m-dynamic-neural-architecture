@@ -7,7 +7,7 @@ import time
 from dna import utils
 from dna.data import group_json_objects
 from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
-from dna.models import GroupRegressionModel
+from dna.models.models import GroupRegressionModel
 
 
 class ProblemBase:
