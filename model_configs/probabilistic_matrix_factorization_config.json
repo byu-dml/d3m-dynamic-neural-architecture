@@ -1,0 +1,23 @@
+{
+    "__init__": {
+        "latent_features": 100,
+        "probabilitistic": true,
+        "lam_u": 0.3,
+        "lam_v": 0.3
+    },
+    "fit": {
+        "batch_size": 7,
+        "drop_last": false,
+        "learning_rate": 0.0001,
+        "n_epochs": 1
+    },
+    "predict_rank": {
+        "batch_size": 2
+    },
+    "predict_regression": {
+        "batch_size": 2
+    },
+    "predict_subset": {
+        "batch_size": 2
+    }
+}
