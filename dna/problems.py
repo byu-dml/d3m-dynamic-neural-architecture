@@ -62,40 +62,6 @@ class ProblemBase:
         raise NotImplementedError()
 
 
-class PredictByGroupProblemBase(ProblemBase):
-
-    def __init__(self, group_key):
-        super().__init__()
-        self.group_key = group_key
-
-    def _group_data(self, data):
-        grouped_data = {}
-        for group, group_indices in group_json_objects(data, self.group_key).items():
-            for i in group_indices:
-                if group not in grouped_data:
-                    grouped_data[group] = []
-                grouped_data[group].append(data[i])
-        return grouped_data
-
-    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
-        self._validate_model_has_method(model, self._predict_method_name)
-
-        model_predict_config = model_config.get(self._predict_method_name, {})
-        model_predict_method = getattr(model, self._predict_method_name)
-
-        grouped_data = self._group_data(data)
-
-        start_timestamp = time.time()
-
-        predictions_by_group = {
-            group: model_predict_method(group_data, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
-        }
-
-        predict_time = time.time() - start_timestamp
-
-        return predictions_by_group, predict_time
-
-
 class RegressionProblem(PredictByGroupProblemBase):
 
     def __init__(self, group_key):
@@ -178,6 +144,40 @@ class RegressionProblem(PredictByGroupProblemBase):
                 'p_value': p_value
             }
         }
+
+
+class PredictByGroupProblemBase(ProblemBase):
+
+    def __init__(self, group_key):
+        super().__init__()
+        self.group_key = group_key
+
+    def _group_data(self, data):
+        grouped_data = {}
+        for group, group_indices in group_json_objects(data, self.group_key).items():
+            for i in group_indices:
+                if group not in grouped_data:
+                    grouped_data[group] = []
+                grouped_data[group].append(data[i])
+        return grouped_data
+
+    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
+        self._validate_model_has_method(model, self._predict_method_name)
+
+        model_predict_config = model_config.get(self._predict_method_name, {})
+        model_predict_method = getattr(model, self._predict_method_name)
+
+        grouped_data = self._group_data(data)
+
+        start_timestamp = time.time()
+
+        predictions_by_group = {
+            group: model_predict_method(group_data, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
+        }
+
+        predict_time = time.time() - start_timestamp
+
+        return predictions_by_group, predict_time
 
 
 class RankProblem(PredictByGroupProblemBase):
