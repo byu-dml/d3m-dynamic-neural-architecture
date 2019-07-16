@@ -121,27 +121,56 @@ class RegressionProblem(ProblemBase):
 
     def __init__(self):
         super().__init__()
+        self.group_key = 'dataset_id'
         self._predict_method_name = 'predict_regression'
 
     def score(self, predictions, data):
         # TODO: just pass in targets
-        targets = []
-        for instance in data:
-            targets.append(instance['test_f1_macro'])
+        predictions_by_group, targets_by_group = self._group_data(predictions, data)
 
-        correlation, p_value = pearson_correlation(predictions, targets)
+        return self._score_by_group(predictions_by_group, targets_by_group)
+
+    def _group_data(self, predictions, data):
+        predictions_by_group = {}
+        targets_by_group = {}
+        for group, group_indices in group_json_objects(data, self.group_key).items():
+            for i in group_indices:
+                if group not in predictions_by_group:
+                    predictions_by_group[group] = []
+                    targets_by_group[group] = []
+                predictions_by_group[group].append(predictions[i])
+                targets_by_group[group].append(data[i]['test_f1_macro'])
+        return predictions_by_group, targets_by_group
+
+    @staticmethod
+    def _score_by_group(predictions_by_group, targets_by_group):
+        RMSEs = []
+        pearson_coefs = []
+        pearson_ps = []
+
+        for group, group_predictions in predictions_by_group.items():
+            group_targets = targets_by_group[group]
+            RMSEs.append(rmse(group_predictions, group_targets))
+            correlation, p_value = pearson_correlation(group_predictions, group_targets)
+            pearson_coefs.append(correlation)
+            pearson_ps.append(p_value)
+
         return {
-            'RMSE': rmse(predictions, targets),
-            'PearsonCorrelation': {
-                'correlation_coefficient': correlation,
-                'p_value': p_value
+            'RMSE': np.mean(RMSEs),
+            'pearson_correlation': {
+                'mean': np.mean(pearson_coefs),
+                'std_dev': np.std(pearson_coefs, ddof=1),
+                'mean_p_value': np.mean(pearson_ps),
+                'std_dev_p_value': np.std(pearson_ps, ddof=1),
             }
         }
     
-    def plot(self, predictions, targets, scores, plot_dir: str):
-        actuals = [item['test_f1_macro'] for item in targets]
-        actuals = np.array(actuals)
-        self._plot_base(predictions, actuals, 'plot', plot_dir, scores, type(self).__name__)
+    def plot(self, predictions, data, scores, plot_dir: str):
+        predictions_by_group, targets_by_group = self._group_data(predictions, data)
+        for (group, group_predictions) in predictions_by_group.items():
+            group_targets = targets_by_group[group]
+            plot_name = group + '_plot'
+            super()._plot_base(group_predictions, group_targets, plot_name, plot_dir, scores, type(self).__name__)
 
 
 class PredictByGroupProblemBase(ProblemBase):
