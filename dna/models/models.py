@@ -1050,7 +1050,7 @@ class MetaAutoSklearn(SklearnBase):
         self.fitted = False
 
 
-class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
+class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
@@ -1074,6 +1074,18 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
             predicted_pipelines.remove(pipeline_id)
 
         return predicted_pipelines
+
+    def predict_regression(self, data, **kwargs):
+        predictions = []
+        cached_predictions = {}
+        for instance in data:
+            dataset_id = instance['dataset_id']
+            if dataset_id not in cached_predictions:
+                metafeatures = pd.Series(instance['metafeatures'])
+                cached_predictions[dataset_id] = self._knd.knn_regression(metafeatures)
+            pipeline_id = instance['pipeline_id']
+            predictions.append(cached_predictions[dataset_id][pipeline_id])
+        return predictions
 
     def predict_subset(self, data, k, **kwargs):
         """

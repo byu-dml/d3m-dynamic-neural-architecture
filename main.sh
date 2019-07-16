@@ -31,7 +31,7 @@ python3 -m dna split-data \
 
 python3 -m dna evaluate \
     --model autosklearn \
-    --problem rank subset \
+    --problem regression rank subset \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
