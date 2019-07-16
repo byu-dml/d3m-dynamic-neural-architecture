@@ -7,7 +7,7 @@ import typing
 import uuid
 
 from dna.data import get_data, preprocess_data, split_data
-from dna.models import get_model, ModelBase
+from dna.models.models import get_model, ModelBase
 from dna.problems import get_problem, ProblemBase
 
 
