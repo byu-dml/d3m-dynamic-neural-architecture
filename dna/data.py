@@ -403,6 +403,23 @@ class GroupDataLoader(object):
         return len(self._group_batches)
 
 
+class PMFDataset(Dataset):
+    # needed to encode the pipelines and datasets for the embeded layers.  Used with GroupDataLoader.
+    def  __init__(
+        self, data: typing.List[typing.Dict], features_key: str,
+        target_key: str, y_dtype: typing.Any, device: str, encoding_function
+    ):
+        super().__init__(
+            data, features_key, target_key, y_dtype, device
+        )
+        self.dataset_encoding_function = encoding_function
+
+    def __getitem__(self, item: int):
+        x = self.dataset_encoding_function(self.data[item][self.features_key]).to(self.device)
+        y = torch.tensor(self.data[item][self.target_key], dtype=self.y_dtype, device=self.device)
+        return x, y
+
+
 class RNNDataset(Dataset):
 
     def __init__(self, data: dict, features_key: str, target_key: str, y_dtype, device: str):

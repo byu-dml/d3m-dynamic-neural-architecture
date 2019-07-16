@@ -26,7 +26,7 @@ def pearson_correlation(y_hat, y):
 
 
 def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
-    top_actual = actual_data.nlargest(k, columns='test_f1_macro')['pipeline_id']
+    top_actual = actual_data.nlargest(k, columns='test_f1_macro', keep='all')['pipeline_id']
     return len(set(top_actual).intersection(set(top_k_predicted)))
 
 

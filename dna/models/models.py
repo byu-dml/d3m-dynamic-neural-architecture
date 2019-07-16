@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from dna.data import Dataset, GroupDataLoader, RNNDataLoader, group_json_objects
+from dna.data import Dataset, GroupDataLoader, PMFDataset, RNNDataLoader, group_json_objects
 from dna.kND import KNearestDatasets
 from dna import utils
 
@@ -650,6 +650,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
             output_dir=output_dir, verbose=verbose
         )
 
+
     def _get_primitive_name_to_enc(self, train_data):
         primitive_names = set()
 
@@ -1039,92 +1040,246 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
     def __init__(self, rank_distance_metric, seed=0):
         super().__init__(seed=seed)
         if rank_distance_metric == "inverse":
-            self.rank_distance_metric = lambda x, y: x / y
+            self.rank_distance_metric = lambda x, y: x / (y + 1)
         else:
             raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
+        self._knd = KNearestDatasets(metric='l1', random_state=3, rank_metric=self.rank_distance_metric)
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, rank_type, k=None):
-        # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
-        all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
-        # this should aready be done by the time it gets here
-        all_other_metafeatures = all_other_metafeatures.transpose()
-        # get the metafeatures out of their list
-        all_other_metafeatures = pd.DataFrame(all_other_metafeatures.iloc[1].tolist(), index=all_other_metafeatures.iloc[0])
-        all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
-        all_other_metafeatures = all_other_metafeatures.reset_index().drop_duplicates()
-        all_other_metafeatures = all_other_metafeatures.set_index('dataset_id')
-        # get the ids for pipelines that we have real values for
-        current_validation_ids = set(pipeline['id'] for pipeline in data.pipeline)
+    def _predict(self, data, method, k=None):
+        data = pd.DataFrame(data)
+        # they all should have the same dataset and metafeatures so take it from the first row
+        dataset_metafeatures = pd.Series(data['metafeatures'].iloc[0])
+        queried_pipelines = data['pipeline_id']
 
-        kND = KNearestDatasets(metric='l1', random_state=3, rank_distance_metric=self.rank_distance_metric)
-        kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
-        if rank_type == "k":
-            # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-            best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
-            k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
-        elif rank_type == "all":
-            k_best_pipelines = kND.allBestSuggestions(pd.Series(dataset_metafeatures))
+        if method == 'all':
+            predicted_pipelines = self._knd.allBestSuggestions(dataset_metafeatures)
+        elif method == 'k':
+            predicted_pipelines = self._knd.kBestSuggestions(dataset_metafeatures, k=k)
         else:
-            raise Exception("Not a valid ranking option for KND")
-        return k_best_pipelines
+            raise ValueError('Unknown method: {}'.format(method))
+
+        for pipeline_id in set(predicted_pipelines).difference(set(queried_pipelines)):
+            predicted_pipelines.remove(pipeline_id)
+
+        return predicted_pipelines
 
     def predict_subset(self, data, k, **kwargs):
-        # they all should have the same dataset and metafeatures so take it from the first row
-        data = pd.DataFrame(data)
-        dataset_metafeatures = data["metafeatures"].iloc[0]
-        dataset_name = data["dataset_id"].iloc[0]
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, k=k, rank_type='k')
-        return pipelines
+        """
+        Recommends at most k pipelines from data expected to perform well for the provided dataset.
+        """
+        return self._predict(data, method='k', k=k)
 
     def predict_rank(self, data, **kwargs):
         """
-        Predict a total ranking of the input pipelines.
-        :data: a list of dictionaries containing pipelines and pipeline_ids to rank for a single dataset.
-        :return:
+        Ranks all pipelines in data.
         """
+        ranked_pipelines = self._predict(data, method='all')
 
-        data = pd.DataFrame(data)
-        dataset_metafeatures = data['metafeatures'].iloc[0]
-        k_best_pipelines_per_dataset = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, rank_type='all')
-        test_pipelines = [value[1]["pipeline"]["id"] for value in data.iterrows()]
-
-        # don't rank "training set only" pipelines
-        for pipeline_id in set(k_best_pipelines_per_dataset).difference(set(test_pipelines)):
-            k_best_pipelines_per_dataset.remove(pipeline_id)
+        assert len(ranked_pipelines) == len(data), '{} {}'.format(len(ranked_pipelines), len(data))
 
         return {
-            'pipeline_id': k_best_pipelines_per_dataset,
-            'rank': list(range(len(k_best_pipelines_per_dataset))),
+            'pipeline_id': ranked_pipelines,
+            'rank': list(range(len(ranked_pipelines))),
         }
 
-    def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True, *, validation_data=None, output_dir=None, verbose=False):
-        """
-        A basic KNN fit.  Loads in and processes the training data from a fixed split
-        :param training_dataset: the dataset to be processed.  If none given it will be pulled from the hardcoded file
-        :param metric: what kind of metric we're using in our metalearning
-        :param maximize_metric: whether to maximize or minimize that metric.  Defaults to Maximize
-        """
-        self.maximize_metric = maximize_metric
-        self.metadata = training_dataset
-        self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
-        self.run_lookup = self.process_runs()
+    def fit(self, train_data, *args, **kwargs):
+        self._runs = self._process_runs(train_data)
+        self._metafeatures = self._process_metafeatures(train_data)
+        self._knd.fit(self._metafeatures, self._runs)
         self.fitted = True
 
-    def process_runs(self):
+    @staticmethod
+    def _process_runs(data):
         """
         This function is used to transform the dataframe into a workable object fot the KNN, with rows of pipeline_ids
         and columns of datasets, with the inside being filled with the scores
         :return:
         """
         new_runs = {}
-        for index, row in enumerate(self.metadata):
+        for index, row in enumerate(data):
             dataset_name = row['dataset_id']
             if dataset_name not in new_runs:
                 new_runs[dataset_name] = {}
-            else:
-                new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
+            new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
         final_new = pd.DataFrame(new_runs)
         return final_new
+
+    @staticmethod
+    def _process_metafeatures(data):
+        metafeatures = pd.DataFrame(data)[['dataset_id', 'metafeatures']].set_index('dataset_id')
+        metafeatures = pd.DataFrame(metafeatures['metafeatures'].tolist(), metafeatures.index)
+        metafeatures.drop_duplicates(inplace=True)
+        return metafeatures
+
+
+class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
+    """
+    Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
+    Adapted from traditional Probabilitistic Matrix Factorization but instead of `Users` and `Items`, we have `Pipelines` and `Datasets`
+    """
+    def __init__(self, latent_features, lam_u, lam_v, probabilitistic, *, device: str = 'cuda:0', seed=0):
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
+        self.latent_features = latent_features
+        self.device = device
+        self.fitted = False
+
+        # regularization terms to make it Probabilitistic
+        self.lam_u = lam_u
+        self.lam_v = lam_v
+        self.mse_loss = torch.nn.MSELoss(reduction="mean")
+        self.probabilitistic = probabilitistic
+
+        self.target_key = 'test_f1_macro'
+        self.batch_group_key = 'pipeline_structure'
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
+        self.prim_inputs_key = 'inputs'
+        self.features_key = 'metafeatures'
+
+    def PMFLoss(self, y_hat, y):
+        rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
+        # PMF loss includes two extra regularlization
+        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated)
+        if self.probabilitistic:
+            u_regularization = self.lam_u * torch.sum(self.model.dataset_factors.weight.norm(dim=1))
+            v_regularization = self.lam_v * torch.sum(self.model.pipeline_factors.weight.norm(dim=1))
+            return rmse_loss + u_regularization + v_regularization
+
+        return rmse_loss
+
+    def _get_loss_function(self):
+        return lambda y_hat, y: self.PMFLoss(y_hat, y)
+
+    def _get_optimizer(self, learning_rate):
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
+        return GroupDataLoader(
+            data = data,
+            group_key = 'pipeline.id',
+            dataset_class = PMFDataset,
+            dataset_params = {
+                'features_key': 'dataset_id',
+                'target_key': self.target_key,
+                'y_dtype': self.y_dtype,
+                'device': self.device,
+                "encoding_function": self.encode_dataset,
+            },
+            batch_size = batch_size,
+            drop_last = drop_last,
+            shuffle = shuffle,
+            seed = self.seed + 2,
+        )
+
+    def _get_model(self, train_data):
+        self.model = PMF(self.n_pipelines, self.n_datasets, self.latent_features, device=self.device, seed=self.seed)
+        return self.model
+
+    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        verbose=False):
+        self.fitted = True
+
+        # get mappings for matrix -> using both datasets to prepare mapping, otherwise we're unprepared for new datasets
+        self.pipeline_id_mapper = self.map_pipeline_ids(train_data + validation_data)
+        self.dataset_id_mapper = self.map_dataset_ids(train_data + validation_data)
+
+        # encode the pipeline dataset mapping
+        train_data = self.encode_pipeline_dataset(train_data)
+        if validation_data is not None:
+            validation_data = self.encode_pipeline_dataset(validation_data)
+
+        # do the rest of the fitting
+        PyTorchModelBase.fit(
+            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            output_dir=output_dir, verbose=verbose
+        )
+
+    def encode_pipeline_dataset(self, data):
+        for instance in data:
+            instance["pipeline"]["pipeline_embedding"] = self.encode_pipeline(instance["pipeline"]["id"])
+            instance["dataset_id_embedding"] = self.dataset_id_mapper[instance["dataset_id"]]
+        return data
+
+    def map_pipeline_ids(self, data):
+        unique_pipelines = list(set([instance["pipeline"]["id"] for instance in data]))
+        # for reproduciblity
+        unique_pipelines.sort()
+        self.n_pipelines = len(unique_pipelines)
+        return {unique_pipelines[index]:index for index in range(self.n_pipelines)}
+
+    def map_dataset_ids(self, data):
+        unique_datasets = list(set([instance["dataset_id"] for instance in data]))
+        unique_datasets.sort()
+        self.n_datasets = len(unique_datasets)
+        return {unique_datasets[index]:index for index in range(self.n_datasets)}
+
+    def encode_dataset(self, dataset):
+        dataset_vec = np.zeros(self.n_datasets)
+        dataset_vec[self.dataset_id_mapper[dataset]] = 1
+        dataset_vec = torch.tensor(dataset_vec.astype("int64"), device=self.device).long()
+        return dataset_vec
+
+    def encode_pipeline(self, pipeline_id):
+        pipeline_vec = np.zeros(self.n_pipelines)
+        pipeline_vec[self.pipeline_id_mapper[pipeline_id]] = 1
+        pipeline_vec = torch.tensor(pipeline_vec.astype("int64"), device=self.device).long()
+        return pipeline_vec
+
+
+class PMF(nn.Module):
+    """
+    In usual Matrix Factorization terms:
+    dataset_features (aka dataset_id) = movie_features
+    pipeline_features (aka pipeline_id) = user_features
+    Imagine it as a matrix like so:
+
+             Datasets (id)
+         ______________________
+    P   | ? .2  ?  ?  .4  ?  ? |
+    i   | ?  ?  ?  ?   ? .4  ? |
+    p   |.7  ?  ?  ?  .8  ?  ? |
+    e   | ? .1  ?  ?   ?  ?  ? |
+    l   | ?  ? .9  ?   ?  0  ? |
+    i   | ?  ?  ?  ?   ?  ?  ? |
+    n   |.3  ?  ?  ?  .2  ?  1 |
+    e   |______________________|
+
+
+    """
+    def __init__(self, n_pipelines, n_datasets, n_factors, device, seed):
+        super(PMF, self).__init__()
+        self.n_pipelines = n_pipelines
+        self.n_datasets = n_datasets
+        self.n_factors = n_factors
+        self.device = device
+        assert type(n_pipelines) == int and type(n_datasets) == int and type(n_factors) == int, "given wrong input for PMF: expected int"
+
+        with PyTorchRandomStateContext(seed):
+            self.pipeline_factors = torch.nn.Embedding(n_pipelines,
+                                                n_factors,
+                                                sparse=False).to(self.device)
+
+            self.dataset_factors = torch.nn.Embedding(n_datasets,
+                                                n_factors,
+                                                sparse=False).to(self.device)
+
+    def forward(self, args):
+        pipeline_id, pipeline, x = args
+        # gather embedding vectors
+        pipeline_vec = pipeline["pipeline_embedding"].to(self.device)
+        dataset_vec = x.long().to(self.device)
+        # Find the embedding id
+        dataset_nums = dataset_vec.argmax(1).tolist()
+        pipeline_num = pipeline_vec.argmax(0).tolist()
+        # find the matrix
+        matrices = torch.matmul(self.pipeline_factors(pipeline_vec), self.dataset_factors(dataset_vec).permute([0, 2, 1])).to(self.device).float()
+        # find the predicted values for each pipeline x dataset in our batch
+        subset = [tuple((index, pipeline_num, dataset_nums[index])) for index in range(matrices.shape[0])]
+        vecs = [matrices[sub].reshape(1) for sub in subset]
+        # combined the predictions
+        combined = torch.cat(vecs)
+        return combined
 
 
 def get_model(model_name: str, model_config: typing.Dict, seed: int):
@@ -1139,6 +1294,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'linear_regression': LinearRegressionBaseline,
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,
+        'probabilistic_matrix_factorization': ProbabilisticMatrixFactorization,
     }[model_name.lower()]
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)
