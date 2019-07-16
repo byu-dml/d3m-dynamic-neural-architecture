@@ -1055,92 +1055,76 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
     def __init__(self, rank_distance_metric, seed=0):
         super().__init__(seed=seed)
         if rank_distance_metric == "inverse":
-            self.rank_distance_metric = lambda x, y: x / y
+            self.rank_distance_metric = lambda x, y: x / (y + 1)
         else:
             raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
+        self._knd = KNearestDatasets(metric='l1', random_state=3, rank_metric=self.rank_distance_metric)
 
-    def get_k_best_pipelines(self, data, dataset_metafeatures, all_other_metafeatures, rank_type, k=None):
-        # all_other_metafeatures = all_other_metafeatures.iloc[:, mf_mask]
-        all_other_metafeatures = all_other_metafeatures.replace([np.inf, -np.inf], np.nan)
-        # this should aready be done by the time it gets here
-        all_other_metafeatures = all_other_metafeatures.transpose()
-        # get the metafeatures out of their list
-        all_other_metafeatures = pd.DataFrame(all_other_metafeatures.iloc[1].tolist(), index=all_other_metafeatures.iloc[0])
-        all_other_metafeatures = all_other_metafeatures.fillna(all_other_metafeatures.mean(skipna=True))
-        all_other_metafeatures = all_other_metafeatures.reset_index().drop_duplicates()
-        all_other_metafeatures = all_other_metafeatures.set_index('dataset_id')
-        # get the ids for pipelines that we have real values for
-        current_validation_ids = set(pipeline['id'] for pipeline in data.pipeline)
+    def _predict(self, data, method, k=None):
+        data = pd.DataFrame(data)
+        # they all should have the same dataset and metafeatures so take it from the first row
+        dataset_metafeatures = pd.Series(data['metafeatures'].iloc[0])
+        queried_pipelines = data['pipeline_id']
 
-        kND = KNearestDatasets(metric='l1', random_state=3, rank_distance_metric=self.rank_distance_metric)
-        kND.fit(all_other_metafeatures, self.run_lookup, current_validation_ids, self.maximize_metric)
-        if rank_type == "k":
-            # best suggestions is a list of 3-tuples that contain the pipeline index,the distance value, and the pipeline_id
-            best_suggestions = kND.kBestSuggestions(pd.Series(dataset_metafeatures), k=k)
-            k_best_pipelines = [suggestion[2] for suggestion in best_suggestions]
-        elif rank_type == "all":
-            k_best_pipelines = kND.allBestSuggestions(pd.Series(dataset_metafeatures))
+        if method == 'all':
+            predicted_pipelines = self._knd.allBestSuggestions(dataset_metafeatures)
+        elif method == 'k':
+            predicted_pipelines = self._knd.kBestSuggestions(dataset_metafeatures, k=k)
         else:
-            raise Exception("Not a valid ranking option for KND")
-        return k_best_pipelines
+            raise ValueError('Unknown method: {}'.format(method))
+
+        for pipeline_id in set(predicted_pipelines).difference(set(queried_pipelines)):
+            predicted_pipelines.remove(pipeline_id)
+
+        return predicted_pipelines
 
     def predict_subset(self, data, k, **kwargs):
-        # they all should have the same dataset and metafeatures so take it from the first row
-        data = pd.DataFrame(data)
-        dataset_metafeatures = data["metafeatures"].iloc[0]
-        dataset_name = data["dataset_id"].iloc[0]
-        pipelines = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, k=k, rank_type='k')
-        return pipelines
+        """
+        Recommends at most k pipelines from data expected to perform well for the provided dataset.
+        """
+        return self._predict(data, method='k', k=k)
 
     def predict_rank(self, data, **kwargs):
         """
-        Predict a total ranking of the input pipelines.
-        :data: a list of dictionaries containing pipelines and pipeline_ids to rank for a single dataset.
-        :return:
+        Ranks all pipelines in data.
         """
+        ranked_pipelines = self._predict(data, method='all')
 
-        data = pd.DataFrame(data)
-        dataset_metafeatures = data['metafeatures'].iloc[0]
-        k_best_pipelines_per_dataset = self.get_k_best_pipelines(data, dataset_metafeatures, self.metafeatures, rank_type='all')
-        test_pipelines = [value[1]["pipeline"]["id"] for value in data.iterrows()]
-
-        # don't rank "training set only" pipelines
-        for pipeline_id in set(k_best_pipelines_per_dataset).difference(set(test_pipelines)):
-            k_best_pipelines_per_dataset.remove(pipeline_id)
+        assert len(ranked_pipelines) == len(data), '{} {}'.format(len(ranked_pipelines), len(data))
 
         return {
-            'pipeline_id': k_best_pipelines_per_dataset,
-            'rank': list(range(len(k_best_pipelines_per_dataset))),
+            'pipeline_id': ranked_pipelines,
+            'rank': list(range(len(ranked_pipelines))),
         }
 
-    def fit(self, training_dataset=None, metric='test_accuracy', maximize_metric=True, *, validation_data=None, output_dir=None, verbose=False):
-        """
-        A basic KNN fit.  Loads in and processes the training data from a fixed split
-        :param training_dataset: the dataset to be processed.  If none given it will be pulled from the hardcoded file
-        :param metric: what kind of metric we're using in our metalearning
-        :param maximize_metric: whether to maximize or minimize that metric.  Defaults to Maximize
-        """
-        self.maximize_metric = maximize_metric
-        self.metadata = training_dataset
-        self.metafeatures = pd.DataFrame(self.metadata)[['dataset_id', 'metafeatures']]
-        self.run_lookup = self.process_runs()
+    def fit(self, train_data, *args, **kwargs):
+        self._runs = self._process_runs(train_data)
+        self._metafeatures = self._process_metafeatures(train_data)
+        self._knd.fit(self._metafeatures, self._runs)
         self.fitted = True
 
-    def process_runs(self):
+    @staticmethod
+    def _process_runs(data):
         """
         This function is used to transform the dataframe into a workable object fot the KNN, with rows of pipeline_ids
         and columns of datasets, with the inside being filled with the scores
         :return:
         """
         new_runs = {}
-        for index, row in enumerate(self.metadata):
+        for index, row in enumerate(data):
             dataset_name = row['dataset_id']
             if dataset_name not in new_runs:
                 new_runs[dataset_name] = {}
-            else:
-                new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
+            new_runs[dataset_name][row['pipeline_id']] = row['test_f1_macro']
         final_new = pd.DataFrame(new_runs)
         return final_new
+
+    @staticmethod
+    def _process_metafeatures(data):
+        metafeatures = pd.DataFrame(data)[['dataset_id', 'metafeatures']].set_index('dataset_id')
+        metafeatures = pd.DataFrame(metafeatures['metafeatures'].tolist(), metafeatures.index)
+        metafeatures.drop_duplicates(inplace=True)
+        return metafeatures
 
 
 class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
