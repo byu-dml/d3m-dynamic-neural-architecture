@@ -444,7 +444,11 @@ class RNNDataLoader(GroupDataLoader):
         encoding = []
         for primitive in pipeline:
             primitive_name = primitive[prim_name_key]
-            encoded_primitive = primitive_to_enc[primitive_name]
+            try:
+                encoded_primitive = primitive_to_enc[primitive_name]
+            except():
+                raise KeyError('A primitive in this data set is not in the primitive encoding')
+
             encoding.append(encoded_primitive)
         return encoding
 
