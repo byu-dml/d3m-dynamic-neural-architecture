@@ -3,10 +3,13 @@ import argparse
 import numpy as np
 import pandas as pd
 import time
+import os
+import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import group_json_objects
 from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna import utils
 
 
 class ProblemBase:
@@ -69,8 +72,49 @@ class ProblemBase:
     def score(self, predictions, targets):
         raise NotImplementedError()
 
-    def plot(self, predictions, targets, scores):
+    def plot(self, predictions, targets, scores, plot_dir: str):
         raise NotImplementedError()
+
+    @staticmethod
+    def _plot_base(predictions, actuals, plot_name: str, plot_directory: str, scores: dict, problem_name: str):
+        if type(predictions) == list:
+            predictions = np.array(predictions)
+        if type(actuals) == list:
+            actuals = np.array(actuals)
+
+        if(len(predictions) != len(actuals)):
+            raise ValueError('The length of the predictions must match the length of the actuals')
+
+        # Create the title with the scores on it
+        title = ProblemBase._make_plot_title('', scores)
+        plt.title(title, fontsize=6)
+
+        # Create the plot
+        plt.xlabel('Predictions')
+        plt.ylabel('Actuals')
+        plt.scatter(predictions, actuals)
+        plt.tight_layout()
+
+        # Save the plot
+        new_dir = os.path.join(plot_directory, problem_name)
+        if not os.path.isdir(new_dir):
+            os.makedirs(new_dir)
+        file_name = os.path.join(new_dir, plot_name)
+        plt.savefig(fname=file_name)
+        plt.clf()
+
+    @staticmethod
+    def _make_plot_title(title, scores):
+        for (score_name, score_value) in scores.items():
+            if type(score_value) == dict:
+                title += score_name.upper() + ':' + '\n'
+                title = ProblemBase._make_plot_title(title, score_value)
+            elif type(score_value) == np.float64 or type(score_value) == float:
+                score_value = '{0:.5f}'.format(score_value)
+                title += score_name + ': ' + score_value + '\n'
+            else:
+                title += score_name + ': ' + str(score_value) + '\n'
+        return title
 
 
 class RegressionProblem(ProblemBase):
@@ -93,6 +137,11 @@ class RegressionProblem(ProblemBase):
                 'p_value': p_value
             }
         }
+    
+    def plot(self, predictions, targets, scores, plot_dir: str):
+        actuals = [item['test_f1_macro'] for item in targets]
+        actuals = np.array(actuals)
+        self._plot_base(predictions, actuals, 'plot', plot_dir, scores, type(self).__name__)
 
 
 class PredictByGroupProblemBase(ProblemBase):
@@ -161,6 +210,19 @@ class RankProblem(PredictByGroupProblemBase):
             }
         }
 
+    def plot(self, predictions, targets, scores, plot_dir: str):
+        grouped_targets = self._group_data(targets)
+        for (dataset_id, predicted_ranks) in predictions.items():
+            predicted_ranks = pd.DataFrame(predicted_ranks)
+            actuals_by_dataset = pd.DataFrame(grouped_targets[dataset_id])
+            merged_data = predicted_ranks.merge(actuals_by_dataset, on='pipeline_id')
+            predicted_ranks = merged_data['rank'].tolist()
+            predicted_ranks = np.array(predicted_ranks)
+            actuals = merged_data['test_f1_macro'].tolist()
+            actual_ranks = utils.rank(actuals)
+            plot_name = dataset_id + '_plot'
+            super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, scores, type(self).__name__)
+
 
 class SubsetProblem(PredictByGroupProblemBase):
 
@@ -221,6 +283,9 @@ class SubsetProblem(PredictByGroupProblemBase):
                 'std_dev': np.std(top_k_counts, ddof=1),
             },
         }
+
+    def plot(self, *args, **kwargs):
+        pass
 
 
 def get_problem(problem_name: str, arguments: argparse.Namespace):

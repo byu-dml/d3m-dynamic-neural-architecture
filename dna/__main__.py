@@ -7,7 +7,7 @@ import typing
 import uuid
 
 from dna.data import get_data, preprocess_data, split_data
-from dna.models import get_model, ModelBase
+from dna.models.models import get_model, ModelBase
 from dna.problems import get_problem, ProblemBase
 
 
@@ -146,21 +146,23 @@ class EvaluateResult:
 
 def evaluate(
     problem: ProblemBase, train_data: typing.Dict, test_data: typing.Dict, model: ModelBase, model_config: typing.Dict,
-    *, verbose: bool = False, model_output_dir: str = None,
+    *, verbose: bool = False, model_output_dir: str = None, plot_dir: str = None
 ):
     train_predictions, fit_time, train_predict_time = problem.fit_predict(
         train_data, test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
     )
     train_scores = problem.score(train_predictions, train_data)
-    # TODO
-    # problem.plot(train_predictions, train_data, train_scores, plot_dir)
+
+    if plot_dir is not None:
+        problem.plot(train_predictions, train_data, train_scores, os.path.join(plot_dir, 'train'))
 
     test_predictions, test_predict_time = problem.predict(
         test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
     )
     test_scores = problem.score(test_predictions, test_data)
-    # TODO
-    # problem.plot(test_predictions, test_data, test_scores, plot_dir)
+
+    if plot_dir is not None:
+        problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
 
     return EvaluateResult(
         train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time, test_scores
@@ -183,10 +185,13 @@ def evaluate_handler(
 
     output_dir = arguments.output_dir
     model_output_dir = None
+    plot_dir = None
     if output_dir is not None:
         output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
         model_output_dir = os.path.join(output_dir, 'model')
         os.makedirs(model_output_dir)
+        plot_dir = os.path.join(output_dir, 'plots')
+        os.makedirs(plot_dir)
 
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
@@ -200,7 +205,8 @@ def evaluate_handler(
             print('{} {} {}'.format(model_name, problem_name, run_id))
         problem = problem_resolver(problem_name, arguments)
         evaluate_result = evaluate(
-            problem, train_data, test_data, model, model_config, verbose=arguments.verbose, model_output_dir=model_output_dir
+            problem, train_data, test_data, model, model_config, verbose=arguments.verbose,
+            model_output_dir=model_output_dir, plot_dir=plot_dir
         )
         result_scores.append({
             'problem_name': problem_name,
