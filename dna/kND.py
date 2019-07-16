@@ -28,7 +28,7 @@ class MinMaxScaler:
 
 class KNearestDatasets(object):
 
-    def __init__(self, metric='l1', metric_params=None, rank_metric=None, random_state=None):
+    def __init__(self, metric='l1', metric_params=None):
         self.metric = metric
         if callable(self.metric):
             self._metric = self.metric
@@ -42,12 +42,6 @@ class KNearestDatasets(object):
         else:
             raise ValueError(self.metric)
         self.metric_params = metric_params if metric_params is not None else {}
-
-        if not callable(rank_metric):
-            raise ValueError(rank_metric)
-        self.rank_metric = rank_metric
-
-        self.random_state = sklearn.utils.check_random_state(random_state)
 
         self.metafeatures = None
         self._scaled_metafeatures = None
@@ -158,23 +152,27 @@ class KNearestDatasets(object):
 
         return kbest[:k]
 
-    def allBestSuggestions(self, x):
+    def knn_regression(self, x):
         """
-        Rank all pipelines in the training set using the rank_metric, a function of dataset distance from x
-        and pipeline performance.
-        :param x: the metafeatures for the dataset being predicted on
+        Regress performance of a pipeline from the training set for a given set of metafeatures x using KNN regression.
+
+        Parameters
+        ----------
+        x: pandas.Series
+            The metafeatures of some dataset
         """
         assert type(x) == pd.Series
 
         nearest_datasets, distances = self.kNearestDatasets(x, k=-1, return_distance=True)
+        if 0. in distances:
+            distances = [int(dist == 0.) for dist in distances]
+        distances = pd.Series(distances, nearest_datasets).reindex(self.runs.columns)
 
-        ranked_pipelines = None
-        # add the distance ranking to each dataset scores
-        for i, (dataset_name, distance) in enumerate(zip(nearest_datasets, distances)):
-            if i == 0:
-                ranked_pipelines = self.rank_metric(self.runs[dataset_name], distance)
-            else:
-                current_ranked_pipelines = self.rank_metric(self.runs[dataset_name], distance)
-                ranked_pipelines = pd.concat([ranked_pipelines, current_ranked_pipelines], axis=1, copy=False).max(axis=1)
+        regressed_values = {}
+        for pipeline_id, dataset_scores in self.runs.iterrows():
+            denom = distances[~dataset_scores.isnull()].sum()
+            if denom > 0.:
+                num = (dataset_scores * distances).sum()
+                regressed_values[pipeline_id] = num / denom
 
-        return ranked_pipelines.sort_values(ascending=False).index.tolist()
+        return pd.Series(regressed_values)
