@@ -6,18 +6,16 @@
         "lam_v": 0.3
     },
     "fit": {
-        "batch_size": 7,
-        "drop_last": false,
-        "learning_rate": 0.0001,
-        "n_epochs": 1
+        "learning_rate": 0.001,
+        "n_epochs": 5
     },
     "predict_rank": {
-        "batch_size": 2
+        "batch_size": 0
     },
     "predict_regression": {
-        "batch_size": 2
+        "batch_size": 0
     },
     "predict_subset": {
-        "batch_size": 2
+        "batch_size": 0
     }
 }

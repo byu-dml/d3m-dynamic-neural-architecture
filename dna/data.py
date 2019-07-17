@@ -403,6 +403,24 @@ class GroupDataLoader(object):
         return len(self._group_batches)
 
 
+class PMFDataLoader(object):
+    def __init__(self, x_data, y_data, n_x, n_y, device="cuda:0"):
+        # Build the matrix using the x and y data
+        self.matrix = torch.zeros([n_x, n_y], device=device)
+        for index, value in enumerate(y_data):
+            self.matrix[x_data[index]["pipeline_id_embedding"]][x_data[index]["dataset_id_embedding"]] = value
+        self.used = False
+        self.n = len(y_data)
+
+    def __len__(self):
+        return 1
+
+    def __iter__(self):
+        if not self.used:
+            yield(None, self.matrix)
+        raise StopIteration()
+
+
 class PMFDataset(Dataset):
     # needed to encode the pipelines and datasets for the embeded layers.  Used with GroupDataLoader.
     def  __init__(

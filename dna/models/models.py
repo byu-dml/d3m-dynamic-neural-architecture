@@ -9,9 +9,10 @@ from sklearn import linear_model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from dna.data import Dataset, GroupDataLoader, PMFDataset, RNNDataLoader, group_json_objects
+from dna.data import Dataset, GroupDataLoader, PMFDataset, RNNDataLoader, PMFDataLoader, group_json_objects
 from dna.kND import KNearestDatasets
 from dna import utils
 
@@ -196,11 +197,11 @@ class PyTorchModelBase:
         if output_dir is not None:
             model_save_path = os.path.join(output_dir, 'model.pt')
 
-        train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
+        train_data_loader = self._get_data_loader(train_data, shuffle=True)
         validation_data_loader = None
         min_loss_score = np.inf
         if validation_data is not None:
-            validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
+            validation_data_loader = self._get_data_loader(validation_data, shuffle=False)
 
         for e in range(n_epochs):
             save_model = False
@@ -260,7 +261,6 @@ class PyTorchModelBase:
 
         if verbose:
             progress = tqdm(total=len(data_loader), position=0)
-
         for x_batch, y_batch in data_loader:
             y_hat_batch = model(x_batch)
             loss = loss_function(y_hat_batch, y_batch)
@@ -1169,31 +1169,26 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
-    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
-        return GroupDataLoader(
-            data = data,
-            group_key = 'pipeline.id',
-            dataset_class = PMFDataset,
-            dataset_params = {
-                'features_key': 'dataset_id',
-                'target_key': self.target_key,
-                'y_dtype': self.y_dtype,
-                'device': self.device,
-                "encoding_function": self.encode_dataset,
-            },
-            batch_size = batch_size,
-            drop_last = drop_last,
-            shuffle = shuffle,
-            seed = self.seed + 2,
-        )
+    def _get_data_loader(self, data, batch_size=0, drop_last=False, shuffle=True):
+        y_data = [instance["test_f1_macro"] for instance in data]
+        x_data = []
+        for instance in data:
+            x_data.append({"pipeline_id_embedding": instance["pipeline"]["pipeline_embedding"],
+                           "dataset_id_embedding": instance["dataset_id_embedding"]})
+
+        with PyTorchRandomStateContext(self.seed):
+            data_loader = PMFDataLoader(x_data, y_data, self.n_pipelines, self.n_datasets)
+            assert len(data_loader) == 1, "PMF dataloader should have a size of 1 not {}".format(len(data_loader))
+            return data_loader
 
     def _get_model(self, train_data):
         self.model = PMF(self.n_pipelines, self.n_datasets, self.latent_features, device=self.device, seed=self.seed)
         return self.model
 
-    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+    def fit(self, train_data, n_epochs, learning_rate, *, validation_data=None, output_dir=None,
         verbose=False):
         self.fitted = True
+        self.batch_size = 0
 
         # get mappings for matrix -> using both datasets to prepare mapping, otherwise we're unprepared for new datasets
         self.pipeline_id_mapper = self.map_pipeline_ids(train_data + validation_data)
@@ -1206,7 +1201,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
         # do the rest of the fitting
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            self, train_data, n_epochs, learning_rate, self.batch_size, False, validation_data=validation_data,
             output_dir=output_dir, verbose=verbose
         )
 
@@ -1236,10 +1231,24 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return dataset_vec
 
     def encode_pipeline(self, pipeline_id):
-        pipeline_vec = np.zeros(self.n_pipelines)
-        pipeline_vec[self.pipeline_id_mapper[pipeline_id]] = 1
-        pipeline_vec = torch.tensor(pipeline_vec.astype("int64"), device=self.device).long()
-        return pipeline_vec
+        return self.pipeline_id_mapper[pipeline_id]
+
+    def predict_regression(self, data, *, batch_size, verbose):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
+        prediction_matrix, target_matrix = self._predict_epoch(data_loader, self._model, verbose=verbose)
+        predictions = self.get_predictions_from_matrix(data, prediction_matrix)
+        return predictions
+
+    def get_predictions_from_matrix(self, x_data, matrix):
+        predictions = []
+        for index, item in enumerate(x_data):
+            predict_value = matrix[self.encode_pipeline(item["pipeline_id"])][self.dataset_id_mapper[item["dataset_id"]]].item()
+            predictions.append(predict_value)
+
+        return predictions
 
 
 class PMF(nn.Module):
@@ -1279,22 +1288,12 @@ class PMF(nn.Module):
                                                 n_factors,
                                                 sparse=False).to(self.device)
 
+
     def forward(self, args):
-        pipeline_id, pipeline, x = args
-        # gather embedding vectors
-        pipeline_vec = pipeline["pipeline_embedding"].to(self.device)
-        dataset_vec = x.long().to(self.device)
-        # Find the embedding id
-        dataset_nums = dataset_vec.argmax(1).tolist()
-        pipeline_num = pipeline_vec.argmax(0).tolist()
-        # find the matrix
-        matrices = torch.matmul(self.pipeline_factors(pipeline_vec), self.dataset_factors(dataset_vec).permute([0, 2, 1])).to(self.device).float()
-        # find the predicted values for each pipeline x dataset in our batch
-        subset = [tuple((index, pipeline_num, dataset_nums[index])) for index in range(matrices.shape[0])]
-        vecs = [matrices[sub].reshape(1) for sub in subset]
-        # combined the predictions
-        combined = torch.cat(vecs)
-        return combined
+        # dataset_embeddings = args["dataset_id_embedding"].long().to(self.device)
+        # pipeline_embeddings = args["pipeline_id_embedding"].to(self.device)
+        matrix = torch.matmul(self.pipeline_factors.weight, self.dataset_factors.weight.permute([1, 0])).to(self.device).float()
+        return matrix
 
 
 def get_model(model_name: str, model_config: typing.Dict, seed: int):
