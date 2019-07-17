@@ -324,6 +324,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
 
         self.pipeline_structures = None
         self.num_primitives = None
+        self.primitive_name_to_enc = None
         self.target_key = 'test_f1_macro'
         self.batch_group_key = 'pipeline_structure'
         self.pipeline_key = 'pipeline'
@@ -345,12 +346,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
             self.pipeline_structures[group] = group_structure
 
         # Get the mapping of primitives to their one hot encoding
-        primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
-
-        # Encode all the pipelines in the training and validation set
-        self.encode_pipelines(data=train_data, primitive_name_to_enc=primitive_name_to_enc)
-        if validation_data is not None:
-            self.encode_pipelines(data=validation_data, primitive_name_to_enc=primitive_name_to_enc)
+        self.primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
 
         PyTorchModelBase.fit(
             self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
@@ -379,21 +375,6 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
             primitive_name_to_enc[primitive_name] = primitive_encoding
 
         return primitive_name_to_enc
-
-    def encode_pipelines(self, data, primitive_name_to_enc):
-        for instance in data:
-            pipeline = instance[self.pipeline_key][self.steps_key]
-            encoded_pipeline = self.encode_pipeline(pipeline=pipeline, primitive_to_enc=primitive_name_to_enc)
-            instance[self.pipeline_key][self.steps_key] = encoded_pipeline
-
-    def encode_pipeline(self, pipeline, primitive_to_enc):
-        # Create a tensor of encoded primitives
-        encoding = []
-        for primitive in pipeline:
-            primitive_name = primitive[self.prim_name_key]
-            encoded_primitive = primitive_to_enc[primitive_name]
-            encoding.append(encoded_primitive)
-        return encoding
 
     def _get_model(self, train_data):
         return DAGLSTMMLP(
@@ -430,7 +411,11 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
             drop_last=drop_last,
             shuffle=shuffle,
             seed=self._data_loader_seed,
-            pipeline_structures=self.pipeline_structures
+            pipeline_structures=self.pipeline_structures,
+            primitive_to_enc=self.primitive_name_to_enc,
+            pipeline_key=self.pipeline_key,
+            steps_key=self.steps_key,
+            prim_name_key=self.prim_name_key
         )
 
     def _get_loss_function(self):
@@ -787,7 +772,7 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase
                 metafeatures = pd.Series(instance['metafeatures'])
                 cached_predictions[dataset_id] = self._knd.knn_regression(metafeatures)
             pipeline_id = instance['pipeline_id']
-            predictions.append(cached_predictions[dataset_id][pipeline_id])
+            predictions.append(cached_predictions[dataset_id].get(pipeline_id, None))
         return predictions
 
     def predict_subset(self, data, k, **kwargs):

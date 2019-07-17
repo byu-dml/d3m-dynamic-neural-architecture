@@ -2,11 +2,12 @@ import argparse
 import hashlib
 import json
 import os
+import random
 import sys
 import typing
 import uuid
 
-from dna.data import get_data, preprocess_data, split_data
+from dna.data import get_data, preprocess_data, split_data, group_json_objects
 from dna.models.models import get_model, ModelBase
 from dna.problems import get_problem, ProblemBase
 
@@ -98,7 +99,7 @@ def configure_evaluate_parser(parser):
         help='path to a json file containing the model configuration values'
     )
     parser.add_argument(
-        '--model-seed', type=int, default=0,
+        '--model-seed', type=int, default=1,
         help='seed used to control the random state of the model'
     )
     parser.add_argument(
@@ -119,13 +120,32 @@ def configure_evaluate_parser(parser):
     parser.add_argument(
         '--metafeature-subset', type=str, default='all', choices=['all', 'landmarkers', 'non-landmarkers']
     )
+    parser.add_argument(
+        '--use-ootsp', default=False, action='store_true',
+        help='when set, enables out-of-training-set pielines (ootsp) mode. discard some pipelines from the training' +\
+            ' data and evaluate the model twice: once with test data that contains only in-training-set pipelines ' +\
+            'and once with only out-of-training-set pipelines'
+    )
+    parser.add_argument(
+        '--ootsp-split-ratio', type=float, default=0.5,
+        help='Used with --use-ootsp to set the ratio of pipelines that will be in the training set'
+    )
+    parser.add_argument(
+        '--ootsp-split-seed', type=int, action='store', default=2,
+        help='Seed used with --use-ootsp used to split the train and test sets into ootsp sets'
+    )
+    parser.add_argument(
+        '--skip-test-ootsp', default=False, action='store_true',
+        help='Used with --use-ootsp evaluate the model using the ootsp splits, but only the test in-training-set ' +\
+            'pipelines. This is useful to compare models that cannot make predictions on ootsp'
+    )
 
 
 class EvaluateResult:
 
     def __init__(
         self, train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
     ):
         self.train_predictions = train_predictions
         self.fit_time = fit_time
@@ -134,19 +154,23 @@ class EvaluateResult:
         self.test_predictions = test_predictions
         self.test_predict_time = test_predict_time
         self.test_scores = test_scores
+        self.ootsp_test_predictions = ootsp_test_predictions
+        self.ootsp_test_predict_time = ootsp_test_predict_time
+        self.ootsp_test_scores = ootsp_test_scores
 
     def __eq__(self, other):
-        result = True
-        result &= self.train_predictions == other.train_predictions
+        result = self.train_predictions == other.train_predictions
         result &= self.train_scores == other.train_scores
         result &= self.test_predictions == other.test_predictions
         result &= self.test_scores == other.test_scores
+        result &= self.ootsp_test_predictions == other.ootsp_test_predictions
+        result &= self.ootsp_test_scores == other.ootsp_test_scores
         return result
 
 
 def evaluate(
-    problem: ProblemBase, train_data: typing.Dict, test_data: typing.Dict, model: ModelBase, model_config: typing.Dict,
-    *, verbose: bool = False, model_output_dir: str = None, plot_dir: str = None
+    problem: ProblemBase, model: ModelBase, model_config: typing.Dict, train_data: typing.Dict, test_data: typing.Dict,
+    ootsp_test_data: typing.Dict = None, *, verbose: bool = False, model_output_dir: str = None, plot_dir: str = None
 ):
     train_predictions, fit_time, train_predict_time = problem.fit_predict(
         train_data, test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
@@ -164,15 +188,29 @@ def evaluate(
     if plot_dir is not None:
         problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
 
+    ootsp_test_predictions = None
+    ootsp_test_predict_time = None
+    ootsp_test_scores = None
+    if ootsp_test_data is not None:
+        ootsp_test_predictions, ootsp_test_predict_time = problem.predict(
+            ootsp_test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+        )
+        ootsp_test_scores = problem.score(ootsp_test_predictions, ootsp_test_data)
+
+        if plot_dir is not None:
+            problem.plot(
+                ootsp_test_predictions, ootsp_test_data, ootsp_test_scores, os.path.join(plot_dir, 'ootsp_test')
+            )
+
     return EvaluateResult(
-        train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time, test_scores
+        train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
     )
 
 
 def evaluate_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *,
-    data_resolver=get_data, model_resolver=get_model,
-    problem_resolver=get_problem,
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data,
+    model_resolver=get_model, problem_resolver=get_problem,
 ):
     run_id = str(uuid.uuid4())
 
@@ -196,6 +234,14 @@ def evaluate_handler(
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
+    ootsp_test_data = None
+    if arguments.use_ootsp:
+        train_data, test_data, ootsp_test_data = get_ootsp_split_data(
+            train_data, test_data, arguments.ootsp_split_ratio, arguments.ootsp_split_seed
+        )
+        if arguments.skip_test_ootsp:
+            ootsp_test_data = None
+
     model_name = getattr(arguments, 'model')
     model = model_resolver(model_name, model_config, seed=getattr(arguments, 'model_seed'))
 
@@ -205,7 +251,7 @@ def evaluate_handler(
             print('{} {} {}'.format(model_name, problem_name, run_id))
         problem = problem_resolver(problem_name, arguments)
         evaluate_result = evaluate(
-            problem, train_data, test_data, model, model_config, verbose=arguments.verbose,
+            problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
             model_output_dir=model_output_dir, plot_dir=plot_dir
         )
         result_scores.append({
@@ -213,10 +259,12 @@ def evaluate_handler(
             'model_name': model_name,
             **evaluate_result.__dict__,
         })
+
         if arguments.verbose:
             results = evaluate_result.__dict__
             del results['train_predictions']
             del results['test_predictions']
+            del results['ootsp_test_predictions']
             print(json.dumps(results, indent=4))
             print()
 
@@ -261,6 +309,26 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
                 json.dump(test_data, f, separators=(',',':'))
 
     return train_data, test_data
+
+
+def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
+    train_pipeline_ids = sorted(set(instance['pipeline_id'] for instance in train_data))
+    k = int(split_ratio * len(train_pipeline_ids))
+
+    rnd = random.Random()
+    rnd.seed(split_seed)
+    in_train_set_pipeline_ids = set(rnd.choices(train_pipeline_ids, k=k))
+
+    new_train_data = [instance for instance in train_data if instance['pipeline_id'] in in_train_set_pipeline_ids]
+    itsp_test_data = []
+    ootsp_test_data = []
+    for instance in test_data:
+        if instance['pipeline_id'] in in_train_set_pipeline_ids:
+            itsp_test_data.append(instance)
+        else:
+            ootsp_test_data.append(instance)
+
+    return new_train_data, itsp_test_data, ootsp_test_data
 
 
 def record_run(
