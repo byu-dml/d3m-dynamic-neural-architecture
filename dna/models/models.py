@@ -1233,14 +1233,21 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def encode_pipeline(self, pipeline_id):
         return self.pipeline_id_mapper[pipeline_id]
 
-    def predict_regression(self, data, *, batch_size, verbose):
+    def predict_regression(self, data, *, verbose, **kwargs):
         if self._model is None:
             raise Exception('model not fit')
 
-        data_loader = self._get_data_loader(data, batch_size, drop_last=False, shuffle=False)
+        data_loader = self._get_data_loader(data, drop_last=False, shuffle=False)
         prediction_matrix, target_matrix = self._predict_epoch(data_loader, self._model, verbose=verbose)
         predictions = self.get_predictions_from_matrix(data, prediction_matrix)
         return predictions
+
+    def predict_rank(self, data, *, verbose, **kwargs):
+        # no batch size needed
+        return super().predict_rank(data, batch_size=0, verbose=verbose)
+
+    def predict_subset(self, data, k, *, verbose=False):
+        return super().predict_subset(data, k, batch_size=0, verbose=verbose)
 
     def get_predictions_from_matrix(self, x_data, matrix):
         predictions = []
