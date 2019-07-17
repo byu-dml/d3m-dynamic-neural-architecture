@@ -312,20 +312,23 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
 
 
 def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
-    full_data = train_data + test_data
-    grouped_data_indices = group_json_objects(full_data, "pipeline_id")
-    groups = list(grouped_data_indices.keys())
+    train_pipeline_ids = sorted(set(instance['pipeline_id'] for instance in train_data))
+    k = int(split_ratio * len(train_pipeline_ids))
 
     rnd = random.Random()
     rnd.seed(split_seed)
-    rnd.shuffle(groups)
+    in_train_set_pipeline_ids = set(rnd.choices(train_pipeline_ids, k=k))
 
-    # make the split into in-training set pipeline ids and out-of-training-set pipeline ids
-    in_training_set_pipelines = groups[:int(len(groups) * split_ratio)]
-    train_data_split = [instance for instance in train_data if instance["pipeline_id"] in in_training_set_pipelines]
-    test_data_split = [instance for instance in test_data if instance["pipeline_id"] in in_training_set_pipelines]
-    out_of_training_test_data = [instance for instance in train_data if instance["pipeline_id"] not in in_training_set_pipelines]
-    return train_data_split, test_data_split, out_of_training_test_data 
+    new_train_data = [instance for instance in train_data if instance['pipeline_id'] in in_train_set_pipeline_ids]
+    itsp_test_data = []
+    ootsp_test_data = []
+    for instance in test_data:
+        if instance['pipeline_id'] in in_train_set_pipeline_ids:
+            itsp_test_data.append(instance)
+        else:
+            ootsp_test_data.append(instance)
+
+    return new_train_data, itsp_test_data, ootsp_test_data
 
 
 def record_run(
