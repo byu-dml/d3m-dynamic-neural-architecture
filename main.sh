@@ -20,6 +20,7 @@ validation_size=2
 validation_split_seed=5460650386
 k=2
 metafeature_subset=all
+# use_ootsp=--use-ootsp
 
 
 results_dir=./dev_results
@@ -41,7 +42,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp \
+    $use_ootsp \
     --skip-test-ootsp
 
 
@@ -53,7 +54,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -64,7 +65,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -76,7 +77,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -89,7 +90,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -103,7 +104,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -116,7 +117,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -130,7 +131,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -144,7 +145,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -157,7 +158,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -170,5 +171,5 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --use-ootsp \
+    $use_ootsp \
     --skip-test-ootsp
