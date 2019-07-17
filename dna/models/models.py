@@ -1170,14 +1170,9 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
     def _get_data_loader(self, data, batch_size=0, drop_last=False, shuffle=True):
-        y_data = [instance["test_f1_macro"] for instance in data]
-        x_data = []
-        for instance in data:
-            x_data.append({"pipeline_id_embedding": instance["pipeline"]["pipeline_embedding"],
-                           "dataset_id_embedding": instance["dataset_id_embedding"]})
-
         with PyTorchRandomStateContext(self.seed):
-            data_loader = PMFDataLoader(x_data, y_data, self.n_pipelines, self.n_datasets)
+            data_loader = PMFDataLoader(data, self.n_pipelines, self.n_datasets, self.encode_pipeline, self.encode_dataset, self.pipeline_id_mapper,
+                                        self.dataset_id_mapper)
             assert len(data_loader) == 1, "PMF dataloader should have a size of 1 not {}".format(len(data_loader))
             return data_loader
 
@@ -1191,25 +1186,14 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         self.batch_size = 0
 
         # get mappings for matrix -> using both datasets to prepare mapping, otherwise we're unprepared for new datasets
-        self.pipeline_id_mapper = self.map_pipeline_ids(train_data + validation_data)
-        self.dataset_id_mapper = self.map_dataset_ids(train_data + validation_data)
-
-        # encode the pipeline dataset mapping
-        train_data = self.encode_pipeline_dataset(train_data)
-        if validation_data is not None:
-            validation_data = self.encode_pipeline_dataset(validation_data)
+        self.pipeline_id_mapper = self.map_pipeline_ids(train_data)
+        self.dataset_id_mapper = self.map_dataset_ids(train_data)
 
         # do the rest of the fitting
         PyTorchModelBase.fit(
             self, train_data, n_epochs, learning_rate, self.batch_size, False, validation_data=validation_data,
             output_dir=output_dir, verbose=verbose
         )
-
-    def encode_pipeline_dataset(self, data):
-        for instance in data:
-            instance["pipeline"]["pipeline_embedding"] = self.encode_pipeline(instance["pipeline"]["id"])
-            instance["dataset_id_embedding"] = self.dataset_id_mapper[instance["dataset_id"]]
-        return data
 
     def map_pipeline_ids(self, data):
         unique_pipelines = list(set([instance["pipeline"]["id"] for instance in data]))
@@ -1231,7 +1215,10 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return dataset_vec
 
     def encode_pipeline(self, pipeline_id):
-        return self.pipeline_id_mapper[pipeline_id]
+        try:
+            return self.pipeline_id_mapper[pipeline_id]
+        except KeyError as e:
+            raise KeyError("Pipeline ID was not in the mapper. Perhaps the pipeline id was not in the training set?")
 
     def predict_regression(self, data, *, verbose, **kwargs):
         if self._model is None:
@@ -1239,7 +1226,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
         data_loader = self._get_data_loader(data, drop_last=False, shuffle=False)
         prediction_matrix, target_matrix = self._predict_epoch(data_loader, self._model, verbose=verbose)
-        predictions = self.get_predictions_from_matrix(data, prediction_matrix)
+        predictions = data_loader.get_predictions_from_matrix(data, prediction_matrix)
         return predictions
 
     def predict_rank(self, data, *, verbose, **kwargs):
@@ -1248,14 +1235,6 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
     def predict_subset(self, data, k, *, verbose=False):
         return super().predict_subset(data, k, batch_size=0, verbose=verbose)
-
-    def get_predictions_from_matrix(self, x_data, matrix):
-        predictions = []
-        for index, item in enumerate(x_data):
-            predict_value = matrix[self.encode_pipeline(item["pipeline_id"])][self.dataset_id_mapper[item["dataset_id"]]].item()
-            predictions.append(predict_value)
-
-        return predictions
 
 
 class PMF(nn.Module):
