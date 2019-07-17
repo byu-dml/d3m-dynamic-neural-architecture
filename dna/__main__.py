@@ -99,7 +99,7 @@ def configure_evaluate_parser(parser):
         help='path to a json file containing the model configuration values'
     )
     parser.add_argument(
-        '--model-seed', type=int, default=0,
+        '--model-seed', type=int, default=1,
         help='seed used to control the random state of the model'
     )
     parser.add_argument(
@@ -121,12 +121,23 @@ def configure_evaluate_parser(parser):
         '--metafeature-subset', type=str, default='all', choices=['all', 'landmarkers', 'non-landmarkers']
     )
     parser.add_argument(
-        '--out-of-training-set-pipelines', default=False, action='store_true',
-        help='when set, test on out of training set pipelines'
+        '--use-ootsp', default=False, action='store_true',
+        help='when set, enables out-of-training-set pielines (ootsp) mode. discard some pipelines from the training' +\
+            ' data and evaluate the model twice: once with test data that contains only in-training-set pipelines ' +\
+            'and once with only out-of-training-set pipelines'
     )
     parser.add_argument(
-        '--out-of-training-set-pipelines-split-size', type=float, default=0.5,
-        help='Used with --out-of-training-set-pipelines to set the percentage of pipelines that will be in the training set'
+        '--ootsp-split-ratio', type=float, default=0.5,
+        help='Used with --use-ootsp to set the ratio of pipelines that will be in the training set'
+    )
+    parser.add_argument(
+        '--ootsp-split-seed', type=int, action='store', default=2,
+        help='Seed used with --use-ootsp used to split the train and test sets into ootsp sets'
+    )
+    parser.add_argument(
+        '--skip-test-ootsp', default=False, action='store_true',
+        help='Used with --use-ootsp evaluate the model using the ootsp splits, but only the test in-training-set ' +\
+            'pipelines. This is useful to compare models that cannot make predictions on ootsp'
     )
 
 
@@ -205,7 +216,7 @@ def evaluate_handler(
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
-    if arguments.out_of_training_set_pipelines:
+    if arguments.use_ootsp:
         train_data, test_data, out_of_training_test_data = get_out_of_training_set_pipeline_data(train_data, test_data, arguments)
 
     model_name = getattr(arguments, 'model')
@@ -226,9 +237,7 @@ def evaluate_handler(
             **evaluate_result.__dict__,
         })
         # if we have a special out-of-training-set, use that here
-        if arguments.out_of_training_set_pipelines:
-            if model_name in ['autosklearn', 'probabilistic_matrix_factorization']:
-                continue
+        if arguments.use_ootsp and not arguments.skip_test_ootsp:
             evaluate_result_out_of_training_set = evaluate(
                 problem, train_data, out_of_training_test_data, model, model_config, verbose=arguments.verbose, model_output_dir=model_output_dir
             )
@@ -242,7 +251,7 @@ def evaluate_handler(
             del results['train_predictions']
             del results['test_predictions']
             print(json.dumps(results, indent=4))
-            if arguments.out_of_training_set_pipelines:
+            if arguments.use_ootsp and not arguments.skip_test_ootsp:
                 results_out_of_training_set = evaluate_result_out_of_training_set.__dict__
                 del results_out_of_training_set['train_predictions']
                 del results_out_of_training_set['test_predictions']
@@ -297,11 +306,11 @@ def get_out_of_training_set_pipeline_data(train_data, test_data, arguments):
     groups = list(grouped_data_indices.keys())
 
     rnd = random.Random()
-    rnd.seed(arguments.split_seed)
+    rnd.seed(arguments.ootsp_split_seed)
     rnd.shuffle(groups)
 
     # make the split into in-training set pipeline ids and out-of-training-set pipeline ids
-    in_training_set_pipelines = groups[:int(len(groups) * arguments.out_of_training_set_pipelines_split_size)]
+    in_training_set_pipelines = groups[:int(len(groups) * arguments.ootsp_split_ratio)]
     train_data_split = [instance for instance in train_data if instance["pipeline_id"] in in_training_set_pipelines]
     test_data_split = [instance for instance in test_data if instance["pipeline_id"] in in_training_set_pipelines]
     out_of_training_test_data = [instance for instance in train_data if instance["pipeline_id"] not in in_training_set_pipelines]

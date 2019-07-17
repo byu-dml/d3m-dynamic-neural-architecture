@@ -28,7 +28,7 @@ results_dir=./dev_results
 python3 -m dna split-data \
     --data-path $raw_data_path \
     --test-size $test_size \
-    --split-seed $test_split_seed 
+    --split-seed $test_split_seed
 
 
 python3 -m dna evaluate \
@@ -41,7 +41,8 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp \
+    --skip-test-ootsp
 
 
 python3 -m dna evaluate \
@@ -52,7 +53,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 
@@ -64,7 +65,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 
@@ -77,7 +78,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -90,7 +91,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -104,7 +105,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -117,7 +118,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -131,7 +132,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -145,7 +146,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -158,7 +159,7 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp
 
 
 python3 -m dna evaluate \
@@ -171,4 +172,5 @@ python3 -m dna evaluate \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
     --verbose \
-    --out-of-training-set-pipelines
+    --use-ootsp \
+    --skip-test-ootsp
