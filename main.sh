@@ -31,18 +31,17 @@ python3 -m dna split-data \
     --split-seed $test_split_seed 
 
 
-# python3 -m dna evaluate \
-#     --model autosklearn \
-#     --problem rank subset \
-#     --k $k \
-#     --model-config-path ./model_configs/autosklearn_config.json \
-#     --metafeature-subset $metafeature_subset \
-#     --train-path $train_path \
-#     --test-size $validation_size \
-#     --split-seed $validation_split_seed \
-#     --output-dir $results_dir \
-#     --verbose \
-#     --out-of-training-set-pipelines
+python3 -m dna evaluate \
+    --model autosklearn \
+    --problem regression rank subset \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose \
+    --out-of-training-set-pipelines
 
 
 python3 -m dna evaluate \
@@ -171,4 +170,5 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    --out-of-training-set-pipelines

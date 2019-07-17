@@ -227,7 +227,7 @@ def evaluate_handler(
         })
         # if we have a special out-of-training-set, use that here
         if arguments.out_of_training_set_pipelines:
-            if model == "autosklearn": 
+            if model_name in ['autosklearn', 'probabilistic_matrix_factorization']:
                 continue
             evaluate_result_out_of_training_set = evaluate(
                 problem, train_data, out_of_training_test_data, model, model_config, verbose=arguments.verbose, model_output_dir=model_output_dir
