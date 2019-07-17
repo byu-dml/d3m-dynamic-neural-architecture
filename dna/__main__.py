@@ -145,7 +145,7 @@ class EvaluateResult:
 
     def __init__(
         self, train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
     ):
         self.train_predictions = train_predictions
         self.fit_time = fit_time
@@ -154,19 +154,23 @@ class EvaluateResult:
         self.test_predictions = test_predictions
         self.test_predict_time = test_predict_time
         self.test_scores = test_scores
+        self.ootsp_test_predictions = ootsp_test_predictions
+        self.ootsp_test_predict_time = ootsp_test_predict_time
+        self.ootsp_test_scores = ootsp_test_scores
 
     def __eq__(self, other):
-        result = True
-        result &= self.train_predictions == other.train_predictions
+        result = self.train_predictions == other.train_predictions
         result &= self.train_scores == other.train_scores
         result &= self.test_predictions == other.test_predictions
         result &= self.test_scores == other.test_scores
+        result &= self.ootsp_test_predictions == other.ootsp_test_predictions
+        result &= self.ootsp_test_scores == other.ootsp_test_scores
         return result
 
 
 def evaluate(
-    problem: ProblemBase, train_data: typing.Dict, test_data: typing.Dict, model: ModelBase, model_config: typing.Dict,
-    *, verbose: bool = False, model_output_dir: str = None, plot_dir: str = None
+    problem: ProblemBase, model: ModelBase, model_config: typing.Dict, train_data: typing.Dict, test_data: typing.Dict,
+    ootsp_test_data: typing.Dict = None, *, verbose: bool = False, model_output_dir: str = None, plot_dir: str = None
 ):
     train_predictions, fit_time, train_predict_time = problem.fit_predict(
         train_data, test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
@@ -184,15 +188,29 @@ def evaluate(
     if plot_dir is not None:
         problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
 
+    ootsp_test_predictions = None
+    ootsp_test_predict_time = None
+    ootsp_test_scores = None
+    if ootsp_test_data is not None:
+        ootsp_test_predictions, ootsp_test_predict_time = problem.predict(
+            ootsp_test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+        )
+        ootsp_test_scores = problem.score(ootsp_test_predictions, ootsp_test_data)
+
+        if plot_dir is not None:
+            problem.plot(
+                ootsp_test_predictions, ootsp_test_data, ootsp_test_scores, os.path.join(plot_dir, 'ootsp_test')
+            )
+
     return EvaluateResult(
-        train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time, test_scores
+        train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
     )
 
 
 def evaluate_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *,
-    data_resolver=get_data, model_resolver=get_model,
-    problem_resolver=get_problem,
+    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data,
+    model_resolver=get_model, problem_resolver=get_problem,
 ):
     run_id = str(uuid.uuid4())
 
@@ -216,8 +234,13 @@ def evaluate_handler(
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
+    ootsp_test_data = None
     if arguments.use_ootsp:
-        train_data, test_data, out_of_training_test_data = get_out_of_training_set_pipeline_data(train_data, test_data, arguments)
+        train_data, test_data, ootsp_test_data = get_ootsp_split_data(
+            train_data, test_data, arguments.ootsp_split_ratio, arguments.ootsp_split_seed
+        )
+        if arguments.skip_test_ootsp:
+            ootsp_test_data = None
 
     model_name = getattr(arguments, 'model')
     model = model_resolver(model_name, model_config, seed=getattr(arguments, 'model_seed'))
@@ -228,7 +251,7 @@ def evaluate_handler(
             print('{} {} {}'.format(model_name, problem_name, run_id))
         problem = problem_resolver(problem_name, arguments)
         evaluate_result = evaluate(
-            problem, train_data, test_data, model, model_config, verbose=arguments.verbose,
+            problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
             model_output_dir=model_output_dir, plot_dir=plot_dir
         )
         result_scores.append({
@@ -236,26 +259,14 @@ def evaluate_handler(
             'model_name': model_name,
             **evaluate_result.__dict__,
         })
-        # if we have a special out-of-training-set, use that here
-        if arguments.use_ootsp and not arguments.skip_test_ootsp:
-            evaluate_result_out_of_training_set = evaluate(
-                problem, train_data, out_of_training_test_data, model, model_config, verbose=arguments.verbose, model_output_dir=model_output_dir
-            )
-            result_scores.append({
-                'out_of_training_set_problem_name': problem_name,
-                'out_of_training_set_model_name': model_name,
-                "out_of_training_set_scores": evaluate_result.__dict__,
-            })
+
         if arguments.verbose:
             results = evaluate_result.__dict__
             del results['train_predictions']
             del results['test_predictions']
+            del results['ootsp_test_predictions']
             print(json.dumps(results, indent=4))
-            if arguments.use_ootsp and not arguments.skip_test_ootsp:
-                results_out_of_training_set = evaluate_result_out_of_training_set.__dict__
-                del results_out_of_training_set['train_predictions']
-                del results_out_of_training_set['test_predictions']
-                print(json.dumps({"out_of_training_set_scores": results_out_of_training_set}, indent=4), "\n")
+            print()
 
     if output_dir is not None:
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -300,17 +311,17 @@ def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
     return train_data, test_data
 
 
-def get_out_of_training_set_pipeline_data(train_data, test_data, arguments):
+def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
     full_data = train_data + test_data
     grouped_data_indices = group_json_objects(full_data, "pipeline_id")
     groups = list(grouped_data_indices.keys())
 
     rnd = random.Random()
-    rnd.seed(arguments.ootsp_split_seed)
+    rnd.seed(split_seed)
     rnd.shuffle(groups)
 
     # make the split into in-training set pipeline ids and out-of-training-set pipeline ids
-    in_training_set_pipelines = groups[:int(len(groups) * arguments.ootsp_split_ratio)]
+    in_training_set_pipelines = groups[:int(len(groups) * split_ratio)]
     train_data_split = [instance for instance in train_data if instance["pipeline_id"] in in_training_set_pipelines]
     test_data_split = [instance for instance in test_data if instance["pipeline_id"] in in_training_set_pipelines]
     out_of_training_test_data = [instance for instance in train_data if instance["pipeline_id"] not in in_training_set_pipelines]

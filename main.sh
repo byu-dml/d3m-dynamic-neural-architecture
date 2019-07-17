@@ -56,7 +56,6 @@ python3 -m dna evaluate \
     --use-ootsp
 
 
-
 python3 -m dna evaluate \
     --model median_regression \
     --problem regression \
@@ -66,7 +65,6 @@ python3 -m dna evaluate \
     --output-dir $results_dir \
     --verbose \
     --use-ootsp
-
 
 
 python3 -m dna evaluate \
