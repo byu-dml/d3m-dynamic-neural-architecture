@@ -64,5 +64,3 @@ class DAGLSTM(nn.Module):
             ), dim=0
         )
         return (mean_hidden_state, mean_cell_state)
-
-

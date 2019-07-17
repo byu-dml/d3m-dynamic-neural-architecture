@@ -57,5 +57,3 @@ class PMF(nn.Module):
         # combined the predictions
         combined = torch.cat(vecs)
         return combined
-
-

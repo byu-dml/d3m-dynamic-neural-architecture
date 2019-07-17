@@ -45,5 +45,3 @@ class Submodule(nn.Module):
             return self.net(x)
         else:
             return self.net(x) + self.skip(x)
-
-

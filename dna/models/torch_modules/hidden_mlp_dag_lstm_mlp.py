@@ -5,6 +5,7 @@ from . import PyTorchRandomStateContext
 from .dag_lstm import DAGLSTM
 from .submodule import Submodule
 
+
 class HiddenMLPDAGLSTMMLP(nn.Module):
     """
     The HiddenMLPDAGLSTMMLP combines a feature vector and a DAG using an MLP and a DAGLSTM and passes the final
@@ -72,5 +73,3 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
         single_hidden_state = self._input_mlp(features)
         hidden_state = single_hidden_state.unsqueeze(dim=0).expand(self.lstm_n_layers, *single_hidden_state.shape)
         return (hidden_state, hidden_state)
-
-
