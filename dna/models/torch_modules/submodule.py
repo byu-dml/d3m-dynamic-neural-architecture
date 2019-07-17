@@ -2,8 +2,8 @@ import typing
 
 import torch.nn as nn
 
-from dna.models.modules import PyTorchRandomStateContext
-from dna.models.modules import ACTIVATIONS
+from . import PyTorchRandomStateContext
+from . import ACTIVATIONS
 
 
 class Submodule(nn.Module):

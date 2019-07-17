@@ -10,13 +10,13 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
+from dna import utils
 from dna.data import Dataset, GroupDataLoader, PMFDataset, RNNDataLoader, group_json_objects
 from dna.kND import KNearestDatasets
-from dna import utils
-from dna.models.modules.dna_module import DNAModule
-from dna.models.modules.dag_lstm_mlp import DAGLSTMMLP
-from dna.models.modules.hidden_mlp_dag_lstm_mlp import HiddenMLPDAGLSTMMLP
-from dna.models.modules.pmf import PMF
+from .torch_modules.dna_module import DNAModule
+from .torch_modules.dag_lstm_mlp import DAGLSTMMLP
+from .torch_modules.hidden_mlp_dag_lstm_mlp import HiddenMLPDAGLSTMMLP
+from .torch_modules.pmf import PMF
 
 
 class ModelNotFitError(Exception):

@@ -1,9 +1,9 @@
 import torch.nn as nn
 
-from dna.models.modules import ACTIVATIONS
-from dna.models.modules import PyTorchRandomStateContext
-from dna.models.modules.dag_lstm import DAGLSTM
-from dna.models.modules.submodule import Submodule
+from . import ACTIVATIONS
+from . import PyTorchRandomStateContext
+from .dag_lstm import DAGLSTM
+from .submodule import Submodule
 
 class HiddenMLPDAGLSTMMLP(nn.Module):
     """

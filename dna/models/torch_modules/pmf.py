@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from dna.models.modules import PyTorchRandomStateContext
+from . import PyTorchRandomStateContext
 
 
 class PMF(nn.Module):

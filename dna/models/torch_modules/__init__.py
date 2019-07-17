@@ -2,8 +2,10 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
+
 F_ACTIVATIONS = {'relu': F.relu, 'leaky_relu': F.leaky_relu, 'sigmoid': F.sigmoid, 'tanh': F.tanh}
 ACTIVATIONS = {'relu': nn.ReLU, 'leaky_relu': nn.LeakyReLU, 'sigmoid': nn.Sigmoid, 'tanh': nn.Tanh}
+
 
 class PyTorchRandomStateContext:
 

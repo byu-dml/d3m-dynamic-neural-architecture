@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from dna.models.modules.dag_lstm import DAGLSTM
-from dna.models.modules.submodule import Submodule
+from .dag_lstm import DAGLSTM
+from .submodule import Submodule
 
 class DAGLSTMMLP(nn.Module):
     """

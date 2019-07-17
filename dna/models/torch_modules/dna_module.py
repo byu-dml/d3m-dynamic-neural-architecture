@@ -3,8 +3,8 @@ import typing
 import torch
 import torch.nn as nn
 
-from dna.models.modules.submodule import Submodule
-from dna.models.modules import F_ACTIVATIONS
+from .submodule import Submodule
+from . import F_ACTIVATIONS
 
 class DNAModule(nn.Module):
 
