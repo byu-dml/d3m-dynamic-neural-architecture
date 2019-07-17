@@ -753,15 +753,11 @@ class MetaAutoSklearn(SklearnBase):
         self.fitted = False
 
 
-class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
+class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase):
 
-    def __init__(self, rank_distance_metric, seed=0):
+    def __init__(self, seed=0):
         super().__init__(seed=seed)
-        if rank_distance_metric == "inverse":
-            self.rank_distance_metric = lambda x, y: x / (y + 1)
-        else:
-            raise Exception("Distance Weighting method not found for AutoSKLearn ranking ")
-        self._knd = KNearestDatasets(metric='l1', random_state=3, rank_metric=self.rank_distance_metric)
+        self._knd = KNearestDatasets(metric='l1')
 
     def _predict(self, data, method, k=None):
         data = pd.DataFrame(data)
@@ -770,7 +766,8 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
         queried_pipelines = data['pipeline_id']
 
         if method == 'all':
-            predicted_pipelines = self._knd.allBestSuggestions(dataset_metafeatures)
+            predicted_pipelines = self._knd.knn_regression(dataset_metafeatures)
+            predicted_pipelines = predicted_pipelines.sort_values(ascending=False).index.tolist()
         elif method == 'k':
             predicted_pipelines = self._knd.kBestSuggestions(dataset_metafeatures, k=k)
         else:
@@ -780,6 +777,18 @@ class AutoSklearnMetalearner(RankModelBase, SubsetModelBase):
             predicted_pipelines.remove(pipeline_id)
 
         return predicted_pipelines
+
+    def predict_regression(self, data, **kwargs):
+        predictions = []
+        cached_predictions = {}
+        for instance in data:
+            dataset_id = instance['dataset_id']
+            if dataset_id not in cached_predictions:
+                metafeatures = pd.Series(instance['metafeatures'])
+                cached_predictions[dataset_id] = self._knd.knn_regression(metafeatures)
+            pipeline_id = instance['pipeline_id']
+            predictions.append(cached_predictions[dataset_id][pipeline_id])
+        return predictions
 
     def predict_subset(self, data, k, **kwargs):
         """
