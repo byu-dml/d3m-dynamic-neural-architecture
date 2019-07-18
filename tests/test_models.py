@@ -58,6 +58,6 @@ class ModelDeterminismTestCase(unittest.TestCase):
         for problem_name in getattr(arguments, 'problem'):
             problem = get_problem(problem_name, arguments)
             results.append(evaluate(
-                problem, train_data, test_data, model, model_config
+                problem, model, model_config, train_data, test_data
             ))
         return results

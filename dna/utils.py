@@ -1,4 +1,6 @@
-import numpy as np
+import typing
 
-def rank(values):
-    return list((len(values) - 1 - np.argsort(values)).astype(float))
+import pandas as pd
+
+def rank(values: typing.Sequence) -> typing.Sequence:
+    return type(values)((pd.Series(values).rank(ascending=False) - 1))
