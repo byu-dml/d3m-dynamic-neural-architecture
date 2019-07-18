@@ -229,5 +229,3 @@ class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase
         ranked_data = self.predict_rank(data, batch_size=batch_size, verbose=verbose)
         top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
         return top_k.tolist()
-
-

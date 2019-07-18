@@ -43,5 +43,3 @@ class DNASiameseModule(nn.Module):
             print("There was an error in the foward pass.  It was ", e)
             print(pipeline[current_index])
             quit(1)
-
-
