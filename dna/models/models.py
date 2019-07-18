@@ -197,11 +197,11 @@ class PyTorchModelBase:
         if output_dir is not None:
             model_save_path = os.path.join(output_dir, 'model.pt')
 
-        train_data_loader = self._get_data_loader(train_data, shuffle=True)
+        train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         min_loss_score = np.inf
         if validation_data is not None:
-            validation_data_loader = self._get_data_loader(validation_data, shuffle=False)
+            validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
 
         for e in range(n_epochs):
             save_model = False
