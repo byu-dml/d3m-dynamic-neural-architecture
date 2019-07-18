@@ -1,24 +1,30 @@
 # Dynamic Neural Architecture (DNA)
-This repository contains a system for evaluating metalearning systems on a meta-dataset (a dataset containing info about machine learning experiments on datasets).  Models range from the simple (random, linear regression) to the complex (deep neural networks, AutoSKLearn) and are evaluated on numerous metric (see `dna/metrics.py`).
+
+This repository contains a system for evaluating metalearning systems on a meta-dataset (a dataset containing info about machine learning experiments on datasets).
+The meta-dataset was generated using the infrastructure created by Data Driven Discovery of Models (D3M), see https://gitlab.com/datadrivendiscovery.
+Models range from the simple (random, linear regression) to the complex (deep neural networks, AutoSKLearn) and are evaluated on various metrics (see `dna/metrics.py`).
 
 ## Instructions for use:
-0. Setup the python enviroment (`python3 install -r requirements.txt`)
-1. The command `bash main.sh` will run all the models available with the configuration shown in `__main__.py`.  To run one model, run a command similar to the ones being run in `main.sh`.
+0. Setup the python enviroment (`pip3 install -r requirements.txt`)
+1. `main.sh` contains examples of how to run each metalearning model.
+A more complete description of how to run a model can be found by running `python3 -m dna --help` or by inspecting `dna/__main__.py`.
 
 ## Configuration and results
-2. To edit the models being run, edit `main.sh` (options are located in `__main__.py`). Model specific config (such as batch size, learning rate, and number of epochs) can be found in `model_configs/_model_name_`.
-3. The full dataset will be available at this link: `link_no_yet_ready`.  Place it next to the small dataset at `data/complete_classification.tar.xz`, uncommenting out lines 3-10 and commenting out lines 13-20.
-4. Results are found in `dev_results/_name_of_your_model_run_/` where `_name_of_your_model_run_` can be found printed out at the top of the `bash main.sh` command.
+1. Models are configured using JSON files, mapping function names to arguments like batch size, learning rate, and number of training epochs.
+Examples can be found in `model_configs/<model name>_config.json`.
+2. There are two meta-datasets available, `data/complete_classification.tar.xz` and `data/small_classification.tar.xz`.
+The smaller is a subset of the larger for development purposes.
+The first few lines of `main.sh` show how to use either dataset.
+3. Complete results of running a metalearning model on the meta-dataset are written to the directory specified by the `--output-dir` flag and contain the arguments used to reproduce the results, model predictions, scores, plots, and any other model outputs such as model parameters.
 
 ## How to contribute a new model:
-0. Add your new model code to `dna/models/_your_model_name_.py`.  It should inherit from the base classes of the tasks it can perform (RegressionBase, RankingBase, SubsetBase).  
-1. Please add tests to `tests/test_models.py`.
-1. Once the model inherits from those classes and overrides their methods, the model should be imported and added to the list found in the function `get_models` of the file `dna/models.py`.  You can then run your model from the command line, or by adding it to `main.sh`
+1. Add your new model code to `dna/models/_your_model_name_.py`.  It should inherit from the base classes of the tasks it can perform (RegressionBase, RankingBase, SubsetBase).
+2. Please add tests to `tests/test_models.py`.
+3. Once the model inherits from those classes and overrides their methods, the model should be imported and added to the list found in the function `get_models` of the file `dna/models.py`.
+4. You can then run your model from the command line, or by adding it to `main.sh`
 
 ## How to contribute a new metric:
-0. Add your metric code to `dna/metrics.py`. 
+0. Add your metric code to `dna/metrics.py`.
 1. Please add tests to the file `tests/test_metrics.py`.
-2. Add your metric to the code found in `dna/problems.py` under the respective task the metric goes under (for example, the spearman metric is found under `RankProblem`). Add the results to the json dictionary returned from the function.
-3. You can see your metric in action by running a model from the command line, or by running `main.sh`. 
-
-
+2. The metrics are computed in `dna/problems.py`, in the appropriate problem class's `score` method, e.g. the Spearman Correlation Coefficient is computed with the `RankProblem`.
+3. You can see your metric in action by running a model from the command line, or by running `main.sh`.
