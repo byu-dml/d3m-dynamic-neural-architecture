@@ -126,9 +126,25 @@ class RegressionProblem(ProblemBase):
 
     def score(self, predictions, data):
         # TODO: just pass in targets
-        predictions_by_group, targets_by_group = self._group_data(predictions, data)
+        # Score all the datasets combined
+        targets = []
+        for instance in data:
+            targets.append(instance['test_f1_macro'])
+        correlation, p_value = pearson_correlation(predictions, targets)
 
-        return self._score_by_group(predictions_by_group, targets_by_group)
+        total_score = {
+            'total_rmse': rmse(predictions, targets),
+            'total_pearson_correlation': {
+                'correlation_coefficient': correlation,
+                'p_value': p_value
+            }
+        }
+
+        # Score per dataset
+        predictions_by_group, targets_by_group = self._group_data(predictions, data)
+        per_dataset_score = self._score_by_group(predictions_by_group, targets_by_group)
+
+        return total_score, per_dataset_score
 
     def _group_data(self, predictions, data):
         predictions_by_group = {}
@@ -156,7 +172,10 @@ class RegressionProblem(ProblemBase):
             pearson_ps.append(p_value)
 
         return {
-            'RMSE': np.mean(RMSEs),
+            'rmse': {
+                'mean': np.mean(RMSEs),
+                'std_dev': np.std(RMSEs, ddof=1)
+            },
             'pearson_correlation': {
                 'mean': np.mean(pearson_coefs),
                 'std_dev': np.std(pearson_coefs, ddof=1),
@@ -166,11 +185,18 @@ class RegressionProblem(ProblemBase):
         }
     
     def plot(self, predictions, data, scores, plot_dir: str):
+        total_score, per_dataset_score = scores
+
+        # Plot all the datasets combined
+        actuals = [item['test_f1_macro'] for item in data]
+        self._plot_base(predictions, actuals, 'All_Datasets', plot_dir, total_score, type(self).__name__)
+
+        # Plot per dataset
         predictions_by_group, targets_by_group = self._group_data(predictions, data)
         for (group, group_predictions) in predictions_by_group.items():
             group_targets = targets_by_group[group]
-            plot_name = group + '_plot'
-            super()._plot_base(group_predictions, group_targets, plot_name, plot_dir, scores, type(self).__name__)
+            plot_name = group
+            super()._plot_base(group_predictions, group_targets, plot_name, plot_dir, per_dataset_score, type(self).__name__)
 
 
 class PredictByGroupProblemBase(ProblemBase):
