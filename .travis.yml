@@ -1,8 +1,10 @@
 language: python
+sudo: true
 python:
   - "3.6"
 
 install:
+  - sudo apt install swig
   - pip install -r requirements.txt > /dev/null
 
 script:
