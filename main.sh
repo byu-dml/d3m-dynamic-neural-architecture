@@ -8,6 +8,8 @@
 # validation_size=25
 # validation_split_seed=3101978347
 # k=25
+# metafeature_subset=all
+
 
 # small has 11 datasets
 raw_data_path=./data/small_classification.tar.xz
@@ -18,6 +20,7 @@ validation_size=2
 validation_split_seed=5460650386
 k=2
 metafeature_subset=all
+# use_ootsp=--use-ootsp
 
 
 results_dir=./dev_results
@@ -31,15 +34,16 @@ python3 -m dna split-data \
 
 python3 -m dna evaluate \
     --model autosklearn \
-    --problem rank subset \
+    --problem regression rank subset \
     --k $k \
-    --model-config-path ./model_configs/autosklearn_config.json \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp \
+    --skip-test-ootsp
 
 
 python3 -m dna evaluate \
@@ -49,7 +53,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -59,7 +64,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -70,7 +76,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -82,7 +89,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -95,7 +103,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -107,7 +116,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -120,7 +130,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -133,7 +144,9 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
+
 
 python3 -m dna evaluate \
     --model hidden_daglstm_regression \
@@ -144,7 +157,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -156,4 +170,6 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp \
+    --skip-test-ootsp
