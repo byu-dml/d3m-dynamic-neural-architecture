@@ -1,5 +1,5 @@
 import argparse
-
+import copy
 import numpy as np
 import pandas as pd
 import time
@@ -117,9 +117,13 @@ class ProblemBase:
                 title += score_name + ': ' + str(score_value) + '\n'
         return title
 
-    def remove_target_data(data):
+    def remove_target_data(self, data_full):
+        data = copy.deepcopy(data_full)
         for instance in data:
-            del data["test_f1_macro"]
+            try:
+                del instance["test_f1_macro"]
+            except Exception as e:
+                print(instance)
         return data
 
 
@@ -172,12 +176,11 @@ class PredictByGroupProblemBase(ProblemBase):
         model_predict_method = getattr(model, self._predict_method_name)
 
         grouped_data = self._group_data(data)
-        grouped_data_x = self.remove_target_data(grouped_data)
 
         start_timestamp = time.time()
 
         predictions_by_group = {
-            group: model_predict_method(grouped_data, verbose=verbose, **model_predict_config) for group, group_data in grouped_data_x.items()
+            group: model_predict_method(grouped_data, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
         }
 
         predict_time = time.time() - start_timestamp
@@ -247,12 +250,11 @@ class SubsetProblem(PredictByGroupProblemBase):
         model_predict_method = getattr(model, self._predict_method_name)
 
         grouped_data = self._group_data(data)
-        grouped_data_x = self.remove_target_data(grouped_data)
 
         start_timestamp = time.time()
 
         predictions_by_group = {
-            group: model_predict_method(group_data, k=self.k, verbose=verbose, **model_predict_config) for group, group_data in grouped_data_x.items()
+            group: model_predict_method(group_data, k=self.k, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
         }
 
         predict_time = time.time() - start_timestamp
