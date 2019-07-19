@@ -4,7 +4,12 @@ python:
   - "3.6"
 
 install:
-  - sudo apt-get install swig
+  - cd /tmp/ &&
+		wget https://github.com/swig/swig/archive/rel-3.0.12.tar.gz &&
+		tar zxf rel-3.0.12.tar.gz && cd swig-rel-3.0.12 &&
+		./autogen.sh && ./configure --prefix "${HOME}"/swig/ 1>/dev/null &&
+		make >/dev/null &&
+		make install >/dev/null
   - curl https://raw.githubusercontent.com/automl/auto-sklearn/master/requirements.txt | xargs -n 1 -L 1 pip install
   - pip install -r requirements.txt > /dev/null
 
