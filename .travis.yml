@@ -4,7 +4,7 @@ python:
   - "3.6"
 
 install:
-  - python3 -m pip install --user virtualenv
+  - python3 -m virtualenv env -p python3 
   - source env/bin/activate
   - sudo apt-get install swig
   - sudo apt-get install swig3.0
