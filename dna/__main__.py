@@ -9,7 +9,8 @@ import uuid
 from numpy import isclose
 
 from dna.data import get_data, preprocess_data, split_data, group_json_objects
-from dna.models.models import get_model, ModelBase
+from dna.models.models import get_model
+from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
 
 
