@@ -7,7 +7,7 @@ install:
   - cd data/
   - tar xf small_classification.tar.xz
   - cd ..
-  - ls
+  - ls data/
   - pwd
   - # install linux packages
   - sudo apt-get update
