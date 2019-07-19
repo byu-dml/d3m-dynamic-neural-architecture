@@ -27,7 +27,7 @@ class ProblemBase:
             )
 
     def fit(
-        self, train_data, test_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
+        self, train_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
     ):
         self._validate_model_has_method(model, self._fit_method_name)
 
@@ -38,7 +38,7 @@ class ProblemBase:
         if not model.fitted or refit_model:
             start_time = time.time()
             model_fit_method(
-                train_data, validation_data=test_data, verbose=verbose, output_dir=model_output_dir, **model_fit_config
+                train_data, verbose=verbose, output_dir=model_output_dir, **model_fit_config
             )
             fit_time = time.time() - start_time
 
@@ -57,10 +57,10 @@ class ProblemBase:
         return predictions, predict_time
 
     def fit_predict(
-        self, train_data, test_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
+        self, train_data, model, model_config, *, refit_model=False, verbose=False, model_output_dir=None
     ):
         fit_time = self.fit(
-            train_data, test_data, model, model_config, refit_model=refit_model, verbose=verbose, model_output_dir=model_output_dir
+            train_data, model, model_config, refit_model=refit_model, verbose=verbose, model_output_dir=model_output_dir
         )
 
         train_predictions, predict_time = self.predict(

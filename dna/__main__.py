@@ -176,7 +176,7 @@ def evaluate(
     ootsp_test_data: typing.Dict = None, *, verbose: bool = False, model_output_dir: str = None, plot_dir: str = None
 ):
     train_predictions, fit_time, train_predict_time = problem.fit_predict(
-        train_data, test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+        train_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
     )
     train_scores = problem.score(train_predictions, train_data)
 
