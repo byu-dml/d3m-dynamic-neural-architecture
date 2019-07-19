@@ -51,7 +51,8 @@ class ProblemBase:
         model_predict_method = getattr(model, self._predict_method_name)
 
         start_timestamp = time.time()
-        predictions = model_predict_method(data, verbose=verbose, **model_predict_config)
+        x_data = self.remove_target_data(data)
+        predictions = model_predict_method(x_data, verbose=verbose, **model_predict_config)
         predict_time = time.time() - start_timestamp
 
         return predictions, predict_time
@@ -115,6 +116,11 @@ class ProblemBase:
             else:
                 title += score_name + ': ' + str(score_value) + '\n'
         return title
+
+    def remove_target_data(data):
+        for instance in data:
+            del data["test_f1_macro"]
+        return data
 
 
 class RegressionProblem(ProblemBase):
