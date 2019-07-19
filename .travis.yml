@@ -4,11 +4,6 @@ python:
   - "3.6"
 
 install:
-  - cd data/
-  - tar xf small_classification.tar.xz
-  - cd ..
-  - ls data/
-  - pwd
   - # install linux packages
   - sudo apt-get update
     # https://github.com/automl/auto-sklearn/issues/314
@@ -17,6 +12,9 @@ install:
   - sudo ln -s /usr/bin/swig3.0 /usr/bin/swig
   - curl https://raw.githubusercontent.com/automl/auto-sklearn/master/requirements.txt | xargs -n 1 -L 1 pip install > /dev/null
   - pip install -r requirements.txt > /dev/null
-
+  - python3 -m dna split-data --data-path ./data/small_classification.tar.xz --test-size 2 --split-seed 1
+  - ls data/
+  - pwd
+  
 script:
   - python3 run_tests.py
