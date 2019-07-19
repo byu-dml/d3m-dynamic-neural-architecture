@@ -19,4 +19,4 @@ install:
   - pip install -r requirements.txt > /dev/null
 
 script:
-  - python3 run_tests.pyt
+  - python3 run_tests.py
