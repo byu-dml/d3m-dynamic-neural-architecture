@@ -6,6 +6,7 @@ import random
 import sys
 import typing
 import uuid
+from numpy import isclose
 
 from dna.data import get_data, preprocess_data, split_data, group_json_objects
 from dna.models.models import get_model, ModelBase
@@ -141,6 +142,17 @@ def configure_evaluate_parser(parser):
     )
 
 
+def configure_rescore_parser(parser):
+    parser.add_argument(
+        '--results-uuid-path', type=str, action='store', required=True,
+        help='path to the uuid directory that contains the run.json file'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', required=True,
+        help='the directory to save the new rescore.json file'
+    )
+
+
 class EvaluateResult:
 
     def __init__(
@@ -272,6 +284,71 @@ def evaluate_handler(
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
 
+def rescore_handler(args):
+    uuid_path = args.results_uuid_path
+    results_file_path = os.path.join(uuid_path, 'run.json')
+
+    # Get the run.json file in the results directory that corresponds to the uuid
+    with open(results_file_path) as f:
+        results = json.load(f)
+
+    # Convert the arguments in the results json dictionary to an argparse namespace
+    arguments = argparse.Namespace()
+    for k, v in results['arguments'].items():
+        arguments.__setattr__(k, v)
+
+    train_data, test_data = get_train_and_test_data(arguments, get_data)
+
+    # Create the output directory for the results of the re-score
+    output_dir = args.output_dir
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+
+    output_dir = os.path.join(output_dir, results['id'])
+    if not os.path.isdir(output_dir):
+        os.mkdir(output_dir)
+
+    # For each problem, re-score using the predictions and data and ensure the scores are the same as before
+    for score in results['scores']:
+        problem = get_problem(score['problem_name'], arguments)
+
+        train_predictions, train_scores = process_scores(score, train_data, 'train', problem)
+        test_predictions, test_scores = process_scores(score, test_data, 'test', problem)
+
+        # Re-plot the data
+        plot_dir = os.path.join(output_dir, 'plots')
+        if not os.path.isdir(plot_dir):
+            os.mkdir(plot_dir)
+
+        problem.plot(train_predictions, train_data, train_scores, os.path.join(plot_dir, 'train'))
+        problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
+
+    # Save the re-scored json file
+    rescore_path = os.path.join(output_dir, 'rescore.json')
+    with open(rescore_path, 'w') as f:
+        json.dump(results, f, indent=4)
+
+
+def process_scores(score: dict, data: list, score_type: str, problem):
+    predictions_key = score_type + '_predictions'
+    predictions = score[predictions_key]
+    scores = problem.score(predictions, data)
+    score_key = score_type + '_scores'
+    check_scores(scores, score[score_key], score_type)
+    score[score_key] = scores
+
+    return predictions, scores
+
+
+def check_scores(scores1: dict, scores2: dict, score_type: str):
+    for k, v1 in scores1.items():
+        v2 = scores2[k]
+        if type(v1) == dict:
+            check_scores(v1, v2, score_type)
+        elif not isclose(v1, v2):
+            raise ValueError('The recomputed {} scores do not match the loaded {} scores'.format(score_type, score_type))
+
+
 def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
     data_arg_names = ['train_path', 'test_path', 'test_size', 'split_seed', 'metafeature_subset']
     data_arg_str = ''.join(str(getattr(arguments, arg)) for arg in data_arg_names)
@@ -360,6 +437,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
     elif arguments.command == 'evaluate':
         evaluate_handler(arguments, subparser)
 
+    elif arguments.command == 'rescore':
+        rescore_handler(arguments)
+
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
 
@@ -380,6 +460,11 @@ def main(argv: typing.Sequence):
         'evaluate', help='train, score, and save a model'
     )
     configure_evaluate_parser(evaluate_parser)
+
+    rescore_parser = subparsers.add_parser(
+        'rescore', help='Recompute the scores of problems given predictions in a run.json file'
+    )
+    configure_rescore_parser(rescore_parser)
 
     arguments = parser.parse_args(argv[1:])
 
