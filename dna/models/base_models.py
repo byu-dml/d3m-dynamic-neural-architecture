@@ -54,8 +54,8 @@ class PyTorchModelBase:
         self._model = None
 
     def fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
-            verbose=False
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        verbose=False
     ):
         self._model = self._get_model(train_data)
         self._loss_function = self._get_loss_function()
@@ -122,9 +122,7 @@ class PyTorchModelBase:
     def _get_data_loader(self, data, batch_size, drop_last, shuffle):
         raise NotImplementedError()
 
-    def _train_epoch(
-            self, data_loader, model: nn.Module, loss_function, optimizer, *, verbose=True
-    ):
+    def _train_epoch(self, data_loader, model: nn.Module, loss_function, optimizer, *, verbose=True):
         model.train()
 
         if verbose:
@@ -143,9 +141,7 @@ class PyTorchModelBase:
         if verbose:
             progress.close()
 
-    def _predict_epoch(
-            self, data_loader, model: nn.Module, *, verbose=True
-    ):
+    def _predict_epoch(self, data_loader, model: nn.Module, *, verbose=True):
         model.eval()
         predictions = []
         targets = []

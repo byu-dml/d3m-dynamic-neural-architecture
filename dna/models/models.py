@@ -111,8 +111,10 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
         self.prim_inputs_key = 'inputs'
         self.features_key = 'metafeatures'
 
-    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
-        verbose=False):
+    def fit(
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        verbose=False
+    ):
         # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
         self.pipeline_structures = {}
         grouped_by_structure = group_json_objects(train_data, self.batch_group_key)
