@@ -4,11 +4,7 @@ python:
   - "3.6"
 
 install:
-  - pip3 install venv
-  - python3 -m venv env -p python3 
-  - source env/bin/activate
   - sudo apt-get install swig
-  - sudo apt-get install swig3.0
   - curl https://raw.githubusercontent.com/automl/auto-sklearn/master/requirements.txt | xargs -n 1 -L 1 pip install
   - pip install -r requirements.txt > /dev/null
 
