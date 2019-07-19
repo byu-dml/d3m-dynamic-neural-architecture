@@ -288,11 +288,11 @@ class SubsetProblem(PredictByGroupProblemBase):
         pass
 
 
-def get_problem(problem_name: str, arguments: argparse.Namespace):
+def get_problem(problem_name: str, **kwargs):
     group_key = 'dataset_id'
     if problem_name == 'regression':
         return RegressionProblem()
     if problem_name == 'rank':
         return RankProblem(group_key)
     if problem_name == 'subset':
-        return SubsetProblem(group_key, arguments.k)
+        return SubsetProblem(group_key, kwargs['k'])
