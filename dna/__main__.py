@@ -144,17 +144,6 @@ def configure_evaluate_parser(parser):
     )
 
 
-def configure_rescore_parser(parser):
-    parser.add_argument(
-        '--results-path', type=str, action='store', required=True,
-        help='path to the file containing the results of a call to evaluate'
-    )
-    parser.add_argument(
-        '--output-dir', type=str, action='store', required=True,
-        help='the base directory to write the recomputed scores and plots'
-    )
-
-
 class EvaluateResult:
 
     def __init__(
@@ -287,6 +276,17 @@ def evaluate_handler(
 
     if output_dir is not None:
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
+
+
+def configure_rescore_parser(parser):
+    parser.add_argument(
+        '--results-path', type=str, action='store', required=True,
+        help='path to the file containing the results of a call to evaluate'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', required=True,
+        help='the base directory to write the recomputed scores and plots'
+    )
 
 
 def rescore_handler(arguments: argparse.Namespace, data_resolver=get_data):
