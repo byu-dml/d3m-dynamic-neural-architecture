@@ -25,12 +25,12 @@ class ModelDeterminismTestCase(unittest.TestCase):
 
     def test_dna_regression_determinism_cpu(self):
         self._test_determinism(
-            model='dna_regression', model_config_path='./model_configs/dna_regression_config.json'
+            model='dna_regression', model_config_path='./tests/model_configs/dna_regression_config.json'
         )
 
     def test_dag_lstm_regression_determinism_cpu(self):
         self._test_determinism(
-            model='daglstm_regression', model_config_path='./model_configs/daglstm_regression_config.json'
+            model='daglstm_regression', model_config_path='./tests/model_configs/daglstm_regression_config.json'
         )
 
     def _test_determinism(self, model: str, model_config_path: str, test_cpu: bool = False):
