@@ -132,7 +132,7 @@ class RegressionProblem(ProblemBase):
             targets.append(instance['test_f1_macro'])
         correlation, p_value = pearson_correlation(predictions, targets)
 
-        total_score = {
+        total_scores = {
             'total_rmse': rmse(predictions, targets),
             'total_pearson_correlation': {
                 'correlation_coefficient': correlation,
@@ -142,9 +142,9 @@ class RegressionProblem(ProblemBase):
 
         # Score per dataset
         predictions_by_group, targets_by_group = self._group_data(predictions, data)
-        per_dataset_score = self._score_by_group(predictions_by_group, targets_by_group)
+        per_dataset_scores, mean_scores = self._score_by_group(predictions_by_group, targets_by_group)
 
-        return total_score, per_dataset_score
+        return {'total_scores': total_scores, 'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
 
     def _group_data(self, predictions, data):
         predictions_by_group = {}
@@ -163,15 +163,26 @@ class RegressionProblem(ProblemBase):
         RMSEs = []
         pearson_coefs = []
         pearson_ps = []
+        per_dataset_scores = {}
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = targets_by_group[group]
-            RMSEs.append(rmse(group_predictions, group_targets))
+            RMSE = rmse(group_predictions, group_targets)
             correlation, p_value = pearson_correlation(group_predictions, group_targets)
+
+            per_dataset_scores[group] = {
+                'rmse': RMSE,
+                'pearson_correlation': {
+                    'correlation_coefficient': correlation,
+                    'p_value': p_value
+                }
+            }
+
+            RMSEs.append(RMSE)
             pearson_coefs.append(correlation)
             pearson_ps.append(p_value)
 
-        return {
+        mean_scores =  {
             'rmse': {
                 'mean': np.mean(RMSEs),
                 'std_dev': np.std(RMSEs, ddof=1)
@@ -183,20 +194,24 @@ class RegressionProblem(ProblemBase):
                 'std_dev_p_value': np.std(pearson_ps, ddof=1),
             }
         }
+
+        return per_dataset_scores, mean_scores
     
     def plot(self, predictions, data, scores, plot_dir: str):
-        total_score, per_dataset_score = scores
+        total_scores, per_dataset_scores, mean_scores = scores['total_scores'], scores['per_dataset_scores'],\
+                                                        scores['mean_scores']
 
         # Plot all the datasets combined
         actuals = [item['test_f1_macro'] for item in data]
-        self._plot_base(predictions, actuals, 'All_Datasets', plot_dir, total_score, type(self).__name__)
+        self._plot_base(predictions, actuals, 'All_Datasets', plot_dir, total_scores, type(self).__name__)
 
         # Plot per dataset
         predictions_by_group, targets_by_group = self._group_data(predictions, data)
         for (group, group_predictions) in predictions_by_group.items():
             group_targets = targets_by_group[group]
+            group_scores = per_dataset_scores[group]
             plot_name = group
-            super()._plot_base(group_predictions, group_targets, plot_name, plot_dir, per_dataset_score, type(self).__name__)
+            super()._plot_base(group_predictions, group_targets, plot_name, plot_dir, group_scores, type(self).__name__)
 
 
 class PredictByGroupProblemBase(ProblemBase):
