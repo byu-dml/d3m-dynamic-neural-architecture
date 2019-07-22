@@ -99,7 +99,7 @@ class ProblemBase:
         new_dir = os.path.join(plot_directory, problem_name)
         if not os.path.isdir(new_dir):
             os.makedirs(new_dir)
-        file_name = os.path.join(new_dir, plot_name)
+        file_name = os.path.join(new_dir, plot_name + '.pdf')
         plt.savefig(fname=file_name)
         plt.clf()
 
