@@ -490,10 +490,39 @@ class RNNDataLoader(GroupDataLoader):
 
     def __init__(
         self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
-        seed: int, pipeline_structures
+        seed: int, pipeline_structures: dict, primitive_to_enc: dict, pipeline_key: str, steps_key: str,
+        prim_name_key: str
     ):
         super().__init__(data, group_key, RNNDataset, dataset_params, batch_size, drop_last, shuffle, seed)
         self.pipeline_structures = pipeline_structures
+
+        if not self._pipelines_encoded(data, pipeline_key, steps_key):
+            self._encode_pipelines(data, primitive_to_enc, pipeline_key, steps_key, prim_name_key)
+
+    def _encode_pipelines(self, data, primitive_name_to_enc, pipeline_key, steps_key, prim_name_key):
+        for instance in data:
+            pipeline = instance[pipeline_key][steps_key]
+            encoded_pipeline = self._encode_pipeline(pipeline, primitive_name_to_enc, prim_name_key)
+            instance[pipeline_key][steps_key] = encoded_pipeline
+
+    @staticmethod
+    def _encode_pipeline(pipeline, primitive_to_enc, prim_name_key):
+        # Create a tensor of encoded primitives
+        encoding = []
+        for primitive in pipeline:
+            primitive_name = primitive[prim_name_key]
+            try:
+                encoded_primitive = primitive_to_enc[primitive_name]
+            except():
+                raise KeyError('A primitive in this data set is not in the primitive encoding')
+
+            encoding.append(encoded_primitive)
+        return encoding
+
+    @staticmethod
+    def _pipelines_encoded(data, pipeline_key, steps_key):
+        primitive_in_pipeline = data[0][pipeline_key][steps_key][0]
+        return type(primitive_in_pipeline) == np.ndarray
 
     def _iter(self):
         group_dataloader_iters = {}

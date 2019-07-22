@@ -112,6 +112,13 @@ class MetricsTestCase(unittest.TestCase):
             err_msg='failed to get spearman from random example, was {}, shouldve been {}'.format(metric, true_metric)
         )
 
+        metric = self.format_and_get_spearman([1, 2.5, 2.5],[1, 2, 3] )
+        true_metric = (0.866025403784, 0.333333333333)
+        np.testing.assert_almost_equal(
+            metric, true_metric,
+            err_msg='failed to get spearman from tie example, was {}, shouldve been {}'.format(metric, true_metric)
+        )
+
     def test_pearson_correlation(self):
         """
         Examples #4 from https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.pearsonr.html

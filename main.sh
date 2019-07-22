@@ -1,27 +1,32 @@
 #!/bin/bash
 
-# # complete has 194 datasets
-# raw_data_path=./data/complete_classification.tar.xz
-# train_path=./data/complete_classification_train.json
-# test_size=44
-# test_split_seed=3746673648
-# validation_size=25
-# validation_split_seed=3101978347
-# k=25
+use_complete_data=false
+# use_ootsp=--use-ootsp
 
-# small has 11 datasets
-raw_data_path=./data/small_classification.tar.xz
-train_path=./data/small_classification_train.json
-test_size=2
-test_split_seed=9232859745
-validation_size=2
-validation_split_seed=5460650386
-k=2
-metafeature_subset=all
+if $use_complete_data; then
+    # complete has 194 datasets
+    raw_data_path=./data/complete_classification.tar.xz
+    train_path=./data/complete_classification_train.json
+    test_size=44
+    test_split_seed=3746673648
+    validation_size=25
+    validation_split_seed=3101978347
+    k=25
+    metafeature_subset=all
+    results_dir=./results
 
-
-results_dir=./dev_results
-
+else
+    # small has 11 datasets
+    raw_data_path=./data/small_classification.tar.xz
+    train_path=./data/small_classification_train.json
+    test_size=2
+    test_split_seed=9232859745
+    validation_size=2
+    validation_split_seed=5460650386
+    k=2
+    metafeature_subset=all
+    results_dir=./dev_results
+fi
 
 python3 -m dna split-data \
     --data-path $raw_data_path \
@@ -31,15 +36,16 @@ python3 -m dna split-data \
 
 python3 -m dna evaluate \
     --model autosklearn \
-    --problem rank subset \
+    --problem regression rank subset \
     --k $k \
-    --model-config-path ./model_configs/autosklearn_config.json \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp \
+    --skip-test-ootsp
 
 
 python3 -m dna evaluate \
@@ -49,7 +55,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -59,7 +66,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -70,7 +78,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -82,7 +91,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -95,7 +105,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -107,7 +118,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -120,7 +132,8 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
 python3 -m dna evaluate \
@@ -133,7 +146,9 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
+
 
 python3 -m dna evaluate \
     --model hidden_daglstm_regression \
@@ -144,16 +159,19 @@ python3 -m dna evaluate \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --output-dir $results_dir \
-    --verbose
+    --verbose \
+    $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model probabilistic_matrix_factorization \
-    --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose
+# python3 -m dna evaluate \
+#     --model probabilistic_matrix_factorization \
+#     --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp \
+#     --skip-test-ootsp
