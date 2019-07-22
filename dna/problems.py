@@ -198,8 +198,7 @@ class RegressionProblem(ProblemBase):
         return per_dataset_scores, mean_scores
     
     def plot(self, predictions, data, scores, plot_dir: str):
-        total_scores, per_dataset_scores, mean_scores = scores['total_scores'], scores['per_dataset_scores'],\
-                                                        scores['mean_scores']
+        total_scores, per_dataset_scores = scores['total_scores'], scores['per_dataset_scores']
 
         # Plot all the datasets combined
         actuals = [item['test_f1_macro'] for item in data]
@@ -258,6 +257,7 @@ class RankProblem(PredictByGroupProblemBase):
         targets_by_group = self._group_data(targets)
         spearman_coefs = []
         spearman_ps = []
+        per_dataset_scores = {}
 
         for group, group_predictions in predictions_by_group.items():
             group_predictions = pd.DataFrame(group_predictions)
@@ -268,10 +268,18 @@ class RankProblem(PredictByGroupProblemBase):
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
             correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
+
+            per_dataset_scores[group] = {
+                'spearman_correlation': {
+                        'correlation_coefficient': correlation,
+                        'p_value': p_value
+                    }
+            }
+
             spearman_coefs.append(correlation)
             spearman_ps.append(p_value)
 
-        return {
+        mean_scores = {
             'spearman_correlation': {
                 'mean': np.mean(spearman_coefs),
                 'std_dev': np.std(spearman_coefs, ddof=1),
@@ -280,8 +288,12 @@ class RankProblem(PredictByGroupProblemBase):
             }
         }
 
+        return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
+
     def plot(self, predictions, targets, scores, plot_dir: str):
+        per_dataset_scores = scores['per_dataset_scores']
         grouped_targets = self._group_data(targets)
+
         for (dataset_id, predicted_ranks) in predictions.items():
             predicted_ranks = pd.DataFrame(predicted_ranks)
             actuals_by_dataset = pd.DataFrame(grouped_targets[dataset_id])
@@ -290,8 +302,9 @@ class RankProblem(PredictByGroupProblemBase):
             predicted_ranks = np.array(predicted_ranks)
             actuals = merged_data['test_f1_macro'].tolist()
             actual_ranks = utils.rank(actuals)
+            group_scores = per_dataset_scores[dataset_id]
             plot_name = dataset_id + '_plot'
-            super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, scores, type(self).__name__)
+            super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, group_scores, type(self).__name__)
 
 
 class SubsetProblem(PredictByGroupProblemBase):
