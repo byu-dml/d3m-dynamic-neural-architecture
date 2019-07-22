@@ -9,11 +9,10 @@ import uuid
 
 import numpy as np
 
-from dna.data import get_data, preprocess_data, split_data, group_json_objects
+from dna.data import get_data, preprocess_data, split_data, group_json_objects, _extract_tarfile
 from dna.models.models import get_model
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
-
 
 def configure_split_parser(parser):
     parser.add_argument(
@@ -42,6 +41,8 @@ def split_handler(
     arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data
 ):
     data_path = getattr(arguments, 'data_path')
+    if not os.path.isfile(data_path):
+        _extract_tarfile(data_path[:-4] + "tar.xz")
     data = data_resolver(data_path)
     train_data, test_data = split_data(
         data, 'dataset_id', getattr(arguments, 'test_size'),
