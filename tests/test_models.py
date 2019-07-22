@@ -17,7 +17,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
         cls.data_path = './data/small_classification_train.json'
         cls.raw_data_path =  './data/small_classification_train.tar.xz'
         if not os.path.isfile(cls.data_path):
-            _extract_tarfile(self.raw_data_path))
+            _extract_tarfile(self.raw_data_path)
 
     def test_dna_regression_determinism(self):
         self._test_determinism(
