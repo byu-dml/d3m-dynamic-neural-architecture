@@ -42,7 +42,7 @@ def split_handler(
 ):
     data_path = getattr(arguments, 'data_path')
     if not os.path.isfile(data_path):
-        _extract_tarfile(data_path[:-4] + "tar.xz")
+        _extract_tarfile(getattr(arguments, 'raw_data_path'))
     data = data_resolver(data_path)
     train_data, test_data = split_data(
         data, 'dataset_id', getattr(arguments, 'test_size'),
