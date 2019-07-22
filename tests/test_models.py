@@ -3,6 +3,7 @@ import unittest
 import argparse
 import json
 import os
+import torch 
 
 from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data
 from dna.models.models import get_model
@@ -21,12 +22,12 @@ class ModelDeterminismTestCase(unittest.TestCase):
 
     def test_dna_regression_determinism(self):
         self._test_determinism(
-            model='dna_regression', model_config_path='./model_configs/dna_regression_config.json'
+            model='dna_regression', model_config_path='./tests/model_configs/dna_regression_config.json'
         )
 
-    def test_dag_lstm_regression_determinism(self):
+    def test_daglstm_regression_determinism(self):
         self._test_determinism(
-            model='daglstm_regression', model_config_path='./model_configs/daglstm_regression_config.json'
+            model='daglstm_regression', model_config_path='./tests/model_configs/daglstm_regression_config.json'
         )
 
     def _test_determinism(self, model: str, model_config_path: str):
@@ -59,6 +60,10 @@ class ModelDeterminismTestCase(unittest.TestCase):
         else:
             with open(model_config_path) as f:
                 model_config = json.load(f)
+                if not torch.cuda.is_available():
+                    if '__init__' not in model_config:
+                        model_config['__init__'] = {}
+                    model_config['__init__']['device'] = 'cpu'
         model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
         train_data, test_data = get_train_and_test_data(
