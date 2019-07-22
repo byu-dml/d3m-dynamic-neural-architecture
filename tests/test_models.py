@@ -11,29 +11,17 @@ from dna.problems import get_problem
 
 class ModelDeterminismTestCase(unittest.TestCase):
 
-    def test_dna_regression_determinism_gpu(self):
-        if torch.cuda.is_available():
-            self._test_determinism(
-                model='dna_regression', model_config_path='./model_configs/dna_regression_config.json'
-            )
-
-    def test_dag_lstm_regression_determinism_gpu(self):
-        if torch.cuda.is_available():
-            self._test_determinism(
-                model='daglstm_regression', model_config_path='./model_configs/daglstm_regression_config.json'
-            )
-
-    def test_dna_regression_determinism_cpu(self):
+    def test_dna_regression_determinism(self):
         self._test_determinism(
             model='dna_regression', model_config_path='./tests/model_configs/dna_regression_config.json'
         )
 
-    def test_dag_lstm_regression_determinism_cpu(self):
+    def test_daglstm_regression_determinism(self):
         self._test_determinism(
             model='daglstm_regression', model_config_path='./tests/model_configs/daglstm_regression_config.json'
         )
 
-    def _test_determinism(self, model: str, model_config_path: str, test_cpu: bool = False):
+    def _test_determinism(self, model: str, model_config_path: str):
         # Set the arguments for this test
         parser = argparse.ArgumentParser()
         configure_evaluate_parser(parser)
@@ -51,22 +39,22 @@ class ModelDeterminismTestCase(unittest.TestCase):
         ]
         arguments = parser.parse_args(argv)
 
-        results1 = self._evaluate_model(arguments, test_cpu)
-        results2 = self._evaluate_model(arguments, test_cpu)
+        results1 = self._evaluate_model(arguments)
+        results2 = self._evaluate_model(arguments)
         self.assertEqual(results1, results2)
 
     @staticmethod
-    def _evaluate_model(arguments, test_cpu):
+    def _evaluate_model(arguments):
         model_config_path = getattr(arguments, 'model_config_path', None)
         if model_config_path is None:
             model_config = {}
         else:
             with open(model_config_path) as f:
                 model_config = json.load(f)
-                if test_cpu:
-                    model_config["__init__"] = {
-                        "device": "cpu"
-                    }
+                if not torch.cuda.is_available():
+                    if '__init__' not in model_config:
+                        model_config['__init__'] = {}
+                    model_config['__init__']['device'] = 'cpu'
         model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
         train_data, test_data = get_train_and_test_data(
