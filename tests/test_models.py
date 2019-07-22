@@ -2,6 +2,7 @@ import unittest
 
 import argparse
 import json
+import torch 
 
 from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data
 from dna.models.models import get_model
@@ -10,17 +11,29 @@ from dna.problems import get_problem
 
 class ModelDeterminismTestCase(unittest.TestCase):
 
-    def test_dna_regression_determinism(self):
+    def test_dna_regression_determinism_gpu(self):
+        if torch.cuda.is_available():
+            self._test_determinism(
+                model='dna_regression', model_config_path='./model_configs/dna_regression_config.json'
+            )
+
+    def test_dag_lstm_regression_determinism_gpu(self):
+        if torch.cuda.is_available():
+            self._test_determinism(
+                model='daglstm_regression', model_config_path='./model_configs/daglstm_regression_config.json'
+            )
+
+    def test_dna_regression_determinism_cpu(self):
         self._test_determinism(
             model='dna_regression', model_config_path='./model_configs/dna_regression_config.json'
         )
 
-    def test_dag_lstm_regression_determinism(self):
+    def test_dag_lstm_regression_determinism_cpu(self):
         self._test_determinism(
             model='daglstm_regression', model_config_path='./model_configs/daglstm_regression_config.json'
         )
 
-    def _test_determinism(self, model: str, model_config_path: str):
+    def _test_determinism(self, model: str, model_config_path: str, test_cpu: bool = False):
         # Set the arguments for this test
         parser = argparse.ArgumentParser()
         configure_evaluate_parser(parser)
@@ -38,18 +51,22 @@ class ModelDeterminismTestCase(unittest.TestCase):
         ]
         arguments = parser.parse_args(argv)
 
-        results1 = self._evaluate_model(arguments)
-        results2 = self._evaluate_model(arguments)
+        results1 = self._evaluate_model(arguments, test_cpu)
+        results2 = self._evaluate_model(arguments, test_cpu)
         self.assertEqual(results1, results2)
 
     @staticmethod
-    def _evaluate_model(arguments):
+    def _evaluate_model(arguments, test_cpu):
         model_config_path = getattr(arguments, 'model_config_path', None)
         if model_config_path is None:
             model_config = {}
         else:
             with open(model_config_path) as f:
                 model_config = json.load(f)
+                if test_cpu:
+                    model_config["__init__"] = {
+                        "device": "cpu"
+                    }
         model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
         train_data, test_data = get_train_and_test_data(
