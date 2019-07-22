@@ -1,6 +1,8 @@
 {
    "__init__": {
     "time_left_for_this_task": 60,
-    "per_run_time_limit": 10
+    "per_run_time_limit": 10,
+    "ensemble_memory_limit": 16384,
+    "ml_memory_limit": 16384
    }
 }
