@@ -1,9 +1,9 @@
-import unittest
-
 import argparse
 import json
 import os
-import torch 
+import unittest
+
+import torch
 
 from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data
 from dna.models.models import get_model
@@ -16,9 +16,9 @@ class ModelDeterminismTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.data_path = 'data/small_classification.json'
-        cls.raw_data_path =  'data/small_classification.tar.xz'
+        cls.tar_data_path =  'data/small_classification.tar.xz'
         if not os.path.isfile(cls.data_path):
-            _extract_tarfile(cls.raw_data_path)
+            _extract_tarfile(cls.tar_data_path)
 
     def test_dna_regression_determinism(self):
         self._test_determinism(
