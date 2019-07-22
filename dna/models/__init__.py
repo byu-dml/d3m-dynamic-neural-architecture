@@ -1,0 +1,2 @@
+class ModelNotFitError(Exception):
+    pass
