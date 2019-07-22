@@ -619,8 +619,8 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         self.batch_size = 0
 
         # get mappings for matrix -> using both datasets to prepare mapping, otherwise we're unprepared for new datasets
-        self.pipeline_id_mapper = self.map_pipeline_ids(train_data + validation_data)
-        self.dataset_id_mapper = self.map_dataset_ids(train_data + validation_data)
+        self.pipeline_id_mapper = self.map_pipeline_ids(train_data)
+        self.dataset_id_mapper = self.map_dataset_ids(train_data)
 
         # encode the pipeline dataset mapping
         train_data = self.encode_pipeline_dataset(train_data)
