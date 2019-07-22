@@ -20,6 +20,7 @@ from .torch_modules.dna_module import DNAModule
 from .torch_modules.dag_lstm_mlp import DAGLSTMMLP
 from .torch_modules.hidden_mlp_dag_lstm_mlp import HiddenMLPDAGLSTMMLP
 from .torch_modules.pmf import PMF
+from .torch_modules import PyTorchRandomStateContext
 
 
 class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
