@@ -14,8 +14,8 @@ class ModelDeterminismTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.data_path = './data/small_classification_train.json'
-        cls.raw_data_path =  './data/small_classification_train.tar.xz'
+        cls.data_path = 'data/small_classification.json'
+        cls.raw_data_path =  'data/small_classification.tar.xz'
         if not os.path.isfile(cls.data_path):
             _extract_tarfile(cls.raw_data_path)
 
