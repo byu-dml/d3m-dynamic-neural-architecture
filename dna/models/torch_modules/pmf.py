@@ -33,27 +33,14 @@ class PMF(nn.Module):
         assert type(n_pipelines) == int and type(n_datasets) == int and type(n_factors) == int, "given wrong input for PMF: expected int"
 
         with PyTorchRandomStateContext(seed):
-            self.pipeline_factors = torch.nn.Embedding(n_pipelines,
-                                                       n_factors,
-                                                       sparse=False).to(self.device)
+            self.pipeline_factors = torch.nn.Embedding(n_pipelines, n_factors, sparse=False).to(self.device)
 
-            self.dataset_factors = torch.nn.Embedding(n_datasets,
-                                                      n_factors,
-                                                      sparse=False).to(self.device)
+            self.dataset_factors = torch.nn.Embedding(n_datasets, n_factors, sparse=False).to(self.device)
+
 
     def forward(self, args):
-        pipeline_id, pipeline, x = args
-        # gather embedding vectors
-        pipeline_vec = pipeline["pipeline_embedding"].to(self.device)
-        dataset_vec = x.long().to(self.device)
-        # Find the embedding id
-        dataset_nums = dataset_vec.argmax(1).tolist()
-        pipeline_num = pipeline_vec.argmax(0).tolist()
-        # find the matrix
-        matrices = torch.matmul(self.pipeline_factors(pipeline_vec), self.dataset_factors(dataset_vec).permute([0, 2, 1])).to(self.device).float()
-        # find the predicted values for each pipeline x dataset in our batch
-        subset = [tuple((index, pipeline_num, dataset_nums[index])) for index in range(matrices.shape[0])]
-        vecs = [matrices[sub].reshape(1) for sub in subset]
-        # combined the predictions
-        combined = torch.cat(vecs)
-        return combined
+        # TODO: will using out of matmul optimize this?
+        matrix = torch.matmul(
+            self.pipeline_factors.weight, self.dataset_factors.weight.permute([1, 0])  # TODO: optimize by removing permute
+        ).to(self.device).float()
+        return matrix
