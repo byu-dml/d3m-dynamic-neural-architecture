@@ -171,6 +171,7 @@ python3 -m dna evaluate \
     --train-path $train_path \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
+    --skip-test \
     --output-dir $results_dir \
     --verbose \
     $use_ootsp \
