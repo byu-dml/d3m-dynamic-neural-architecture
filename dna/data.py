@@ -493,8 +493,8 @@ class RNNDataLoader(GroupDataLoader):
 
     def __init__(
         self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
-        seed: int, primitive_to_enc: dict, pipeline_key: str, steps_key: str,
-        prim_name_key: str, pipeline_structures: dict = None
+        seed: int, primitive_to_enc: dict, pipeline_key: str, steps_key: str, prim_name_key: str,
+        pipeline_structures: dict = None
     ):
         super().__init__(data, group_key, RNNDataset, dataset_params, batch_size, drop_last, shuffle, seed)
         self.pipeline_structures = pipeline_structures

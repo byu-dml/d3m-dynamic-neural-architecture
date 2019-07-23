@@ -93,8 +93,10 @@ class DAGLSTMRegressionModel(LSTMModel):
 
         self.reduction = reduction
 
-    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
-        verbose=False):
+    def fit(
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        verbose=False
+    ):
         # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
         self.pipeline_structures = {}
         grouped_by_structure = group_json_objects(train_data, self.batch_group_key)
@@ -105,8 +107,10 @@ class DAGLSTMRegressionModel(LSTMModel):
             group_structure = [primitive[self.prim_inputs_key] for primitive in pipeline]
             self.pipeline_structures[group] = group_structure
 
-        super().fit(train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
-                    output_dir=output_dir, verbose=verbose)
+        super().fit(
+            train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            output_dir=output_dir, verbose=verbose
+        )
 
     def _get_model(self, train_data):
         return DAGLSTMMLP(
