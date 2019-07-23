@@ -404,7 +404,10 @@ class GroupDataLoader(object):
 
 
 class PMFDataLoader(object):
-    def __init__(self, data, n_x, n_y, pipeline_encoder, dataset_encoder, pipeline_id_mapper, dataset_id_mapper, device="cuda:0"):
+
+    def __init__(
+        self, data, n_x, n_y, pipeline_encoder, dataset_encoder, pipeline_id_mapper, dataset_id_mapper, device="cuda:0"
+    ):
         # assign functions for mapping
         self.pipeline_id_mapper = pipeline_id_mapper
         self.dataset_id_mapper = dataset_id_mapper

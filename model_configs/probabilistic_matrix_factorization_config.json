@@ -1,6 +1,6 @@
 {
     "__init__": {
-        "latent_features": 100,
+        "k": 100,
         "probabilitistic": true,
         "lam_u": 0.3,
         "lam_v": 0.3

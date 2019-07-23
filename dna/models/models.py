@@ -54,7 +54,7 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
         )
 
     def _get_loss_function(self):
-        objective = torch.nn.MSELoss(reduction="mean")
+        objective = torch.nn.MSELoss(reduction='mean')
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
     def _get_optimizer(self, learning_rate):
@@ -198,7 +198,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
         )
 
     def _get_loss_function(self):
-        objective = torch.nn.MSELoss(reduction="mean")
+        objective = torch.nn.MSELoss(reduction='mean')
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
 
@@ -558,27 +558,28 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     """
     Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
     Adapted from traditional Probabilitistic Matrix Factorization but instead of `Users` and `Items`, we have `Pipelines` and `Datasets`
-    """
-    def __init__(self, latent_features, lam_u, lam_v, probabilitistic, *, device: str = 'cuda:0', seed=0):
-        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
-        self.latent_features = latent_features
-        self.device = device
-        self.fitted = False
 
-        # regularization terms to make it Probabilitistic
+    Parameters
+    ----------
+    k: int
+        the number of latent features
+    probabilistic: bool
+        whether to use the probabilistic component in the matrix factorization
+    lam_u: float
+        a regularization term used when probabilistic is True
+    lam_v: float
+        a regularization term used when probabilistic is True
+    """
+    def __init__(self, k: int, probabilitistic: bool, lam_u: float, lam_v: float, *, device: str = 'cuda:0', seed=0):
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
+        self.k = k
+        self.probabilitistic = probabilitistic
         self.lam_u = lam_u
         self.lam_v = lam_v
-        self.mse_loss = torch.nn.MSELoss(reduction="mean")
-        self.probabilitistic = probabilitistic
 
-        self.target_key = 'test_f1_macro'
-        self.batch_group_key = 'pipeline_structure'
-        self.pipeline_key = 'pipeline'
-        self.steps_key = 'steps'
-        self.prim_name_key = 'name'
-        self.prim_inputs_key = 'inputs'
-        self.features_key = 'metafeatures'
+        self.mse_loss = torch.nn.MSELoss(reduction='mean')
 
+    # TODO: can we optimize the loss function by not initializing every call?
     def PMFLoss(self, y_hat, y):
         rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
         # PMF loss includes two extra regularlization
@@ -591,7 +592,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return rmse_loss
 
     def _get_loss_function(self):
-        return lambda y_hat, y: self.PMFLoss(y_hat, y)
+        return self.PMFLoss
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
@@ -600,15 +601,16 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         with PyTorchRandomStateContext(self.seed):
             data_loader = PMFDataLoader(data, self.n_pipelines, self.n_datasets, self.encode_pipeline, self.encode_dataset, self.pipeline_id_mapper,
                                         self.dataset_id_mapper)
-            assert len(data_loader) == 1, "PMF dataloader should have a size of 1 not {}".format(len(data_loader))
+            assert len(data_loader) == 1, 'PMF dataloader should have a size of 1 not {}'.format(len(data_loader))
             return data_loader
 
     def _get_model(self, train_data):
-        self.model = PMF(self.n_pipelines, self.n_datasets, self.latent_features, device=self.device, seed=self.seed)
+        self.model = PMF(self.n_pipelines, self.n_datasets, self.k, device=self.device, seed=self.seed)
         return self.model
 
-    def fit(self, train_data, n_epochs, learning_rate, *, validation_data=None, output_dir=None,
-        verbose=False):
+    def fit(
+        self, train_data, n_epochs, learning_rate, *, validation_data=None, output_dir=None, verbose=False
+    ):
         self.fitted = True
         self.batch_size = 0
 
@@ -623,14 +625,14 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         )
 
     def map_pipeline_ids(self, data):
-        unique_pipelines = list(set([instance["pipeline"]["id"] for instance in data]))
+        unique_pipelines = list(set([instance['pipeline_id'] for instance in data]))
         # for reproduciblity
         unique_pipelines.sort()
         self.n_pipelines = len(unique_pipelines)
         return {unique_pipelines[index]:index for index in range(self.n_pipelines)}
 
     def map_dataset_ids(self, data):
-        unique_datasets = list(set([instance["dataset_id"] for instance in data]))
+        unique_datasets = list(set([instance['dataset_id'] for instance in data]))
         unique_datasets.sort()
         self.n_datasets = len(unique_datasets)
         return {unique_datasets[index]:index for index in range(self.n_datasets)}
@@ -638,14 +640,14 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def encode_dataset(self, dataset):
         dataset_vec = np.zeros(self.n_datasets)
         dataset_vec[self.dataset_id_mapper[dataset]] = 1
-        dataset_vec = torch.tensor(dataset_vec.astype("int64"), device=self.device).long()
+        dataset_vec = torch.tensor(dataset_vec.astype('int64'), device=self.device).long()
         return dataset_vec
 
     def encode_pipeline(self, pipeline_id):
         try:
             return self.pipeline_id_mapper[pipeline_id]
         except KeyError as e:
-            raise KeyError("Pipeline ID was not in the mapper. Perhaps the pipeline id was not in the training set?")
+            raise KeyError('Pipeline ID was not in the mapper. Perhaps the pipeline id was not in the training set?')
 
     def predict_regression(self, data, *, verbose, **kwargs):
         if self._model is None:

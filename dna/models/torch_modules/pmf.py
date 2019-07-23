@@ -33,17 +33,14 @@ class PMF(nn.Module):
         assert type(n_pipelines) == int and type(n_datasets) == int and type(n_factors) == int, "given wrong input for PMF: expected int"
 
         with PyTorchRandomStateContext(seed):
-            self.pipeline_factors = torch.nn.Embedding(n_pipelines,
-                                                n_factors,
-                                                sparse=False).to(self.device)
+            self.pipeline_factors = torch.nn.Embedding(n_pipelines, n_factors, sparse=False).to(self.device)
 
-            self.dataset_factors = torch.nn.Embedding(n_datasets,
-                                                n_factors,
-                                                sparse=False).to(self.device)
+            self.dataset_factors = torch.nn.Embedding(n_datasets, n_factors, sparse=False).to(self.device)
 
 
     def forward(self, args):
-        # dataset_embeddings = args["dataset_id_embedding"].long().to(self.device)
-        # pipeline_embeddings = args["pipeline_id_embedding"].to(self.device)
-        matrix = torch.matmul(self.pipeline_factors.weight, self.dataset_factors.weight.permute([1, 0])).to(self.device).float()
+        # TODO: will using out of matmul optimize this?
+        matrix = torch.matmul(
+            self.pipeline_factors.weight, self.dataset_factors.weight.permute([1, 0])  # TODO: optimize by removing permute
+        ).to(self.device).float()
         return matrix
