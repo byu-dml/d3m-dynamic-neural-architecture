@@ -139,6 +139,9 @@ def configure_evaluate_parser(parser):
         help='Used with --use-ootsp evaluate the model using the ootsp splits, but only the test in-training-set ' +\
             'pipelines. This is useful to compare models that cannot make predictions on ootsp'
     )
+    parser.add_argument(
+        '--skip-test', default=False, action='store_true', help='skip evaluation of the model on the test data'
+    )
 
 
 class EvaluateResult:
@@ -180,13 +183,17 @@ def evaluate(
     if plot_dir is not None:
         problem.plot(train_predictions, train_data, train_scores, os.path.join(plot_dir, 'train'))
 
-    test_predictions, test_predict_time = problem.predict(
-        test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
-    )
-    test_scores = problem.score(test_predictions, test_data)
+    test_predictions = None
+    test_predict_time = None
+    test_scores = None
+    if test_data is not None:
+        test_predictions, test_predict_time = problem.predict(
+            test_data, model, model_config, verbose=verbose, model_output_dir=model_output_dir
+        )
+        test_scores = problem.score(test_predictions, test_data)
 
-    if plot_dir is not None:
-        problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
+        if plot_dir is not None:
+            problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
 
     ootsp_test_predictions = None
     ootsp_test_predict_time = None
@@ -237,6 +244,8 @@ def evaluate_handler(
         arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
         arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache, data_resolver
     )
+    if arguments.skip_test:
+        test_data = None
     ootsp_test_data = None
     if arguments.use_ootsp:
         train_data, test_data, ootsp_test_data = get_ootsp_split_data(
