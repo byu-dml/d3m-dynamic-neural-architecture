@@ -1,30 +1,32 @@
 #!/bin/bash
 
-# # complete has 194 datasets
-# raw_data_path=./data/complete_classification.tar.xz
-# train_path=./data/complete_classification_train.json
-# test_size=44
-# test_split_seed=3746673648
-# validation_size=25
-# validation_split_seed=3101978347
-# k=25
-# metafeature_subset=all
-# # use_ootsp=--use-ootsp
-# results_dir=./results
-
-
-# small has 11 datasets
-raw_data_path=./data/small_classification.tar.xz
-train_path=./data/small_classification_train.json
-test_size=2
-test_split_seed=9232859745
-validation_size=2
-validation_split_seed=5460650386
-k=2
-metafeature_subset=all
+use_complete_data=false
 # use_ootsp=--use-ootsp
-results_dir=./dev_results
 
+if $use_complete_data; then
+    # complete has 194 datasets
+    raw_data_path=./data/complete_classification.tar.xz
+    train_path=./data/complete_classification_train.json
+    test_size=44
+    test_split_seed=3746673648
+    validation_size=25
+    validation_split_seed=3101978347
+    k=25
+    metafeature_subset=all
+    results_dir=./results
+
+else
+    # small has 11 datasets
+    raw_data_path=./data/small_classification.tar.xz
+    train_path=./data/small_classification_train.json
+    test_size=2
+    test_split_seed=9232859745
+    validation_size=2
+    validation_split_seed=5460650386
+    k=2
+    metafeature_subset=all
+    results_dir=./dev_results
+fi
 
 python3 -m dna split-data \
     --data-path $raw_data_path \
