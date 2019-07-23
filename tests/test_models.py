@@ -20,7 +20,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
         parser = argparse.ArgumentParser()
         configure_split_parser(parser)
         argv = [
-            "--data-path", "data/small_classification.json",
+            "--data-path", "data/small_classification.tar.xz",
             "--train-path", cls.data_path_train,
             "--test-path", 'data/small_classification_test.json',
             "--test-size", "2",
