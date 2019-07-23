@@ -493,8 +493,8 @@ class RNNDataLoader(GroupDataLoader):
 
     def __init__(
         self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
-        seed: int, pipeline_structures: dict, primitive_to_enc: dict, pipeline_key: str, steps_key: str,
-        prim_name_key: str
+        seed: int, primitive_to_enc: dict, pipeline_key: str, steps_key: str, prim_name_key: str,
+        pipeline_structures: dict = None
     ):
         super().__init__(data, group_key, RNNDataset, dataset_params, batch_size, drop_last, shuffle, seed)
         self.pipeline_structures = pipeline_structures
@@ -536,8 +536,12 @@ class RNNDataLoader(GroupDataLoader):
             # Get a batch of encoded pipelines, metafeatures, and targets
             (pipeline_batch, x_batch, y_batch) = next(group_dataloader_iters[group])
 
-            # Get the structure of the pipelines in this group so the RNN can parse the pipeline
-            group_structure = self.pipeline_structures[group]
+            if self.pipeline_structures is not None:
+                # Get the structure of the pipelines in this group so the RNN can parse the pipeline
+                group_structure = self.pipeline_structures[group]
 
-            yield ((group_structure, pipeline_batch, x_batch), y_batch)
+                yield ((group_structure, pipeline_batch, x_batch), y_batch)
+            else:
+                # Don't return a pipeline structure and the RNN will have to treat it like a straight pipeline
+                yield((pipeline_batch, x_batch), y_batch)
         raise StopIteration()
