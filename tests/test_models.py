@@ -72,9 +72,9 @@ class ModelDeterminismTestCase(unittest.TestCase):
         else:
             with open(model_config_path) as f:
                 model_config = json.load(f)
-                if not torch.cuda.is_available():	
-                    if '__init__' not in model_config:	
-                        model_config['__init__'] = {}	
+                if not torch.cuda.is_available():
+                    if '__init__' not in model_config:
+                        model_config['__init__'] = {}
                     model_config['__init__']['device'] = 'cpu'
         model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
