@@ -463,11 +463,9 @@ class LinearRegressionBaseline(SklearnBase):
 
 class MetaAutoSklearn(SklearnBase):
 
-    def __init__(self, time_left_for_this_task=60, per_run_time_limit=10, seed=0):
+    def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
-        self.regressor = autosklearn.AutoSklearnRegressor(
-            time_left_for_this_task=time_left_for_this_task, per_run_time_limit=per_run_time_limit, seed=seed
-        )
+        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs)
         self.fitted = False
 
 

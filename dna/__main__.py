@@ -7,6 +7,8 @@ import sys
 import typing
 import uuid
 
+import numpy as np
+
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models.models import get_model
 from dna.models.base_models import ModelBase
@@ -231,7 +233,10 @@ def evaluate_handler(
 
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
 
-    train_data, test_data = get_train_and_test_data(arguments=arguments, data_resolver=data_resolver)
+    train_data, test_data = get_train_and_test_data(
+        arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
+        arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache, data_resolver
+    )
     ootsp_test_data = None
     if arguments.use_ootsp:
         train_data, test_data, ootsp_test_data = get_ootsp_split_data(
@@ -247,7 +252,7 @@ def evaluate_handler(
     for problem_name in getattr(arguments, 'problem'):
         if arguments.verbose:
             print('{} {} {}'.format(model_name, problem_name, run_id))
-        problem = problem_resolver(problem_name, arguments)
+        problem = problem_resolver(problem_name, **vars(arguments))
         evaluate_result = evaluate(
             problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
             model_output_dir=model_output_dir, plot_dir=plot_dir
@@ -270,36 +275,102 @@ def evaluate_handler(
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
 
-def get_train_and_test_data(arguments: argparse.Namespace, data_resolver):
-    # TODO: replace "arguments" arg with actual needed args, e.g. split_seed
-    data_arg_names = ['train_path', 'test_path', 'test_size', 'split_seed', 'metafeature_subset']
-    data_arg_str = ''.join(str(getattr(arguments, arg)) for arg in data_arg_names)
+def configure_rescore_parser(parser):
+    parser.add_argument(
+        '--results-path', type=str, action='store', required=True,
+        help='path to the file containing the results of a call to evaluate'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', required=True,
+        help='the base directory to write the recomputed scores and plots'
+    )
+
+
+def rescore_handler(arguments: argparse.Namespace, data_resolver=get_data):
+    with open(arguments.results_path) as f:
+        results = json.load(f)
+
+    train_data, test_data = get_train_and_test_data(
+        results['arguments']['train_path'], results['arguments']['test_path'], results['arguments']['test_size'],
+        results['arguments']['split_seed'], results['arguments']['metafeature_subset'],
+        results['arguments']['cache_dir'], results['arguments']['no_cache'], data_resolver
+    )
+
+    # Create the output directory for the results of the re-score
+    output_dir = os.path.join(arguments.output_dir, results['id'])
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    plot_dir = os.path.join(output_dir, 'plots')
+    if not os.path.isdir(plot_dir):
+        os.mkdir(plot_dir)
+
+    # For each problem, re-score using the predictions and data and ensure the scores are the same as before
+    for score in results['scores']:
+        problem = get_problem(score['problem_name'], **results['arguments'])
+
+        train_predictions, train_scores = rescore(score, train_data, 'train', problem)
+        test_predictions, test_scores = rescore(score, test_data, 'test', problem)
+
+        problem.plot(train_predictions, train_data, train_scores, os.path.join(plot_dir, 'train'))
+        problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
+
+    # Save the re-scored json file
+    rescore_path = os.path.join(output_dir, 'rescore.json')
+    with open(rescore_path, 'w') as f:
+        json.dump(results, f, indent=4)
+
+
+def rescore(score: dict, data: list, score_type: str, problem):
+    predictions_key = score_type + '_predictions'
+    predictions = score[predictions_key]
+    scores = problem.score(predictions, data)
+    score_key = score_type + '_scores'
+    check_scores(scores, score[score_key], score_type)
+    score[score_key] = scores
+
+    return predictions, scores
+
+
+def check_scores(scores: dict, rescores: dict, score_type: str):
+    for k, v1 in scores.items():
+        v2 = rescores[k]
+        if type(v1) == dict:
+            check_scores(v1, v2, score_type)
+        elif not np.isclose(v1, v2):
+            raise ValueError('{} {} score value {} does not equal rescore value {}'.format(score_type, k, v1, v2))
+
+
+def get_train_and_test_data(
+    train_path, test_path, test_size, split_seed, metafeature_subset, cache_dir, no_cache: bool, data_resolver=get_data
+):
+    data_arg_str = str(train_path) + str(test_path) + str(test_size) + str(split_seed) + str(metafeature_subset)
     cache_id = hashlib.sha256(data_arg_str.encode('utf8')).hexdigest()
-    cache_dir = os.path.join(arguments.cache_dir, cache_id)
+    cache_dir = os.path.join(cache_dir, cache_id)
     train_cache_path = os.path.join(cache_dir, 'train.json')
     test_cache_path = os.path.join(cache_dir, 'test.json')
 
-    load_cached_data = (not arguments.no_cache) and (os.path.isdir(cache_dir))
+    load_cached_data = (not no_cache) and (os.path.isdir(cache_dir))
 
     # determine whether to load raw or cached data
     if load_cached_data:
         in_train_path = train_cache_path
         in_test_path = test_cache_path
     else:
-        in_train_path = arguments.train_path
-        in_test_path = arguments.test_path
+        in_train_path = train_path
+        in_test_path = test_path
 
     # when loading raw data and test_path is not provided, split train into train and test data
     train_data = data_resolver(in_train_path)
     if in_test_path is None:
         assert not load_cached_data
-        train_data, test_data = split_data_by_group(train_data, 'dataset_id', arguments.test_size, arguments.split_seed)
+        train_data, test_data = split_data_by_group(train_data, 'dataset_id', test_size, split_seed)
     else:
         test_data = data_resolver(in_test_path)
 
     if not load_cached_data:
-        train_data, test_data = preprocess_data(train_data, test_data, arguments.metafeature_subset)
-        if not arguments.no_cache:
+        train_data, test_data = preprocess_data(train_data, test_data, metafeature_subset)
+        if not no_cache:
             if not os.path.isdir(cache_dir):
                 os.makedirs(cache_dir)
             with open(train_cache_path, 'w') as f:
@@ -359,6 +430,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
     elif arguments.command == 'evaluate':
         evaluate_handler(arguments, subparser)
 
+    elif arguments.command == 'rescore':
+        rescore_handler(arguments)
+
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
 
@@ -379,6 +453,11 @@ def main(argv: typing.Sequence):
         'evaluate', help='train, score, and save a model'
     )
     configure_evaluate_parser(evaluate_parser)
+
+    rescore_parser = subparsers.add_parser(
+        'rescore', help='recompute scores from the file output by evaluate and remake the plots'
+    )
+    configure_rescore_parser(rescore_parser)
 
     arguments = parser.parse_args(argv[1:])
 
