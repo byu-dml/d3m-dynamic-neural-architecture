@@ -137,6 +137,20 @@ python3 -m dna evaluate \
 
 
 python3 -m dna evaluate \
+    --model lstm \
+    --model-config-path ./model_configs/lstm_config.json \
+    --problem regression rank subset \
+    --k $k \
+    --metafeature-subset $metafeature_subset \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose \
+    $use_ootsp
+
+
+python3 -m dna evaluate \
     --model daglstm_regression \
     --model-config-path ./model_configs/daglstm_regression_config.json \
     --problem regression rank subset \
