@@ -113,7 +113,7 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
         self.features_key = 'metafeatures'
 
     def fit(
-        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, *, output_dir=None,
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *, output_dir=None,
         verbose=False
     ):
         # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
@@ -130,8 +130,8 @@ class DAGLSTMRegressionModel(PyTorchRegressionRankSubsetModelBase):
         self.primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
 
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, output_dir=output_dir,
-            verbose=verbose
+            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience,
+            output_dir=output_dir, verbose=verbose
         )
 
     def _get_primitive_name_to_enc(self, train_data):
@@ -610,7 +610,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return self.model
 
     def fit(
-        self, train_data, n_epochs, learning_rate, validation_ratio, *, output_dir=None, verbose=False
+        self, train_data, n_epochs, learning_rate, validation_ratio, patience, *, output_dir=None, verbose=False
     ):
         batch_size = 0
 
@@ -620,7 +620,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
         # do the rest of the fitting
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, batch_size, False, validation_ratio, output_dir=output_dir,
+            self, train_data, n_epochs, learning_rate, batch_size, False, validation_ratio, patience, output_dir=output_dir,
             verbose=verbose
         )
 

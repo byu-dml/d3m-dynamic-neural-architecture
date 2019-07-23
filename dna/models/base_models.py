@@ -56,9 +56,18 @@ class PyTorchModelBase:
         self._model = None
 
     def fit(
-        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio: float, *, output_dir=None,
-        verbose=False
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio: float, patience: int, *,
+        output_dir=None, verbose=False
     ):
+        """
+        TODO
+        Parameters
+        ----------
+        patience: int
+            the maximum number of epochs to continue fitting without any model improvement, which is determined using
+            the loss value on validation data, when validation_ration > 0, or on train_data otherwise
+        """
+
         self._model = self._get_model(train_data)
         self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
@@ -72,8 +81,12 @@ class PyTorchModelBase:
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         min_loss_score = np.inf
+        min_loss_epoch = -1
         if validation_data is not None:
             validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
+
+        if patience < 1:
+            patience = np.inf
 
         for e in range(n_epochs):
             save_model = False
@@ -100,14 +113,19 @@ class PyTorchModelBase:
                     print('validation loss: {}'.format(validation_loss_score))
                 if validation_loss_score < min_loss_score:
                     min_loss_score = validation_loss_score
+                    min_loss_epoch = e
                     save_model = True
             else:
                 if train_loss_score < min_loss_score:
                     min_loss_score = train_loss_score
+                    min_loss_epoch = e
                     save_model = True
 
             if save_model and model_save_path is not None:
                 torch.save(self._model.state_dict(), model_save_path)
+
+            if e - min_loss_epoch >= patience:
+                break
 
         if not save_model and model_save_path is not None:  # model not saved during final epoch
             self._model.load_state_dict(torch.load(model_save_path))
