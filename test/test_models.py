@@ -37,7 +37,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
 
     def test_daglstm_regression_determinism(self):
         # TODO: fix this test on the CPU
-        if not torch.cuda.is_available():
+        if torch.cuda.is_available():
             self._test_determinism(
                 model='daglstm_regression', model_config_path='./test/model_configs/daglstm_regression_config.json'
             )
