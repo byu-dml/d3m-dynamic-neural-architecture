@@ -8,6 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from dna import utils
+from dna.data import split_data_by_group
 
 
 class ModelBase:
@@ -50,11 +51,12 @@ class PyTorchModelBase:
         self.y_dtype = y_dtype
         self.device = device
         self.seed = seed
+        self._validation_split_seed = seed + 1
 
         self._model = None
 
     def fit(
-        self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio: float, *, output_dir=None,
         verbose=False
     ):
         self._model = self._get_model(train_data)
@@ -64,6 +66,8 @@ class PyTorchModelBase:
         model_save_path = None
         if output_dir is not None:
             model_save_path = os.path.join(output_dir, 'model.pt')
+
+        train_data, validation_data = self._get_validation_split(train_data, validation_ratio, self._validation_split_seed)
 
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
@@ -189,6 +193,16 @@ class PyTorchModelBase:
         }
         with open(save_path, 'w') as f:
             json.dump(outputs, f, separators=(',',':'))
+
+    @staticmethod
+    def _get_validation_split(train_data, validation_ratio, split_seed):
+        if validation_ratio < 0 or 1 <= validation_ratio:
+            raise ValueError('invalid validation ratio: {}'.format(validation_ratio))
+
+        if validation_ratio == 0:
+            return train_data, None
+
+        return split_data_by_group(train_data, 'dataset_id', validation_ratio, split_seed)
 
 
 class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):

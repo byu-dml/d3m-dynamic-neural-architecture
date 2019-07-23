@@ -7,6 +7,7 @@
     },
     "fit": {
         "learning_rate": 0.001,
-        "n_epochs": 5
+        "n_epochs": 5,
+        "validation_ratio": 0
     }
 }
