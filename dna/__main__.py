@@ -14,6 +14,7 @@ from dna.models.models import get_model
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
 
+
 def configure_split_parser(parser):
     parser.add_argument(
         '--data-path', type=str, action='store', required=True,
