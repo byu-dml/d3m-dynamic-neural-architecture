@@ -3,8 +3,9 @@ import numpy as np
 
 from .base_models import PyTorchRegressionRankSubsetModelBase
 from .base_models import PyTorchModelBase
-from .torch_modules.lstm import LSTM
+from .torch_modules.lstm_mlp import LSTMMLP
 from dna.data import RNNDataLoader
+
 
 class LSTMModel(PyTorchRegressionRankSubsetModelBase):
     def __init__(
@@ -73,7 +74,7 @@ class LSTMModel(PyTorchRegressionRankSubsetModelBase):
 
     def _get_model(self, train_data):
         n_features = len(train_data[0][self.features_key])
-        return LSTM(
+        return LSTMMLP(
             input_size=self.num_primitives,
             hidden_size=self.hidden_state_size,
             lstm_n_layers=self.lstm_n_layers,

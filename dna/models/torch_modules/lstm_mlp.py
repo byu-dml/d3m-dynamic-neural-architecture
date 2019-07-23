@@ -1,18 +1,19 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
 from . import PyTorchRandomStateContext
 from .submodule import Submodule
 
-class LSTM(nn.Module):
+
+class LSTMMLP(nn.Module):
     """
     A standard LSTM for processing straight sequences
     """
 
     def __init__(
-            self, input_size: int, hidden_size: int, lstm_n_layers: int, dropout: float, mlp_extra_input_size: int,
-            mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, output_size: int, mlp_activation_name: str,
-            mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
+        self, input_size: int, hidden_size: int, lstm_n_layers: int, dropout: float, mlp_extra_input_size: int,
+        mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, output_size: int, mlp_activation_name: str,
+        mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
     ):
         super().__init__()
 
