@@ -9,7 +9,7 @@ from sklearn import linear_model
 import torch
 
 from dna import utils
-from dna.data import Dataset, GroupDataLoader, PMFDataset, group_json_objects
+from dna.data import Dataset, GroupDataLoader, PMFDataset, PMFDataLoader, group_json_objects
 from dna.kND import KNearestDatasets
 from .lstm_model import LSTMModel
 from .base_models import PyTorchModelBase
@@ -21,6 +21,7 @@ from .torch_modules.dna_module import DNAModule
 from .torch_modules.dag_lstm_mlp import DAGLSTMMLP
 from .torch_modules.hidden_mlp_dag_lstm_mlp import HiddenMLPDAGLSTMMLP
 from .torch_modules.pmf import PMF
+from .torch_modules import PyTorchRandomStateContext
 
 
 class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
@@ -54,7 +55,7 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
         )
 
     def _get_loss_function(self):
-        objective = torch.nn.MSELoss(reduction="mean")
+        objective = torch.nn.MSELoss(reduction='mean')
         return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
     def _get_optimizer(self, learning_rate):
@@ -482,27 +483,28 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     """
     Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
     Adapted from traditional Probabilitistic Matrix Factorization but instead of `Users` and `Items`, we have `Pipelines` and `Datasets`
-    """
-    def __init__(self, latent_features, lam_u, lam_v, probabilitistic, *, device: str = 'cuda:0', seed=0):
-        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
-        self.latent_features = latent_features
-        self.device = device
-        self.fitted = False
 
-        # regularization terms to make it Probabilitistic
+    Parameters
+    ----------
+    k: int
+        the number of latent features
+    probabilistic: bool
+        whether to use the probabilistic component in the matrix factorization
+    lam_u: float
+        a regularization term used when probabilistic is True
+    lam_v: float
+        a regularization term used when probabilistic is True
+    """
+    def __init__(self, k: int, probabilitistic: bool, lam_u: float, lam_v: float, *, device: str = 'cuda:0', seed=0):
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
+        self.k = k
+        self.probabilitistic = probabilitistic
         self.lam_u = lam_u
         self.lam_v = lam_v
-        self.mse_loss = torch.nn.MSELoss(reduction="mean")
-        self.probabilitistic = probabilitistic
 
-        self.target_key = 'test_f1_macro'
-        self.batch_group_key = 'pipeline_structure'
-        self.pipeline_key = 'pipeline'
-        self.steps_key = 'steps'
-        self.prim_name_key = 'name'
-        self.prim_inputs_key = 'inputs'
-        self.features_key = 'metafeatures'
+        self.mse_loss = torch.nn.MSELoss(reduction='mean')
 
+    # TODO: can we optimize the loss function by not initializing every call?
     def PMFLoss(self, y_hat, y):
         rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
         # PMF loss includes two extra regularlization
@@ -515,67 +517,47 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return rmse_loss
 
     def _get_loss_function(self):
-        return lambda y_hat, y: self.PMFLoss(y_hat, y)
+        return self.PMFLoss
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
-    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
-        return GroupDataLoader(
-            data = data,
-            group_key = 'pipeline.id',
-            dataset_class = PMFDataset,
-            dataset_params = {
-                'features_key': 'dataset_id',
-                'target_key': self.target_key,
-                'y_dtype': self.y_dtype,
-                'device': self.device,
-                "encoding_function": self.encode_dataset,
-            },
-            batch_size = batch_size,
-            drop_last = drop_last,
-            shuffle = shuffle,
-            seed = self.seed + 2,
-        )
+    def _get_data_loader(self, data, batch_size=0, drop_last=False, shuffle=True):
+        with PyTorchRandomStateContext(self.seed):
+            data_loader = PMFDataLoader(data, self.n_pipelines, self.n_datasets, self.encode_pipeline, self.encode_dataset, self.pipeline_id_mapper,
+                                        self.dataset_id_mapper)
+            assert len(data_loader) == 1, 'PMF dataloader should have a size of 1 not {}'.format(len(data_loader))
+            return data_loader
 
     def _get_model(self, train_data):
-        self.model = PMF(self.n_pipelines, self.n_datasets, self.latent_features, device=self.device, seed=self.seed)
+        self.model = PMF(self.n_pipelines, self.n_datasets, self.k, device=self.device, seed=self.seed)
         return self.model
 
-    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
-        verbose=False):
+    def fit(
+        self, train_data, n_epochs, learning_rate, *, validation_data=None, output_dir=None, verbose=False
+    ):
         self.fitted = True
+        self.batch_size = 0
 
         # get mappings for matrix -> using both datasets to prepare mapping, otherwise we're unprepared for new datasets
-        self.pipeline_id_mapper = self.map_pipeline_ids(train_data + validation_data)
-        self.dataset_id_mapper = self.map_dataset_ids(train_data + validation_data)
-
-        # encode the pipeline dataset mapping
-        train_data = self.encode_pipeline_dataset(train_data)
-        if validation_data is not None:
-            validation_data = self.encode_pipeline_dataset(validation_data)
+        self.pipeline_id_mapper = self.map_pipeline_ids(train_data)
+        self.dataset_id_mapper = self.map_dataset_ids(train_data)
 
         # do the rest of the fitting
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            self, train_data, n_epochs, learning_rate, self.batch_size, False, validation_data=validation_data,
             output_dir=output_dir, verbose=verbose
         )
 
-    def encode_pipeline_dataset(self, data):
-        for instance in data:
-            instance["pipeline"]["pipeline_embedding"] = self.encode_pipeline(instance["pipeline"]["id"])
-            instance["dataset_id_embedding"] = self.dataset_id_mapper[instance["dataset_id"]]
-        return data
-
     def map_pipeline_ids(self, data):
-        unique_pipelines = list(set([instance["pipeline"]["id"] for instance in data]))
+        unique_pipelines = list(set([instance['pipeline_id'] for instance in data]))
         # for reproduciblity
         unique_pipelines.sort()
         self.n_pipelines = len(unique_pipelines)
         return {unique_pipelines[index]:index for index in range(self.n_pipelines)}
 
     def map_dataset_ids(self, data):
-        unique_datasets = list(set([instance["dataset_id"] for instance in data]))
+        unique_datasets = list(set([instance['dataset_id'] for instance in data]))
         unique_datasets.sort()
         self.n_datasets = len(unique_datasets)
         return {unique_datasets[index]:index for index in range(self.n_datasets)}
@@ -583,14 +565,30 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def encode_dataset(self, dataset):
         dataset_vec = np.zeros(self.n_datasets)
         dataset_vec[self.dataset_id_mapper[dataset]] = 1
-        dataset_vec = torch.tensor(dataset_vec.astype("int64"), device=self.device).long()
+        dataset_vec = torch.tensor(dataset_vec.astype('int64'), device=self.device).long()
         return dataset_vec
 
     def encode_pipeline(self, pipeline_id):
-        pipeline_vec = np.zeros(self.n_pipelines)
-        pipeline_vec[self.pipeline_id_mapper[pipeline_id]] = 1
-        pipeline_vec = torch.tensor(pipeline_vec.astype("int64"), device=self.device).long()
-        return pipeline_vec
+        try:
+            return self.pipeline_id_mapper[pipeline_id]
+        except KeyError as e:
+            raise KeyError('Pipeline ID was not in the mapper. Perhaps the pipeline id was not in the training set?')
+
+    def predict_regression(self, data, *, verbose, **kwargs):
+        if self._model is None:
+            raise Exception('model not fit')
+
+        data_loader = self._get_data_loader(data, drop_last=False, shuffle=False)
+        prediction_matrix, target_matrix = self._predict_epoch(data_loader, self._model, verbose=verbose)
+        predictions = data_loader.get_predictions_from_matrix(data, prediction_matrix)
+        return predictions
+
+    def predict_rank(self, data, *, verbose, **kwargs):
+        # no batch size needed
+        return super().predict_rank(data, batch_size=0, verbose=verbose)
+
+    def predict_subset(self, data, k, *, verbose=False):
+        return super().predict_subset(data, k, batch_size=0, verbose=verbose)
 
 
 def get_model(model_name: str, model_config: typing.Dict, seed: int):
