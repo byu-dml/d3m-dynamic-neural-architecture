@@ -2,23 +2,42 @@ import unittest
 
 import argparse
 import json
+import os
 
-from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data
-from dna.data import get_data
+from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data, split_handler, configure_split_parser
 from dna.models.models import get_model
 from dna.problems import get_problem
+from dna.data import _extract_tarfile
 
 
 class ModelDeterminismTestCase(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        # make sure the data is unzipped and ready
+        cls.data_path_train = 'data/small_classification_train.json'
+        cls.raw_data_path =  'data/small_classification.tar.xz'
+        parser = argparse.ArgumentParser()
+        configure_split_parser(parser)
+        argv = [
+            "--data-path", "data/small_classification.tar.xz",
+            "--train-path", cls.data_path_train,
+            "--test-path", 'data/small_classification_test.json',
+            "--test-size", "2",
+            '--split-seed', "0"
+        ]        
+        cls.arguments = parser.parse_args(argv)
+        split_handler(cls.arguments, parser)
+        
+
     def test_dna_regression_determinism(self):
         self._test_determinism(
-            model='dna_regression', model_config_path='./model_configs/dna_regression_config.json'
+            model='dna_regression', model_config_path='./tests/model_configs/dna_regression_config.json'
         )
 
     def test_dag_lstm_regression_determinism(self):
         self._test_determinism(
-            model='daglstm_regression', model_config_path='./model_configs/daglstm_regression_config.json'
+            model='daglstm_regression', model_config_path='./tests/model_configs/daglstm_regression_config.json'
         )
 
     def _test_determinism(self, model: str, model_config_path: str):
@@ -31,7 +50,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
             '--model-seed', '0',
             '--problem', 'regression', 'rank', 'subset',
             '--k', '2',
-            '--train-path', './data/small_classification_train.json',
+            '--train-path', self.data_path_train,
             '--test-size', '2',
             '--split-seed', '0',
             '--metafeature-subset', 'all',
@@ -53,10 +72,13 @@ class ModelDeterminismTestCase(unittest.TestCase):
                 model_config = json.load(f)
         model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
-        train_data, test_data = get_train_and_test_data(arguments, data_resolver=get_data)
+        train_data, test_data = get_train_and_test_data(
+            arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
+            arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache
+        )
         results = []
         for problem_name in getattr(arguments, 'problem'):
-            problem = get_problem(problem_name, arguments)
+            problem = get_problem(problem_name, **vars(arguments))
             results.append(evaluate(
                 problem, model, model_config, train_data, test_data
             ))
