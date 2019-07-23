@@ -5,7 +5,7 @@ import unittest
 
 import torch
 
-from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data
+from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data, split_handler, configure_split_parser
 from dna.models.models import get_model
 from dna.problems import get_problem
 from dna.data import _extract_tarfile
@@ -15,10 +15,21 @@ class ModelDeterminismTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.data_path = 'data/small_classification.json'
-        cls.tar_data_path =  'data/small_classification.tar.xz'
-        if not os.path.isfile(cls.data_path):
-            _extract_tarfile(cls.tar_data_path)
+        # make sure the data is unzipped and ready
+        cls.data_path_train = 'data/small_classification_train.json'
+        cls.raw_data_path =  'data/small_classification.tar.xz'
+        parser = argparse.ArgumentParser()
+        configure_split_parser(parser)
+        argv = [
+            "--data-path", "data/small_classification.tar.xz",
+            "--train-path", cls.data_path_train,
+            "--test-path", 'data/small_classification_test.json',
+            "--test-size", "2",
+            '--split-seed', "0"
+        ]        
+        cls.arguments = parser.parse_args(argv)
+        split_handler(cls.arguments, parser)
+        
 
     def test_dna_regression_determinism(self):
         self._test_determinism(
@@ -40,7 +51,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
             '--model-seed', '0',
             '--problem', 'regression', 'rank', 'subset',
             '--k', '2',
-            '--train-path', self.data_path,
+            '--train-path', self.data_path_train,
             '--test-size', '2',
             '--split-seed', '0',
             '--metafeature-subset', 'all',
