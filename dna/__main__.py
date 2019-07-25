@@ -9,6 +9,7 @@ import uuid
 
 import numpy as np
 
+from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models.models import get_model
 from dna.models.base_models import ModelBase
@@ -283,6 +284,12 @@ def evaluate_handler(
     if output_dir is not None:
         record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
+    if output_dir is not None:
+        if not os.listdir(model_output_dir):
+            os.rmdir(model_output_dir)
+        if not os.listdir(plot_dir):
+            os.rmdir(plot_dir)
+
 
 def configure_rescore_parser(parser):
     parser.add_argument(
@@ -420,6 +427,7 @@ def record_run(
 
     run = {
         'id': run_id,
+        'git_commit': utils.get_git_commit_hash(),
         'arguments': arguments.__dict__,
         'model_config': model_config,
     }
