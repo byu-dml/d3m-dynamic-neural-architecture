@@ -1,14 +1,11 @@
+import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
-import autosklearn.regression as autosklearn
 from sklearn import linear_model
 
-from .base_models import RegressionModelBase
-from .base_models import RankModelBase
-from .base_models import SubsetModelBase
-from .base_models import SklearnBase
-from dna.kND import KNearestDatasets
+from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase
 from dna import utils
+from dna.kND import KNearestDatasets
 
 
 class MeanBaseline(RegressionModelBase):

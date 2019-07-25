@@ -1,10 +1,10 @@
-import os
 import json
+import os
 
-import torch
-import torch.nn as nn
 import numpy as np
 import pandas as pd
+import torch
+import torch.nn as nn
 from tqdm import tqdm
 
 from dna import utils
