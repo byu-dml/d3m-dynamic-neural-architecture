@@ -8,6 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from dna import utils
+from dna.data import RNNDataLoader
 
 
 class ModelBase:
@@ -229,3 +230,87 @@ class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase
         ranked_data = self.predict_rank(data, batch_size=batch_size, verbose=verbose)
         top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
         return top_k.tolist()
+
+
+class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
+
+    def __init__(self, device: str = 'cuda:0', seed: int = 0):
+
+        super().__init__(y_dtype=torch.float32, seed=seed, device=device)
+
+        self._data_loader_seed = seed + 1
+        self._model_seed = seed + 2
+        self.pipeline_structures = None
+        self.num_primitives = None
+        self.primitive_name_to_enc = None
+        self.target_key = 'test_f1_macro'
+        self.batch_group_key = 'pipeline_structure'
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
+        self.prim_inputs_key = 'inputs'
+        self.features_key = 'metafeatures'
+
+    def _get_model(self, train_data):
+        raise NotImplementedError()
+
+    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+            verbose=False):
+
+        # Get the mapping of primitives to their one hot encoding
+        self.primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
+
+        PyTorchModelBase.fit(
+            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            output_dir=output_dir, verbose=verbose
+        )
+
+    def _get_primitive_name_to_enc(self, train_data):
+        primitive_names = set()
+
+        # Get a set of all the primitives in the train set
+        for instance in train_data:
+            primitives = instance[self.pipeline_key][self.steps_key]
+            for primitive in primitives:
+                primitive_name = primitive[self.prim_name_key]
+                primitive_names.add(primitive_name)
+
+        # Get one hot encodings of all the primitives
+        self.num_primitives = len(primitive_names)
+        encoding = np.identity(n=self.num_primitives)
+
+        # Create a mapping of primitive names to one hot encodings
+        primitive_name_to_enc = {}
+        primitive_names = sorted(primitive_names)
+        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+            primitive_name_to_enc[primitive_name] = primitive_encoding
+
+        return primitive_name_to_enc
+
+    def _get_loss_function(self):
+        objective = torch.nn.MSELoss(reduction="mean")
+        return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+
+    def _get_optimizer(self, learning_rate):
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
+
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
+        return RNNDataLoader(
+            data=data,
+            group_key=self.batch_group_key,
+            dataset_params={
+                'features_key': self.features_key,
+                'target_key': self.target_key,
+                'y_dtype': self.y_dtype,
+                'device': self.device
+            },
+            batch_size=batch_size,
+            drop_last=drop_last,
+            shuffle=shuffle,
+            seed=self._data_loader_seed,
+            pipeline_structures=self.pipeline_structures,
+            primitive_to_enc=self.primitive_name_to_enc,
+            pipeline_key=self.pipeline_key,
+            steps_key=self.steps_key,
+            prim_name_key=self.prim_name_key
+        )

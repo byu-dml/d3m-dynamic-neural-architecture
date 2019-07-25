@@ -1,16 +1,22 @@
-from .models import PyTorchRegressionRankSubsetModelBase
+from .base_models import RNNRegressionRankSubsetModelBase
 from .torch_modules.dag_transformer.dag_transformer import DAGTransformer
 
 
-class DAGTransformerRegressionModel(PyTorchRegressionRankSubsetModelBase):
+class DAGTransformerRegressionModel(RNNRegressionRankSubsetModelBase):
+    def __init__(self, device: str = 'cuda:0', seed: int = 0):
+
+        super().__init__(device=device, seed=seed)
+
     def _get_model(self, train_data):
         return DAGTransformer()
 
-    def _get_loss_function(self):
-        pass
+    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+            verbose=False):
 
-    def _get_optimizer(self, learning_rate):
-        pass
+        # TODO: Create attention pipeline structures
 
-    def _get_data_loader(self, data, batch_size, drop_last, shuffle):
-        pass
+        super().fit(
+            train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            output_dir=output_dir, verbose=verbose
+        )
+
