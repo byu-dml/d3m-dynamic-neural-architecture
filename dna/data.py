@@ -38,21 +38,31 @@ def group_json_objects(json_objects, group_key):
     return grouped_objects
 
 
-def split_data(data: typing.List[typing.Dict], group_by_key: str, test_size: int, seed: int):
+def split_data_by_group(data: typing.List[typing.Dict], group_by_key: str, test_size: typing.Union[int, float], seed: int):
     grouped_data_indices = group_json_objects(data, group_by_key)
     groups = list(grouped_data_indices.keys())
 
-    rnd = random.Random()
-    rnd.seed(seed)
-    rnd.shuffle(groups)
+    if 0 < test_size < 1:
+        test_size = int(round(test_size * len(groups)))
+    if test_size <= 0 or len(groups) <= test_size:
+        raise ValueError('invalid test size: {}'.format(test_size))
+
+    rng = random.Random()
+    rng.seed(seed)
+    rng.shuffle(groups)
+
+    train_groups = groups[test_size:]
+    assert len(train_groups) == len(groups) - test_size
+    test_groups = groups[:test_size]
+    assert len(test_groups) == test_size
 
     train_data = []
-    for group in groups[test_size:]:
+    for group in train_groups:
         for i in grouped_data_indices[group]:
             train_data.append(data[i])
 
     test_data = []
-    for group in groups[:test_size]:
+    for group in test_groups:
         for i in grouped_data_indices[group]:
             test_data.append(data[i])
 

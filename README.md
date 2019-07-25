@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.com/byu-dml/d3m-dynamic-neural-architecture.svg?branch=develop)](https://travis-ci.com/byu-dml/d3m-dynamic-neural-architecture)
 # Dynamic Neural Architecture (DNA)
 
 This repository contains a system for evaluating metalearning systems on a meta-dataset (a dataset containing info about machine learning experiments on datasets).
