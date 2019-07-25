@@ -12,6 +12,7 @@ from dna import utils
 from dna.data import Dataset, GroupDataLoader, PMFDataset, PMFDataLoader, group_json_objects
 from dna.kND import KNearestDatasets
 from .lstm_model import LSTMModel
+from .dag_transformer_regression_model import DAGTransformerRegressionModel
 from .base_models import PyTorchModelBase
 from .base_models import PyTorchRegressionRankSubsetModelBase
 from .base_models import RegressionModelBase
@@ -605,6 +606,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'lstm': LSTMModel,
         'daglstm_regression': DAGLSTMRegressionModel,
         'hidden_daglstm_regression': HiddenDAGLSTMRegressionModel,
+        'dag_transformer_regression': DAGTransformerRegressionModel,
         'linear_regression': LinearRegressionBaseline,
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,
