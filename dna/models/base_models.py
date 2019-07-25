@@ -65,7 +65,7 @@ class PyTorchModelBase:
         ----------
         patience: int
             the maximum number of epochs to continue fitting without any model improvement, which is determined using
-            the loss value on validation data, when validation_ration > 0, or on train_data otherwise
+            the loss value on validation data, when validation_ratio > 0, or on train_data otherwise
         """
 
         self._model = self._get_model(train_data)
