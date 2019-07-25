@@ -6,7 +6,7 @@ import unittest
 import torch
 
 from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data, split_handler, configure_split_parser
-from dna.models.models import get_model
+from dna.models import get_model
 from dna.problems import get_problem
 
 

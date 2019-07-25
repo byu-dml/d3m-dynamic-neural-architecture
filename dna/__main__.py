@@ -11,7 +11,7 @@ import numpy as np
 
 from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
-from dna.models.models import get_model
+from dna.models import get_model
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
 
