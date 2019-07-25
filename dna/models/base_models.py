@@ -359,10 +359,19 @@ class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
 
 class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
 
-    def __init__(self, device: str = 'cuda:0', seed: int = 0):
+    def __init__(
+        self, activation_name, dropout, output_n_hidden_layers, output_hidden_layer_size, use_batch_norm,
+        use_skip, *, device: str = 'cuda:0', seed: int = 0
+    ):
 
         super().__init__(y_dtype=torch.float32, seed=seed, device=device)
 
+        self.activation_name = activation_name
+        self.dropout = dropout
+        self.output_n_hidden_layers = output_n_hidden_layers
+        self.output_hidden_layer_size = output_hidden_layer_size
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
         self._data_loader_seed = seed + 1
         self._model_seed = seed + 2
         self.pipeline_structures = None
@@ -380,8 +389,8 @@ class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
         raise NotImplementedError()
 
     def fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
-            output_dir=None, verbose=False
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
+        output_dir=None, verbose=False
     ):
 
         # Get the mapping of primitives to their one hot encoding
