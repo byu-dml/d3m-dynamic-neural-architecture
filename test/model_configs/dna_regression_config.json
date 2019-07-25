@@ -11,7 +11,9 @@
         "batch_size": 32,
         "drop_last": true,
         "learning_rate": 0.0001,
-        "n_epochs": 1
+        "n_epochs": 1,
+        "validation_ratio": 0.1,
+        "patience": 20
     },
     "predict_rank": {
         "batch_size": 32

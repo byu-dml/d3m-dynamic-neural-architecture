@@ -99,7 +99,7 @@ class DAGLSTMRegressionModel(LSTMModel):
         self.reduction = reduction
 
     def fit(
-        self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *, output_dir=None,
         verbose=False
     ):
         # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
@@ -113,7 +113,7 @@ class DAGLSTMRegressionModel(LSTMModel):
             self.pipeline_structures[group] = group_structure
 
         super().fit(
-            train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience,
             output_dir=output_dir, verbose=verbose
         )
 
@@ -226,10 +226,9 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return self.model
 
     def fit(
-        self, train_data, n_epochs, learning_rate, *, validation_data=None, output_dir=None, verbose=False
+        self, train_data, n_epochs, learning_rate, validation_ratio, patience, *, output_dir=None, verbose=False
     ):
-        self.fitted = True
-        self.batch_size = 0
+        batch_size = 0
 
         # get mappings for matrix -> using both datasets to prepare mapping, otherwise we're unprepared for new datasets
         self.pipeline_id_mapper = self.map_pipeline_ids(train_data)
@@ -237,8 +236,8 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
         # do the rest of the fitting
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, self.batch_size, False, validation_data=validation_data,
-            output_dir=output_dir, verbose=verbose
+            self, train_data, n_epochs, learning_rate, batch_size, False, validation_ratio, patience, output_dir=output_dir,
+            verbose=verbose
         )
 
     def map_pipeline_ids(self, data):

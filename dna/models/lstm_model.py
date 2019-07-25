@@ -39,14 +39,15 @@ class LSTMModel(PyTorchRegressionRankSubsetModelBase):
         self.prim_inputs_key = 'inputs'
         self.features_key = 'metafeatures'
 
-    def fit(self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
-            verbose=False):
-
+    def fit(
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
+        output_dir=None, verbose=False
+    ):
         # Get the mapping of primitives to their one hot encoding
         self.primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
 
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_data=validation_data,
+            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience,
             output_dir=output_dir, verbose=verbose
         )
 

@@ -17,7 +17,7 @@ class MeanBaseline(RegressionModelBase):
         super().__init__(seed=seed)
         self.mean = None
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+    def fit(self, data, *, output_dir=None, verbose=False):
         total = 0
         for instance in data:
             total += instance['test_f1_macro']
@@ -36,7 +36,7 @@ class MedianBaseline(RegressionModelBase):
         super().__init__(seed=seed)
         self.median = None
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+    def fit(self, data, *, output_dir=None, verbose=False):
         self.median = np.median([instance['test_f1_macro'] for instance in data])
         self.fitted = True
 
@@ -52,7 +52,7 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase, SubsetModelBase):
         super().__init__(seed=seed)
         self.primitive_scores = None
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+    def fit(self, data, *, output_dir=None, verbose=False):
         # for each primitive, get the scores of all the pipelines that use the primitive
         primitive_score_totals = {}
         for instance in data:

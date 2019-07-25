@@ -8,6 +8,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from dna import utils
+from dna.data import split_data_by_group
 
 
 class ModelBase:
@@ -50,13 +51,23 @@ class PyTorchModelBase:
         self.y_dtype = y_dtype
         self.device = device
         self.seed = seed
+        self._validation_split_seed = seed + 1
 
         self._model = None
 
     def fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, *, validation_data=None, output_dir=None,
-            verbose=False
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio: float, patience: int, *,
+        output_dir=None, verbose=False
     ):
+        """
+        TODO
+        Parameters
+        ----------
+        patience: int
+            the maximum number of epochs to continue fitting without any model improvement, which is determined using
+            the loss value on validation data, when validation_ratio > 0, or on train_data otherwise
+        """
+
         self._model = self._get_model(train_data)
         self._loss_function = self._get_loss_function()
         self._optimizer = self._get_optimizer(learning_rate)
@@ -65,11 +76,17 @@ class PyTorchModelBase:
         if output_dir is not None:
             model_save_path = os.path.join(output_dir, 'model.pt')
 
+        train_data, validation_data = self._get_validation_split(train_data, validation_ratio, self._validation_split_seed)
+
         train_data_loader = self._get_data_loader(train_data, batch_size, drop_last, shuffle=True)
         validation_data_loader = None
         min_loss_score = np.inf
+        min_loss_epoch = -1
         if validation_data is not None:
             validation_data_loader = self._get_data_loader(validation_data, batch_size, drop_last=False, shuffle=False)
+
+        if patience < 1:
+            patience = np.inf
 
         for e in range(n_epochs):
             save_model = False
@@ -96,14 +113,19 @@ class PyTorchModelBase:
                     print('validation loss: {}'.format(validation_loss_score))
                 if validation_loss_score < min_loss_score:
                     min_loss_score = validation_loss_score
+                    min_loss_epoch = e
                     save_model = True
             else:
                 if train_loss_score < min_loss_score:
                     min_loss_score = train_loss_score
+                    min_loss_epoch = e
                     save_model = True
 
             if save_model and model_save_path is not None:
                 torch.save(self._model.state_dict(), model_save_path)
+
+            if e - min_loss_epoch >= patience:
+                break
 
         if not save_model and model_save_path is not None:  # model not saved during final epoch
             self._model.load_state_dict(torch.load(model_save_path))
@@ -122,9 +144,7 @@ class PyTorchModelBase:
     def _get_data_loader(self, data, batch_size, drop_last, shuffle):
         raise NotImplementedError()
 
-    def _train_epoch(
-            self, data_loader, model: nn.Module, loss_function, optimizer, *, verbose=True
-    ):
+    def _train_epoch(self, data_loader, model: nn.Module, loss_function, optimizer, *, verbose=True):
         model.train()
 
         if verbose:
@@ -143,9 +163,7 @@ class PyTorchModelBase:
         if verbose:
             progress.close()
 
-    def _predict_epoch(
-            self, data_loader, model: nn.Module, *, verbose=True
-    ):
+    def _predict_epoch(self, data_loader, model: nn.Module, *, verbose=True):
         model.eval()
         predictions = []
         targets = []
@@ -194,6 +212,16 @@ class PyTorchModelBase:
         with open(save_path, 'w') as f:
             json.dump(outputs, f, separators=(',',':'))
 
+    @staticmethod
+    def _get_validation_split(train_data, validation_ratio, split_seed):
+        if validation_ratio < 0 or 1 <= validation_ratio:
+            raise ValueError('invalid validation ratio: {}'.format(validation_ratio))
+
+        if validation_ratio == 0:
+            return train_data, None
+
+        return split_data_by_group(train_data, 'dataset_id', validation_ratio, split_seed)
+
 
 class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
 
@@ -239,7 +267,7 @@ class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
         self.steps_key = 'steps'
         self.prim_name_key = 'name'
 
-    def fit(self, data, *, validation_data=None, output_dir=None, verbose=False):
+    def fit(self, data, *, output_dir=None, verbose=False):
         self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
         data = pd.DataFrame(data)
         y = data['test_f1_macro']
