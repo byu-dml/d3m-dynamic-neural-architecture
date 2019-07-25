@@ -7,10 +7,11 @@ from dna.data import RNNDataLoader
 
 
 class LSTMModel(PyTorchRegressionRankSubsetModelBase):
+
     def __init__(
-            self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
-            output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False, *,
-            device: str = 'cuda:0', seed: int = 0
+        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False, *,
+        device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(y_dtype=torch.float32, seed=seed, device=device)
 
