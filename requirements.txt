@@ -7,7 +7,7 @@ ConfigSpace==0.4.10
 cycler==0.10.0
 Cython==0.29.12
 ddt==1.2.1
-docutils==0.15.1
+docutils==0.14
 gitdb==0.6.4
 gitdb2==2.0.5
 GitPython==2.1.12
