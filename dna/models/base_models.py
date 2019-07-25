@@ -1,10 +1,10 @@
-import os
 import json
+import os
 
-import torch
-import torch.nn as nn
 import numpy as np
 import pandas as pd
+import torch
+import torch.nn as nn
 from tqdm import tqdm
 
 from dna import utils
@@ -257,3 +257,101 @@ class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase
         ranked_data = self.predict_rank(data, batch_size=batch_size, verbose=verbose)
         top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
         return top_k.tolist()
+
+
+class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
+
+    def __init__(self, seed=0):
+        super().__init__(seed=seed)
+        self.pipeline_key = 'pipeline'
+        self.steps_key = 'steps'
+        self.prim_name_key = 'name'
+
+    def fit(self, data, *, output_dir=None, verbose=False):
+        self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
+        data = pd.DataFrame(data)
+        y = data['test_f1_macro']
+        X_data = self.prepare_data(data)
+        self.regressor.fit(X_data, y)
+        self.fitted = True
+
+    def predict_regression(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        data = pd.DataFrame(data)
+        X_data = self.prepare_data(data)
+        return self.regressor.predict(X_data).tolist()
+
+    def predict_rank(self, data, *, verbose=False):
+        if not self.fitted:
+            raise ModelNotFitError('{} not fit'.format(type(self).__name__))
+
+        predictions = self.predict_regression(data)
+        ranks = utils.rank(predictions)
+        return {
+            'pipeline_id': [instance['pipeline_id'] for instance in data],
+            'rank': ranks,
+        }
+
+    def predict_subset(self, data, k, **kwargs):
+        if not self.fitted:
+            raise Exception('model not fit')
+
+        ranked_data = self.predict_rank(data, **kwargs)
+        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
+        return top_k.tolist()
+
+    def prepare_data(self, data):
+        # expand the column of lists of metafeatures into a full dataframe
+        metafeature_df = pd.DataFrame(data.metafeatures.values.tolist()).reset_index(drop=True)
+        assert np.isnan(metafeature_df.values).sum() == 0, 'metafeatures should not contain nans'
+        assert np.isinf(metafeature_df.values).sum() == 0, 'metafeatures should not contain infs'
+
+        encoded_pipelines = self.one_hot_encode_pipelines(data)
+        assert np.isnan(encoded_pipelines.values).sum() == 0, 'pipeline encodings should not contain nans'
+        assert np.isinf(encoded_pipelines.values).sum() == 0, 'pipeline encodings should not contain infs'
+
+        # concatenate the parts together and validate
+        assert metafeature_df.shape[0] == encoded_pipelines.shape[0], 'number of metafeature instances does not match number of pipeline instances'
+        X_data = pd.concat([encoded_pipelines, metafeature_df], axis=1, ignore_index=True)
+        assert X_data.shape[1] == (encoded_pipelines.shape[1] + metafeature_df.shape[1]), 'dataframe was combined incorrectly'
+        return X_data
+
+    def _one_hot_encode_mapping(self, data):
+        primitive_names = set()
+
+        # Get a set of all the primitives in the train set
+        for instance in data:
+            primitives = instance[self.pipeline_key][self.steps_key]
+            for primitive in primitives:
+                primitive_name = primitive[self.prim_name_key]
+                primitive_names.add(primitive_name)
+
+        primitive_names = sorted(primitive_names)
+
+        # Get one hot encodings of all the primitives
+        self.n_primitives = len(primitive_names)
+        encoding = np.identity(n=self.n_primitives)
+
+        # Create a mapping of primitive names to one hot encodings
+        primitive_name_to_enc = {}
+        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+            primitive_name_to_enc[primitive_name] = primitive_encoding
+
+        return primitive_name_to_enc
+
+    def one_hot_encode_pipelines(self, data):
+        return pd.DataFrame([self.encode_pipeline(pipeline) for pipeline in data[self.pipeline_key]])
+
+    def encode_pipeline(self, pipeline):
+        """
+        Encodes a pipeline by OR-ing the one-hot encoding of the primitives.
+        """
+        encoding = np.zeros(self.n_primitives)
+        for primitive in pipeline[self.steps_key]:
+            primitive_name = primitive[self.prim_name_key]
+            # get the position of the one hot encoding
+            primitive_index = np.argmax(self.one_hot_primitives_map[primitive_name])
+            encoding[primitive_index] = 1
+        return encoding

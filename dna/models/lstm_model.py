@@ -1,8 +1,7 @@
-import torch
 import numpy as np
+import torch
 
-from .base_models import PyTorchRegressionRankSubsetModelBase
-from .base_models import PyTorchModelBase
+from .base_models import PyTorchModelBase, PyTorchRegressionRankSubsetModelBase
 from .torch_modules.lstm_mlp import LSTMMLP
 from dna.data import RNNDataLoader
 
