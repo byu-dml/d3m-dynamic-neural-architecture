@@ -403,6 +403,59 @@ class GroupDataLoader(object):
         return len(self._group_batches)
 
 
+class PMFDataLoader(object):
+
+    def __init__(
+        self, data, n_x, n_y, pipeline_encoder, dataset_encoder, pipeline_id_mapper, dataset_id_mapper, device="cuda:0"
+    ):
+        # assign functions for mapping
+        self.pipeline_id_mapper = pipeline_id_mapper
+        self.dataset_id_mapper = dataset_id_mapper
+        self.encode_pipeline = pipeline_encoder
+        self.dataset_encoder = dataset_encoder
+         # encode the pipeline dataset mapping
+        x_data = self.encode_pipeline_dataset(data)
+        y_data = [instance["test_f1_macro"] for instance in data]
+        # Build the matrix using the x and y data
+        self.matrix = torch.zeros([n_x, n_y], device=device)
+        for index, value in enumerate(y_data):
+            self.matrix[x_data[index]["pipeline_id_embedding"]][x_data[index]["dataset_id_embedding"]] = value
+        self.used = False
+        self.n = len(y_data)
+
+    def __len__(self):
+        return 1
+
+    def __iter__(self):
+        # only return one object: the matrix
+        if not self.used:
+            yield(None, self.matrix)
+        raise StopIteration()
+
+    def encode_pipeline_dataset(self, data):
+        """
+        Creates the embeddings for the dataset
+        """
+        try:
+            x_data = []
+            for instance in data:
+                x_data.append({"pipeline_id_embedding": self.encode_pipeline(instance["pipeline"]["id"]),
+                            "dataset_id_embedding": self.dataset_id_mapper[instance["dataset_id"]]})
+            return x_data
+
+        except KeyError as e:
+            raise KeyError("Pipeline/Dataset ID was not in the mapper. Perhaps the pipeline/dataset id was not in the training set? Error: {}".format(e))
+
+    
+    def get_predictions_from_matrix(self, x_data, matrix):
+        predictions = []
+        for index, item in enumerate(x_data):
+            predict_value = matrix[self.encode_pipeline(item["pipeline_id"])][self.dataset_id_mapper[item["dataset_id"]]].item()
+            predictions.append(predict_value)
+
+        return predictions
+
+
 class PMFDataset(Dataset):
     # needed to encode the pipelines and datasets for the embeded layers.  Used with GroupDataLoader.
     def  __init__(
@@ -440,8 +493,8 @@ class RNNDataLoader(GroupDataLoader):
 
     def __init__(
         self, data: dict, group_key: str, dataset_params: dict, batch_size: int, drop_last: bool, shuffle: bool,
-        seed: int, pipeline_structures: dict, primitive_to_enc: dict, pipeline_key: str, steps_key: str,
-        prim_name_key: str
+        seed: int, primitive_to_enc: dict, pipeline_key: str, steps_key: str, prim_name_key: str,
+        pipeline_structures: dict = None
     ):
         super().__init__(data, group_key, RNNDataset, dataset_params, batch_size, drop_last, shuffle, seed)
         self.pipeline_structures = pipeline_structures
@@ -483,8 +536,12 @@ class RNNDataLoader(GroupDataLoader):
             # Get a batch of encoded pipelines, metafeatures, and targets
             (pipeline_batch, x_batch, y_batch) = next(group_dataloader_iters[group])
 
-            # Get the structure of the pipelines in this group so the RNN can parse the pipeline
-            group_structure = self.pipeline_structures[group]
+            if self.pipeline_structures is not None:
+                # Get the structure of the pipelines in this group so the RNN can parse the pipeline
+                group_structure = self.pipeline_structures[group]
 
-            yield ((group_structure, pipeline_batch, x_batch), y_batch)
+                yield ((group_structure, pipeline_batch, x_batch), y_batch)
+            else:
+                # Don't return a pipeline structure and the RNN will have to treat it like a straight pipeline
+                yield((pipeline_batch, x_batch), y_batch)
         raise StopIteration()
