@@ -6,9 +6,9 @@ from dna.data import group_json_objects
 class DAGLSTMRegressionModel(LSTMModel):
 
     def __init__(
-            self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
-            output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
-            reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
+        self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
+        reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
             activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,
@@ -18,8 +18,8 @@ class DAGLSTMRegressionModel(LSTMModel):
         self.reduction = reduction
 
     def fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *, output_dir=None,
-            verbose=False
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
+        output_dir=None, verbose=False
     ):
         # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
         self.pipeline_structures = {}

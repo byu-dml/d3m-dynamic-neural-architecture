@@ -4,9 +4,9 @@ from .torch_modules.hidden_mlp_dag_lstm_mlp import HiddenMLPDAGLSTMMLP
 class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
 
     def __init__(
-            self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, hidden_state_size: int,
-            lstm_n_layers: int, dropout: float, output_n_hidden_layers: int, output_hidden_layer_size: int,
-            use_batch_norm: bool, use_skip: bool = False, reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
+        self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, hidden_state_size: int,
+        lstm_n_layers: int, dropout: float, output_n_hidden_layers: int, output_hidden_layer_size: int,
+        use_batch_norm: bool, use_skip: bool = False, reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
             activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,

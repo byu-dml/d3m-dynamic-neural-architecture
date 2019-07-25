@@ -1,9 +1,9 @@
 import torch
 
-from .torch_modules import PyTorchRandomStateContext
-from .torch_modules.pmf import PMF
 from .base_models import PyTorchModelBase
 from .base_models import PyTorchRegressionRankSubsetModelBase
+from .torch_modules import PyTorchRandomStateContext
+from .torch_modules.pmf import PMF
 from dna.data import PMFDataLoader
 
 
@@ -23,6 +23,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     lam_v: float
         a regularization term used when probabilistic is True
     """
+
     def __init__(self, k: int, probabilitistic: bool, lam_u: float, lam_v: float, *, device: str = 'cuda:0', seed=0):
         super().__init__(y_dtype=torch.float32, device=device, seed=seed)
         self.k = k
@@ -52,8 +53,10 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
     def _get_data_loader(self, data, batch_size=0, drop_last=False, shuffle=True):
         with PyTorchRandomStateContext(self.seed):
-            data_loader = PMFDataLoader(data, self.n_pipelines, self.n_datasets, self.encode_pipeline, self.encode_dataset, self.pipeline_id_mapper,
-                                        self.dataset_id_mapper)
+            data_loader = PMFDataLoader(
+                data, self.n_pipelines, self.n_datasets, self.encode_pipeline, self.encode_dataset,
+                self.pipeline_id_mapper, self.dataset_id_mapper
+            )
             assert len(data_loader) == 1, 'PMF dataloader should have a size of 1 not {}'.format(len(data_loader))
             return data_loader
 
@@ -62,7 +65,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         return self.model
 
     def fit(
-            self, train_data, n_epochs, learning_rate, validation_ratio, patience, *, output_dir=None, verbose=False
+        self, train_data, n_epochs, learning_rate, validation_ratio, patience, *, output_dir=None, verbose=False
     ):
         batch_size = 0
 
@@ -72,8 +75,8 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
 
         # do the rest of the fitting
         PyTorchModelBase.fit(
-            self, train_data, n_epochs, learning_rate, batch_size, False, validation_ratio, patience, output_dir=output_dir,
-            verbose=verbose
+            self, train_data, n_epochs, learning_rate, batch_size, False, validation_ratio, patience,
+            output_dir=output_dir, verbose=verbose
         )
 
     def map_pipeline_ids(self, data):

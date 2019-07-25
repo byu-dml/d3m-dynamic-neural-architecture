@@ -1,14 +1,14 @@
 import torch
 
-from .torch_modules.dna_module import DNAModule
 from .base_models import PyTorchRegressionRankSubsetModelBase
-from dna.data import GroupDataLoader, Dataset
+from .torch_modules.dna_module import DNAModule
+from dna.data import Dataset, GroupDataLoader
 
 class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
 
     def __init__(
-            self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
-            use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
+        self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
+        use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(y_dtype=torch.float32, device=device, seed=seed)
 
