@@ -9,7 +9,7 @@ import uuid
 
 import numpy as np
 
-from dna.data import get_data, preprocess_data, split_data, group_json_objects
+from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models.models import get_model
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
@@ -43,10 +43,7 @@ def split_handler(
 ):
     data_path = getattr(arguments, 'data_path')
     data = data_resolver(data_path)
-    train_data, test_data = split_data(
-        data, 'dataset_id', getattr(arguments, 'test_size'),
-        getattr(arguments, 'split_seed')
-    )
+    train_data, test_data = split_data_by_group(data, 'dataset_id', arguments.test_size, arguments.split_seed)
 
     train_path = getattr(arguments, 'train_path')
     if train_path is None:
@@ -376,7 +373,7 @@ def get_train_and_test_data(
     train_data = data_resolver(in_train_path)
     if in_test_path is None:
         assert not load_cached_data
-        train_data, test_data = split_data(train_data, 'dataset_id', test_size, split_seed)
+        train_data, test_data = split_data_by_group(train_data, 'dataset_id', test_size, split_seed)
     else:
         test_data = data_resolver(in_test_path)
 
