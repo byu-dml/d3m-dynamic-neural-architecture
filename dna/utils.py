@@ -21,5 +21,5 @@ def get_reduction_function(reduction: str):
     elif reduction == 'mul':
         return torch.mul
     else:
-        raise Exception('No valid hidden state reduction was provided to the DAG LSTM\n'
+        raise Exception('No valid reduction was provided\n'
                         'Got \"' + reduction + '\"')
