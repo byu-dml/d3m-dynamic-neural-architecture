@@ -5,9 +5,10 @@ from .torch_modules.attention_mlp import AttentionMLP
 class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
 
     def __init__(
-        self, n_layers: int, n_heads: int, dim_keys, dim_values, reduction: str, activation_name: str,
-        dropout: float,  output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool,
-        use_skip: bool, *, device: str = 'cuda:0', seed: int = 0
+        self, n_layers: int, n_heads: int, attention_in_features: int, attention_hidden_features: int,
+        attention_activation_name: str, reduction: str, activation_name: str, dropout: float,
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool, *,
+        device: str = 'cuda:0', seed: int = 0
     ):
 
         super().__init__(activation_name, dropout, output_n_hidden_layers, output_hidden_layer_size, use_batch_norm,
@@ -15,8 +16,9 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
 
         self.n_layers = n_layers
         self.n_heads = n_heads
-        self.dim_keys = dim_keys
-        self.dim_values = dim_values
+        self.attention_in_features = attention_in_features
+        self.attention_hidden_features = attention_hidden_features
+        self.attention_activation_name = attention_activation_name
         self.reduction = reduction
 
     def _get_model(self, train_data):
@@ -24,9 +26,10 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
         return AttentionMLP(
             n_layers=self.n_layers,
             n_heads=self.n_heads,
-            dim_model=self.num_primitives,
-            dim_keys=self.dim_keys,
-            dim_values=self.dim_values,
+            in_features=self.num_primitives,
+            attention_in_features=self.attention_in_features,
+            attention_activation_name=self.attention_activation_name,
+            attention_hidden_features=self.attention_hidden_features,
             dropout=self.dropout,
             reduction=self.reduction,
             mlp_extra_input_size=n_features,
