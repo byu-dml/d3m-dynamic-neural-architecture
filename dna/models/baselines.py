@@ -137,7 +137,7 @@ class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
-        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs)
+        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder="./tmp")
         self.fitted = False
 
 
