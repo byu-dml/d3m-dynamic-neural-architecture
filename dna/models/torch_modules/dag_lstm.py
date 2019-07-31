@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from . import PyTorchRandomStateContext
-from dna.utils import get_reduction_function
+from . import get_reduction_function
 
 
 class DAGLSTM(nn.Module):

@@ -5,7 +5,7 @@ from torch_transformer import Encoder
 from . import PyTorchRandomStateContext
 from . import F_ACTIVATIONS
 from .submodule import Submodule
-from dna.utils import get_reduction_function
+from . import get_reduction_function
 
 
 class AttentionMLP(nn.Module):
