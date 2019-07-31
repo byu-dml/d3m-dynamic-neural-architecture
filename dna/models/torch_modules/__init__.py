@@ -29,5 +29,4 @@ def get_reduction_function(reduction: str):
     elif reduction == 'mul':
         return torch.mul
     else:
-        raise Exception('No valid reduction was provided\n'
-                        'Got \"' + reduction + '\"')
+        raise ValueError('unknown reduction: {}'.format(reduction))
