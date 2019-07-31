@@ -30,7 +30,7 @@ def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k
     Assumes that the top_k_predicted list is sorted. 
     """
     top_k_predicted = top_k_predicted[:k]
-    assert len(top_k_predicted) <= k, "The number of pipelines given is more than K: {} vs {}".format(len(top_k_predicted), k)
+    assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
     top_actual = actual_data.nlargest(k, columns='test_f1_macro', keep='all')['pipeline_id']
     return len(set(top_actual).intersection(set(top_k_predicted)))
 
@@ -40,7 +40,7 @@ def top_k_regret(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k:
     Assumes that the top_k_predicted list is sorted. 
     """
     top_k_predicted = top_k_predicted[:k]
-    assert len(top_k_predicted) <= k, "The number of pipelines given is more than K: {} vs {}".format(len(top_k_predicted), k)
+    assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
     actual_best_score = actual_data['test_f1_macro'].max()
     min_regret = float('inf')
     for pipeline_id in top_k_predicted:
