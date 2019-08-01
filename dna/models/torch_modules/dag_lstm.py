@@ -11,12 +11,12 @@ class DAGLSTM(nn.Module):
     """
 
     def __init__(
-            self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction: str, *, device: str,
+            self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction_name: str, *, device: str,
             seed: int
     ):
         super().__init__()
 
-        self.reduction = get_reduction_function(reduction)
+        self.reduction = get_reduction_function(reduction_name)
 
         if dropout > 0:
             # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110

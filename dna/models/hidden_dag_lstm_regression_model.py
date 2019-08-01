@@ -6,11 +6,11 @@ class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
     def __init__(
         self, activation_name: str, input_n_hidden_layers: int, input_hidden_layer_size: int, hidden_state_size: int,
         lstm_n_layers: int, dropout: float, output_n_hidden_layers: int, output_hidden_layer_size: int,
-        use_batch_norm: bool, use_skip: bool = False, reduction: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
+        use_batch_norm: bool, use_skip: bool = False, reduction_name: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
             activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,
-            output_hidden_layer_size, use_batch_norm, use_skip, reduction, device=device, seed=seed
+            output_hidden_layer_size, use_batch_norm, use_skip, reduction_name, device=device, seed=seed
         )
 
         self.input_n_hidden_layers = input_n_hidden_layers
@@ -30,7 +30,7 @@ class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
             output_size=1,
             mlp_use_batch_norm=self.use_batch_norm,
             mlp_use_skip=self.use_skip,
-            reduction=self.reduction,
+            reduction_name=self.reduction_name,
             device=self.device,
             seed=self._model_seed,
         )

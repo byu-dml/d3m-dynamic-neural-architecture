@@ -17,7 +17,7 @@ class AttentionMLP(nn.Module):
 
     def __init__(
         self, n_layers: int, n_heads: int, in_features: int, attention_in_features: int, attention_hidden_features,
-        attention_activation_name: str, dropout: float, reduction: str, mlp_extra_input_size: int,
+        attention_activation_name: str, dropout: float, reduction_name: str, mlp_extra_input_size: int,
         mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str, output_size: int,
         mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
     ):
@@ -36,7 +36,7 @@ class AttentionMLP(nn.Module):
         # This would be problematic because attention_in_features must be divisible by n_heads
         self.embedder = Submodule([in_features, attention_in_features], 'relu', False, False, 0, device=device, seed=seed)
 
-        self.reduction = get_reduction_function(reduction)
+        self.reduction = get_reduction_function(reduction_name)
 
         with PyTorchRandomStateContext(seed=seed):
             self.attention = Encoder(

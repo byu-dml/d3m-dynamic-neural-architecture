@@ -6,7 +6,7 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
 
     def __init__(
         self, n_layers: int, n_heads: int, attention_in_features: int, attention_hidden_features: int,
-        attention_activation_name: str, reduction: str, activation_name: str, dropout: float,
+        attention_activation_name: str, reduction_name: str, activation_name: str, dropout: float,
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool, *,
         device: str = 'cuda:0', seed: int = 0
     ):
@@ -21,7 +21,7 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
         self.attention_in_features = attention_in_features
         self.attention_hidden_features = attention_hidden_features
         self.attention_activation_name = attention_activation_name
-        self.reduction = reduction
+        self.reduction_name = reduction_name
 
     def _get_model(self, train_data):
         n_features = len(train_data[0][self.features_key])
@@ -33,7 +33,7 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
             attention_activation_name=self.attention_activation_name,
             attention_hidden_features=self.attention_hidden_features,
             dropout=self.dropout,
-            reduction=self.reduction,
+            reduction_name=self.reduction_name,
             mlp_extra_input_size=n_features,
             mlp_hidden_layer_size=self.output_hidden_layer_size,
             mlp_n_hidden_layers=self.output_n_hidden_layers,

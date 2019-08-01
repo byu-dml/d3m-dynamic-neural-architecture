@@ -10,7 +10,7 @@
     "attention_in_features": 128,
     "attention_hidden_features": 32,
     "attention_activation_name": null,
-    "reduction": "sum",
+    "reduction_name": "sum",
 
     "output_n_hidden_layers": 0,
     "output_hidden_layer_size": null
