@@ -1,0 +1,35 @@
+{
+  "__init__": {
+    "activation_name": "relu",
+    "use_batch_norm": true,
+    "use_skip": false,
+    "dropout": 0.5,
+
+    "n_layers": 6,
+    "n_heads": 4,
+    "attention_in_features": 128,
+    "attention_hidden_features": 32,
+    "attention_activation_name": null,
+    "reduction_name": "sum",
+
+    "output_n_hidden_layers": 0,
+    "output_hidden_layer_size": null
+  },
+  "fit": {
+    "n_epochs": 1,
+    "learning_rate": 0.0001,
+    "batch_size": 7,
+    "drop_last": true,
+    "validation_ratio": 0.1,
+    "patience": 20
+  },
+  "predict_regression": {
+    "batch_size": 2
+  },
+  "predict_rank": {
+    "batch_size": 2
+  },
+  "predict_subset": {
+    "batch_size": 2
+  }
+}

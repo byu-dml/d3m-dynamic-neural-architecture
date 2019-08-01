@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from . import PyTorchRandomStateContext
+from . import get_reduction_function, PyTorchRandomStateContext
 
 
 class DAGLSTM(nn.Module):
@@ -10,18 +10,12 @@ class DAGLSTM(nn.Module):
     """
 
     def __init__(
-            self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction: str, *, device: str,
+            self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction_name: str, *, device: str,
             seed: int
     ):
         super().__init__()
 
-        if reduction == 'mean':
-            self.reduction = torch.mean
-        elif reduction == 'sum':
-            self.reduction = torch.sum
-        else:
-            raise Exception('No valid hidden state reduction was provided to the DAG LSTM\n'
-                            'Got \"' + reduction + '\"')
+        self.reduction = get_reduction_function(reduction_name)
 
         if dropout > 0:
             # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110

@@ -19,3 +19,14 @@ class PyTorchRandomStateContext:
 
     def __exit__(self, *args):
         torch.random.set_rng_state(self._state)
+
+
+def get_reduction_function(reduction: str):
+    if reduction == 'mean':
+        return torch.mean
+    elif reduction == 'sum':
+        return torch.sum
+    elif reduction == 'mul':
+        return torch.mul
+    else:
+        raise ValueError('unknown reduction: {}'.format(reduction))

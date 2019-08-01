@@ -16,7 +16,7 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
     def __init__(
             self, lstm_input_size: int, lstm_hidden_state_size: int, lstm_n_layers: int, dropout: float,
             input_mlp_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
-            output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, reduction: str, *, device: str, seed: int,
+            output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, reduction_name: str, *, device: str, seed: int,
     ):
         super().__init__()
 
@@ -46,7 +46,7 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
         self._input_mlp = nn.Sequential(*input_layers)
 
         self._dag_lstm = DAGLSTM(
-            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction, device=self.device,
+            lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction_name, device=self.device,
             seed=self._lstm_seed
         )
         self.lstm_hidden_state_size = lstm_hidden_state_size
