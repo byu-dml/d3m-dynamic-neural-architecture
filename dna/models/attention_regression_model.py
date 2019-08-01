@@ -10,7 +10,6 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool, *,
         device: str = 'cuda:0', seed: int = 0
     ):
-
         super().__init__(
             activation_name, dropout, output_n_hidden_layers, output_hidden_layer_size, use_batch_norm, use_skip,
             device=device, seed=seed

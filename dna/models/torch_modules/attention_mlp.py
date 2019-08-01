@@ -21,7 +21,6 @@ class AttentionMLP(nn.Module):
         mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str, output_size: int,
         mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
     ):
-
         super().__init__()
 
         if attention_in_features % n_heads != 0:

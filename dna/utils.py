@@ -2,7 +2,7 @@ import typing
 
 import git
 import pandas as pd
-import torch
+
 
 def rank(values: typing.Sequence) -> typing.Sequence:
     return type(values)((pd.Series(values).rank(ascending=False) - 1))
