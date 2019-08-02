@@ -4,6 +4,7 @@
     "use_batch_norm": true,
     "use_skip": false,
     "dropout": 0.5,
+    "use_mask": true,
 
     "n_layers": 6,
     "n_heads": 4,
