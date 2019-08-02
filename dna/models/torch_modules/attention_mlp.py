@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch_transformer import Encoder
+from torch_multi_head_attention import MultiHeadAttention
 
 from . import PyTorchRandomStateContext
 from . import F_ACTIVATIONS
@@ -17,11 +18,13 @@ class AttentionMLP(nn.Module):
 
     def __init__(
         self, n_layers: int, n_heads: int, in_features: int, attention_in_features: int, attention_hidden_features,
-        attention_activation_name: str, dropout: float, reduction_name: str, mlp_extra_input_size: int,
+        attention_activation_name: str, dropout: float, reduction_name: str, use_mask: bool, mlp_extra_input_size: int,
         mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str, output_size: int,
         mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
     ):
         super().__init__()
+
+        self.use_mask = use_mask
 
         if attention_in_features % n_heads != 0:
             raise ValueError(
@@ -55,10 +58,15 @@ class AttentionMLP(nn.Module):
             mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=device, seed=seed+1
         )
 
+        self.device = device
+
     def forward(self, args):
         sequence, features = args
         embedded_sequence = self.embedder(sequence)
-        attended_sequence = self.attention(embedded_sequence)
+        mask = None
+        if self.use_mask:
+            mask = MultiHeadAttention.gen_history_mask(embedded_sequence).to(self.device)
+        attended_sequence = self.attention(embedded_sequence, mask=mask)
 
         seq_len_dim = 1
         encoded_sequence = self.reduction(attended_sequence, dim=seq_len_dim)
