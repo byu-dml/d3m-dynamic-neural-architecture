@@ -5,7 +5,11 @@ class DAGAttentionMLP(AttentionMLP):
     """
     The DAG Attention MLP, like the Attention MLP which it extends, encodes a sequence and passes it through an MLP
     along with some additional concatenated features. But the sequence is treated like a dag, utilizing a dag structure
-    passed into the forward function. The structure is still treated ambiguously, but less so.
+    passed into the forward function. The structures of the dags that this model processes not only define the immediate
+    inputs to a given node, but all the inputs that come before it. This way, attention can be applied to the node
+    itself and all the nodes it depends on. The structure is still ambiguous, however. The ambiguity is each node is
+    defined by a collection including itself and all its dependents. But this collection does not take into account the
+    various paths of dependents leading to that node, beginning at a start node.
     """
 
     def __init__(
