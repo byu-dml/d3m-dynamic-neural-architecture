@@ -59,17 +59,24 @@ class AttentionMLP(nn.Module):
         )
 
         self.device = device
+        self.seq_len_dim = 1
+
+    def _get_encoded_sequence(self, sequence, attention):
+        mask = None
+        if self.use_mask:
+            mask = MultiHeadAttention.gen_history_mask(sequence).to(self.device)
+
+        attended_sequence = attention(sequence, mask=mask)
+        encoded_sequence = self.reduction(attended_sequence, dim=self.seq_len_dim)
+        return encoded_sequence
+
+    def _get_final_output(self, encoded_sequence, features):
+        mlp_input = torch.cat((encoded_sequence, features), dim=1)
+        output = self.mlp(mlp_input)
+        return output.squeeze()
 
     def forward(self, args):
         sequence, features = args
         embedded_sequence = self.embedder(sequence)
-        mask = None
-        if self.use_mask:
-            mask = MultiHeadAttention.gen_history_mask(embedded_sequence).to(self.device)
-        attended_sequence = self.attention(embedded_sequence, mask=mask)
-
-        seq_len_dim = 1
-        encoded_sequence = self.reduction(attended_sequence, dim=seq_len_dim)
-        mlp_input = torch.cat((encoded_sequence, features), dim=1)
-        output = self.mlp(mlp_input)
-        return output.squeeze()
+        encoded_sequence = self._get_encoded_sequence(embedded_sequence, self.attention)
+        return self._get_final_output(encoded_sequence, features)
