@@ -3,18 +3,18 @@
     "activation_name": "relu",
     "use_batch_norm": true,
     "use_skip": false,
-    "dropout": 0.5,
-    "use_mask": true,
+    "dropout": 0.1,
 
-    "n_layers": 6,
+    "use_mask": true,
+    "n_layers": 4,
     "n_heads": 4,
-    "attention_in_features": 128,
+    "attention_in_features": 32,
     "attention_hidden_features": 32,
-    "attention_activation_name": null,
+    "attention_activation_name": "relu",
     "reduction_name": "sum",
 
-    "output_n_hidden_layers": 0,
-    "output_hidden_layer_size": null
+    "output_n_hidden_layers": 1,
+    "output_hidden_layer_size": 16
   },
   "fit": {
     "n_epochs": 1,

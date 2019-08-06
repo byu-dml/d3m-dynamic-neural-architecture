@@ -61,9 +61,9 @@ class AttentionMLP(nn.Module):
         self.device = device
         self.seq_len_dim = 1
 
-    def _get_encoded_sequence(self, sequence, attention):
+    def _get_encoded_sequence(self, sequence, attention, use_mask):
         mask = None
-        if self.use_mask:
+        if use_mask:
             mask = MultiHeadAttention.gen_history_mask(sequence).to(self.device)
 
         attended_sequence = attention(sequence, mask=mask)
@@ -78,5 +78,5 @@ class AttentionMLP(nn.Module):
     def forward(self, args):
         sequence, features = args
         embedded_sequence = self.embedder(sequence)
-        encoded_sequence = self._get_encoded_sequence(embedded_sequence, self.attention)
+        encoded_sequence = self._get_encoded_sequence(embedded_sequence, self.attention, self.use_mask)
         return self._get_final_output(encoded_sequence, features)

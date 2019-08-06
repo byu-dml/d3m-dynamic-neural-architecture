@@ -1,9 +1,9 @@
 from .attention_regression_model import AttentionRegressionModel
-from .torch_modules.dag_attention_mlp import DAGAttentionMLP
+from .torch_modules.explicit_dag_attention_mlp import ExplicitDAGAttentionMLP
 from dna.data import group_json_objects
 
 
-class DAGAttentionRegressionModel(AttentionRegressionModel):
+class ExplicitDAGAttentionRegressionModel(AttentionRegressionModel):
 
     def fit(
             self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
@@ -19,17 +19,20 @@ class DAGAttentionRegressionModel(AttentionRegressionModel):
     @staticmethod
     def _modify_pipeline_structure(structure):
         for i, inputs in enumerate(structure):
-            new_inputs = {i}
+            inputs = sorted(inputs)
+            input_paths = []
             for input_ in inputs:
+                input_path = []
                 if input_ != 'inputs.0':
-                    new_inputs.update(structure[input_])
+                    input_path.append(input_)
+                input_path.append(i)
+                input_paths.append(input_path)
 
-            new_inputs = sorted(new_inputs)
-            structure[i] = new_inputs
+            structure[i] = input_paths
 
     def _get_model(self, train_data):
         n_features = len(train_data[0][self.features_key])
-        return DAGAttentionMLP(
+        return ExplicitDAGAttentionMLP(
             n_layers=self.n_layers,
             n_heads=self.n_heads,
             in_features=self.num_primitives,
