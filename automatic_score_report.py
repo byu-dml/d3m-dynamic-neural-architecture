@@ -15,12 +15,20 @@ for dir_ in dirs:
         results = json.load(f)
     id_ = results['id']
     try:
-        scores = results['scores'][0]
-        train_scores = scores['train_scores']
-        test_scores = scores['test_scores']
-        print('ID:', results['id'])
-        print('MEAN TRAIN SCORES:', train_scores['mean_scores'])
-        print('MEAN TEST SCORES:', test_scores['mean_scores'])
+        print('ID:', id_)
+        problem_scores = results['scores']
+        for scores in problem_scores:
+            problem_name = scores['problem_name']
+            train_scores = scores['train_scores']
+            test_scores = scores['test_scores']
+            train_scores = train_scores['mean_scores'] if problem_name != 'subset' else train_scores
+            test_scores = test_scores['mean_scores'] if problem_name != 'subset' else test_scores
+            print('PROBLEM:', problem_name)
+            print('MEAN TRAIN SCORES:', train_scores)
+            print('MEAN TEST SCORES:', test_scores)
+            print()
     except(KeyError, TypeError):
         print('Results at id: {0} do not have scores'.format(id_))
+        print()
+    print('#######################################################')
     print()
