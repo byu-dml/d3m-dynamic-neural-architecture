@@ -6,8 +6,8 @@ from dna.data import group_json_objects
 class DAGAttentionRegressionModel(AttentionRegressionModel):
 
     def fit(
-            self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
-            output_dir=None, verbose=False
+        self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience, *,
+        output_dir=None, verbose=False
     ):
         self._get_pipeline_structures(train_data)
 
