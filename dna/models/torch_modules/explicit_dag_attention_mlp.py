@@ -6,10 +6,14 @@ from .attention_mlp import PyTorchRandomStateContext
 from .attention_mlp import F_ACTIVATIONS
 
 
-
 class ExplicitDAGAttentionMLP(AttentionMLP):
-    # TODO: Fill in documentation
     """
+    The explicit DAG attention MLP treats the dag unambiguously. The DAG structure is reformed in a one to one mapping.
+    The paths to a given node are attended. Meaning the input to a node and the node itself. They are then reduced to
+    one vector called an input encoding. This is repeated for all inputs going into a node. Then all the input encodings
+    are attended to and reduced to create a node encoding. The node in the dag is then replaced with this encoding so
+    it can be attended to in the same way when it's an input to a future node. After all the nodes have been encoded
+    using attention, a heuristic is used to reduce the entire dag into an encoded vector to be passed into an MLP.
     """
 
     def __init__(
@@ -52,6 +56,5 @@ class ExplicitDAGAttentionMLP(AttentionMLP):
             encoded_node = self._get_encoded_sequence(encoded_inputs, self.paths_attention, False)
             dag[:, i] = encoded_node
 
-        # encoded_dag = self.reduction(dag, dim=self.seq_len_dim)
         encoded_dag = dag[:, -1]
         return self._get_final_output(encoded_dag, features)
