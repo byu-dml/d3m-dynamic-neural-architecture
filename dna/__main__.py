@@ -336,52 +336,77 @@ def configure_tuning_parser(parser):
     parser.add_argument(
         '--metafeature-subset', type=str, default='all', choices=['all', 'landmarkers', 'non-landmarkers']
     )
+    parser.add_argument(
+        '--verbose', default=False, action='store_true'
+    )
 
-def tuning_handler(arguments: argparse.Namespace, data_resolver=get_data):
-    with open(arguments.model_config_path, "r") as file:
+def tuning_handler(arguments_global: argparse.Namespace, data_resolver=get_data):
+    # gather config files
+    with open(arguments_global.model_config_path, "r") as file:
         model_config = json.load(file)
-    with open(arguments.tuning_config_path, "r") as file:
+    with open(arguments_global.tuning_config_path, "r") as file:
         tuning_config = json.load(file)
 
+    # define function to evaluate fitness
     def _evaluate_model(model_config):
-        print("Calling evaluate")
-        if model_config["__init__"]["n_hidden_layers"] == 0 or model_config["__init__"]["hidden_layer_size"] == 0 or \
-            model_config["__init__"]["learning_rate"] == 0:
-            raise Exception("Should not be zero")
+        try:
+            parser = argparse.ArgumentParser()
+            configure_evaluate_parser(parser)
+            argv_list = [
+                '--model', str(arguments_global.model),
+                '--model-config-path', "DO_NOT_USE",
+                '--model-seed', str(arguments_global.model_seed),
+                '--problem', 'regression', "rank", "subset",
+                '--k', str(arguments_global.k),
+                '--train-path', str(arguments_global.train_path),
+                '--test-size', str(arguments_global.test_size),
+                '--split-seed', str(arguments_global.split_seed),
+                '--metafeature-subset', str(arguments_global.metafeature_subset),
+            ]
+            arguments = parser.parse_args(argv_list)
+            init_output_dir = arguments_global.output_dir
+            model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
-        parser = argparse.ArgumentParser()
-        configure_evaluate_parser(parser)
-        argv = [
-            '--model', arguments.model_name,
-            '--model-config-path', "DO_NOT_USE",
-            '--model-seed', arguments.model_seed,
-            '--problem', 'regression', "rank", "subset",
-            '--k', arguments.k,
-            '--train-path', arguments.train_path,
-            '--test-size', arguments.test_size,
-            '--split-seed', arguments.split_seed,
-            '--metafeature-subset', arguments.metafeature_subset,
-        ]
-        arguments = parser.parse_args(argv)
-        model = get_model(arguments.model, model_config, seed=arguments.model_seed)
+            train_data, test_data = get_train_and_test_data(
+                arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
+                arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache
+            )
 
-        train_data, test_data = get_train_and_test_data(
-            arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
-            arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache
-        )
-        results = []
-        for problem_name in getattr(arguments, 'problem'):
-            problem = get_problem(problem_name, **vars(arguments))
-            results.append(evaluate(
-                problem, model, model_config, train_data, test_data
-            ))
-        write_results(results)
+            run_uuid = str(uuid.uuid4())
+            output_dir = os.path.join(init_output_dir, run_uuid)
+            result_scores = []
+            for problem_name in getattr(arguments, 'problem'):
+                problem = get_problem(problem_name, **vars(arguments))
+                evaluate_result = evaluate(
+                    problem, model, model_config, train_data, test_data
+                )
+                result_scores.append({
+                    'problem_name': problem_name,
+                    'model_name':  arguments_global.model,
+                    **evaluate_result.__dict__,
+                })
+            run_id = arguments_global.model + run_uuid
+            record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
-        return (results[0].__dict__["test_scores"]["total_scores"]["total_rmse"], )
+            if arguments.verbose:
+                results = evaluate_result.__dict__
+                del results['train_predictions']
+                del results['test_predictions']
+                del results['ootsp_test_predictions']
+                print(json.dumps(results, indent=4), "\n")
+
+            if output_dir is not None:
+                record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
+
+            return (result_scores[0]["test_scores"]["total_scores"]["total_rmse"], )
+
+        except Exception as e:
+            print("Function failed to run due to: {}".format(e))
+            raise(e)
 
     tune = TuningDeap(_evaluate_model, tuning_config, model_config)
     best_config, best_score = tune.run_evolutionary()
-    print("The best config found was {} with a score of {}".format(" ".join([item for item in best_config]), best_score))
+    print("The best config found was {} with a score of {}".format(" ".join([str(item) for item in best_config]), best_score))
 
 
 def configure_rescore_parser(parser):

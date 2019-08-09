@@ -12,7 +12,7 @@ if $use_complete_data; then
     validation_split_seed=3101978347
     k=25
     metafeature_subset=all
-    results_dir=./results
+    results_dir=./tuning_results
 
 else
     # small has 11 datasets
@@ -24,7 +24,7 @@ else
     validation_split_seed=5460650386
     k=2
     metafeature_subset=all
-    results_dir=./dev_results
+    results_dir=./tuning_results
 fi
 
 python3 -m dna split-data \
@@ -43,4 +43,5 @@ python3 -m dna tune \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
     --model-seed $validation_split_seed \
-    --output-dir $results_dir 
+    --output-dir $results_dir \
+    --verbose

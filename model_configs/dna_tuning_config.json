@@ -1,0 +1,31 @@
+{
+    "population_size": 2,
+    "n_generations": 10,
+    "output_path": "./tuning_results",
+    "attributes": {
+        "hidden_layer_size": {
+            "int": [1, 512, 1]
+        },
+        "n_hidden_layers": {
+            "int": [1, 10, 1]
+        },
+        "use_batch_norm": {
+            "bool": []
+        },
+        "use_skip": {
+            "bool": []
+        },
+        "dropout": {
+            "float": [0, 1, 0.1]
+        },
+        "drop_last":  {
+            "bool": []
+        },
+        "learning_rate": {
+            "float": [0.0001, 0.001, 0.0001]
+        },
+        "patience": {
+            "int": [0, 10, 1]
+        }
+    }
+}
