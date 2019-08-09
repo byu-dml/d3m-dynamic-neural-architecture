@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def load_results(results_dir_: str):
-    results_path = os.path.join(results_dir, 'run.json')
+    results_path = os.path.join(results_dir_, 'run.json')
     with open(results_path) as f:
         results_ = json.load(f)
     return results_
@@ -14,7 +14,7 @@ def load_results(results_dir_: str):
 
 def append_score(score_list: list, path_idx_list: list, score: float, idx: int):
     score_list.append(score)
-    path_idx_list.append(path_idx)
+    path_idx_list.append(idx)
 
 
 def print_best_score(score_list: list, path_idx_list: list, best_function, score_name: str, paths_: list):
@@ -64,9 +64,9 @@ else:
     results_dir = args.results_dir
     dirs = os.listdir(results_dir)
 
-    for dir_ in dirs:
-        results_dir = os.path.join(results_dir, dir_)
-        results = load_results(results_dir)
+    for uuid_dir in dirs:
+        results_uuid_dir = os.path.join(results_dir, uuid_dir)
+        results = load_results(results_uuid_dir)
         id_ = results['id']
         try:
             print('ID:', id_)
@@ -84,5 +84,5 @@ else:
         except(KeyError, TypeError):
             print('Results at id: {0} do not have scores'.format(id_))
             print()
-        print('#######################################################')
+        print('#######################################################################################################')
         print()
