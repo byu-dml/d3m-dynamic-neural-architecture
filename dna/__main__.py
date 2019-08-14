@@ -353,7 +353,7 @@ def check_scores(scores: dict, rescores: dict, score_type: str):
         v2 = rescores[k]
         if type(v1) == dict:
             check_scores(v1, v2, score_type)
-        elif not np.isclose(v1, v2):
+        elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
             raise ValueError('{} {} score value {} does not equal rescore value {}'.format(score_type, k, v1, v2))
 
 
