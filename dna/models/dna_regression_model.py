@@ -8,9 +8,9 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
-        use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
+        loss_function_name, use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
-        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name)
 
         self.n_hidden_layers = n_hidden_layers
         self.hidden_layer_size = hidden_layer_size
@@ -33,10 +33,6 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
             self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout,
             device=self.device, seed=self._model_seed
         )
-
-    def _get_loss_function(self):
-        objective = torch.nn.MSELoss(reduction='mean')
-        return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)

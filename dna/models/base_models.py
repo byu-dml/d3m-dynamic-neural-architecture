@@ -41,7 +41,7 @@ class SubsetModelBase(ModelBase):
 
 class PyTorchModelBase:
 
-    def __init__(self, *, y_dtype, device, seed):
+    def __init__(self, *, y_dtype, device, seed, loss_function_name: str, loss_function_params: dict):
         """
         Parameters
         ----------
@@ -52,6 +52,8 @@ class PyTorchModelBase:
         self.device = device
         self.seed = seed
         self._validation_split_seed = seed + 1
+        self._loss_function_name = loss_function_name
+        self._loss_function_params = loss_function_params
 
         self._model = None
 
@@ -136,7 +138,15 @@ class PyTorchModelBase:
         raise NotImplementedError()
 
     def _get_loss_function(self):
-        raise NotImplementedError()
+        if self._loss_function_name == 'rmse':
+            objective = torch.nn.MSELoss(reduction='mean')
+            return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
+        elif self._loss_function_name =='mse':
+            return torch.nn.MSELoss(reduction='mean')
+        elif self._loss_function_name == 'l1':
+            return torch.nn.L1Loss(reduction='mean')
+        else:
+            raise ValueError('No valid loss function name provided. Got {}'.format(self._loss_function_name))
 
     def _get_optimizer(self, learning_rate):
         raise NotImplementedError()
@@ -225,9 +235,12 @@ class PyTorchModelBase:
 
 class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
 
-    def __init__(self, y_dtype, device, seed):
+    def __init__(self, y_dtype, device, seed, loss_function_name=None, loss_function_params=None):
         # different arguments means different function calls
-        PyTorchModelBase.__init__(self, y_dtype=torch.float32, device=device, seed=seed)
+        PyTorchModelBase.__init__(
+            self, y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name,
+            loss_function_params=loss_function_params
+        )
         RegressionModelBase.__init__(self, seed=seed)
 
     def predict_regression(self, data, *, batch_size, verbose):
@@ -361,10 +374,10 @@ class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
 
     def __init__(
         self, activation_name, dropout, output_n_hidden_layers, output_hidden_layer_size, use_batch_norm,
-        use_skip, *, device: str = 'cuda:0', seed: int = 0
+        use_skip, loss_function_name: str, *, device: str = 'cuda:0', seed: int = 0
     ):
 
-        super().__init__(y_dtype=torch.float32, seed=seed, device=device)
+        super().__init__(y_dtype=torch.float32, seed=seed, device=device, loss_function_name=loss_function_name)
 
         self.activation_name = activation_name
         self.dropout = dropout
@@ -422,10 +435,6 @@ class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
             primitive_name_to_enc[primitive_name] = primitive_encoding
 
         return primitive_name_to_enc
-
-    def _get_loss_function(self):
-        objective = torch.nn.MSELoss(reduction="mean")
-        return lambda y_hat, y: torch.sqrt(objective(y_hat, y))
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)

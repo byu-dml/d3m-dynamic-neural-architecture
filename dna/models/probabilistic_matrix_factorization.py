@@ -24,12 +24,12 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         a regularization term used when probabilistic is True
     """
 
-    def __init__(self, k: int, probabilitistic: bool, lam_u: float, lam_v: float, *, device: str = 'cuda:0', seed=0):
+    def __init__(self, k: int, loss_function_params, *,  device: str = 'cuda:0', seed=0):
         super().__init__(y_dtype=torch.float32, device=device, seed=seed)
         self.k = k
-        self.probabilitistic = probabilitistic
-        self.lam_u = lam_u
-        self.lam_v = lam_v
+        self.probabilitistic = loss_function_params['probabilitistic']
+        self.lam_u = loss_function_params['lam_u']
+        self.lam_v = loss_function_params['lam_v']
 
         self.mse_loss = torch.nn.MSELoss(reduction='mean')
 

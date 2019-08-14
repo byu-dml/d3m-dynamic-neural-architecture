@@ -4,6 +4,7 @@
     "use_batch_norm": true,
     "use_skip": false,
     "dropout": 0.5,
+    "loss_function_name": "rmse",
     "use_mask": true,
 
     "n_layers": 6,
