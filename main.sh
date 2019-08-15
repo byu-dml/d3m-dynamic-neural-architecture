@@ -192,6 +192,19 @@ python3 -m dna evaluate \
 
 
 python3 -m dna evaluate \
+    --model dag_attention_regression \
+    --model-config-path ./model_configs/dag_attention_regression_config.json \
+    --problem regression rank subset \
+    --k $k \
+    --train-path $train_path \
+    --test-size $validation_size \
+    --split-seed $validation_split_seed \
+    --output-dir $results_dir \
+    --verbose \
+    $use_ootsp
+
+
+python3 -m dna evaluate \
     --model probabilistic_matrix_factorization \
     --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
     --problem regression rank subset \
