@@ -1,31 +1,43 @@
 {
-    "population_size": 2,
-    "n_generations": 10,
-    "output_path": "./tuning_results",
+    "population_size": 1,
+    "n_generations": 5,
+    "output_path": "./tuning_results_test",
     "attributes": {
         "hidden_layer_size": {
-            "int": [1, 512, 1]
+            "type": "int",
+            "min": 1,
+            "max": 512,
+            "step": 1
         },
         "n_hidden_layers": {
-            "int": [1, 10, 1]
+            "type": "int",
+            "min": 1,
+            "max": 10,
+            "step": 1
         },
         "use_batch_norm": {
-            "bool": []
+            "type": "bool"
         },
         "use_skip": {
-            "bool": []
+            "type": "bool" 
         },
         "dropout": {
-            "float": [0, 1, 0.1]
-        },
-        "drop_last":  {
-            "bool": []
+            "type": "float",
+            "min": 0,
+            "max": 1,
+            "step": 0.1
         },
         "learning_rate": {
-            "float": [0.0001, 0.001, 0.0001]
+            "type": "float",
+            "min": 0.0001,
+            "max": 0.001,
+            "step": 0.0001
         },
         "patience": {
-            "int": [0, 10, 1]
+            "type": "int",
+            "min": 0,
+            "max": 10,
+            "step": 1
         }
     }
 }

@@ -294,51 +294,10 @@ def evaluate_handler(
 
 def configure_tuning_parser(parser):
     parser.add_argument(
-        '--model', type=str, action='store', required=True,
-        help='the model name to tune'
-    )
-    parser.add_argument(
-        '--model-config-path', type=str, action='store', required=True,
-        help='the directory to read in the original model config'
-    )
-    parser.add_argument(
         '--tuning-config-path', type=str, action='store', required=True,
         help='the directory to read in the tuning config'
     )
-    parser.add_argument(
-        '--train-path', type=str, action='store', required=True,
-        help='path to read the train data'
-    )
-    parser.add_argument(
-        '--test-path', type=str, action='store', default=None,
-        help='path to read the test data; if not provided, train data will be split'
-    )
-    parser.add_argument(
-        '--test-size', type=int, action='store', default=1,
-        help='the number of datasets in the test split'
-    )
-    parser.add_argument(
-        '--split-seed', type=int, action='store', default=0,
-        help='seed used to split the data into train and test sets'
-    )
-    parser.add_argument(
-        '--k', type=int, action='store', default=10,
-        help='the number of pipelines to rank'
-    )
-    parser.add_argument(
-        '--model-seed', type=int, default=1,
-        help='seed used to control the random state of the model'
-    )
-    parser.add_argument(
-        '--output-dir', type=str, default=None,
-        help='directory path to write outputs for this model run'
-    )
-    parser.add_argument(
-        '--metafeature-subset', type=str, default='all', choices=['all', 'landmarkers', 'non-landmarkers']
-    )
-    parser.add_argument(
-        '--verbose', default=False, action='store_true'
-    )
+    configure_evaluate_parser(parser)
 
 def tuning_handler(arguments_global: argparse.Namespace, data_resolver=get_data):
     # gather config files

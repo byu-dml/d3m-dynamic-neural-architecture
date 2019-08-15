@@ -37,6 +37,7 @@ python3 -m dna tune \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
     --tuning-config-path ./model_configs/dna_tuning_config.json \
+    --problem regression rank subset \
     --train-path $train_path \
     --k $k \
     --metafeature-subset $metafeature_subset \
