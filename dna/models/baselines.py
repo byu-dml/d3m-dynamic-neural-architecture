@@ -2,6 +2,7 @@ import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
 from sklearn import linear_model
+import os
 
 from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase
 from dna import utils
@@ -137,7 +138,11 @@ class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
-        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder='./tmp')
+
+        tmp_dir = './tmp'
+        if os.path.isdir(tmp_dir):
+            os.system('rm -r {}'.format(tmp_dir))
+        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder=tmp_dir)
         self.fitted = False
 
 
