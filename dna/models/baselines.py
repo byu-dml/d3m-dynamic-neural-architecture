@@ -2,6 +2,7 @@ import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
 from sklearn import linear_model
+from sklearn.ensemble import RandomForestClassifier
 
 from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase
 from dna import utils
@@ -130,6 +131,13 @@ class LinearRegressionBaseline(SklearnBase):
     def __init__(self, seed=0):
         super().__init__(seed=seed)
         self.regressor = linear_model.LinearRegression()
+        self.fitted = False
+
+
+class RandomForestBaseline(SklearnBase):
+    def __init__(self, seed=0):
+        super().__init__(seed=seed)
+        self.regressor = RandomForestClassifier(random_state=seed)
         self.fitted = False
 
 
