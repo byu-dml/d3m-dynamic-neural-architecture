@@ -10,8 +10,8 @@ class DNAModule(nn.Module):
 
     def __init__(
             self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
-            output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
-            *, device: str = 'cuda:0', seed: int = 0
+            output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0, 
+            aggregate_function: str = "max", *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__()
         self.submodule_input_sizes = submodule_input_sizes
@@ -21,7 +21,7 @@ class DNAModule(nn.Module):
         self.output_layer_size = output_layer_size
         self.activation_name = activation_name
         self._activation = F_ACTIVATIONS[activation_name]
-        self.aggregate_func = "max"
+        self.aggregate_func = aggregate_function
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
         self.dropout = dropout
@@ -62,19 +62,29 @@ class DNAModule(nn.Module):
         pipeline_id, pipeline, x = args
         outputs = {'inputs.0': self._input_submodule(x)}
         for i, step in enumerate(pipeline['steps']):
-            import pdb; pdb.set_trace()
-            inputs = self.aggregate_function(tuple(outputs[j] for j in step['inputs']))
+            inputs = self.aggregate_function([outputs[j] for j in step['inputs']])
             submodule = self._dynamic_submodules[step['name']]
             h = self._activation(submodule(inputs))
             outputs[i] = h
         return torch.squeeze(self._output_submodule(h))
 
     def aggregate_function(self, inputs: tuple):
-        if self.aggregate_func == "concat":
-            return torch.cat(inputs, dim=1)
-        elif self.aggregate_func == "max":
-            return torch.max(inputs)
-        elif self.aggregate_func == "mean":
-            return torch.mean(inputs, dim=1)
+        if len(inputs) > 1:
+            # more than one tensor to aggregate
+            complete_tensor = torch.stack(inputs)
+            if self.aggregate_func == "concat":
+                return torch.cat(tuple((inputs)), dim=1)
+            elif self.aggregate_func == "max":
+                def op(inputs): 
+                    return torch.max(inputs, dim=0).values()
+            elif self.aggregate_func == "mean":
+                def op(inputs): return torch.mean(inputs, dim=0)
+            elif self.aggregate_func == "sum":
+                def op(inputs): return torch.sum(inputs, dim=0)
+            else:
+                raise ValueError("Did not recognize the aggregate function: {}".format(self.aggregate_func))
+
+            return op(complete_tensor)
         else:
-            raise ValueError("Did not recognize the aggregate function: {}".format(self.aggregate_func))
+            # only one tensor - no need for an aggregate
+            return inputs[0]
