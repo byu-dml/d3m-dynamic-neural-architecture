@@ -21,6 +21,7 @@ class DNAModule(nn.Module):
         self.output_layer_size = output_layer_size
         self.activation_name = activation_name
         self._activation = F_ACTIVATIONS[activation_name]
+        self.aggregate_func = "max"
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
         self.dropout = dropout
@@ -61,8 +62,19 @@ class DNAModule(nn.Module):
         pipeline_id, pipeline, x = args
         outputs = {'inputs.0': self._input_submodule(x)}
         for i, step in enumerate(pipeline['steps']):
-            inputs = torch.cat(tuple(outputs[j] for j in step['inputs']), dim=1)
+            import pdb; pdb.set_trace()
+            inputs = self.aggregate_function(tuple(outputs[j] for j in step['inputs']))
             submodule = self._dynamic_submodules[step['name']]
             h = self._activation(submodule(inputs))
             outputs[i] = h
         return torch.squeeze(self._output_submodule(h))
+
+    def aggregate_function(self, inputs: tuple):
+        if self.aggregate_func == "concat":
+            return torch.cat(inputs, dim=1)
+        elif self.aggregate_func == "max":
+            return torch.max(inputs)
+        elif self.aggregate_func == "mean":
+            return torch.mean(inputs, dim=1)
+        else:
+            raise ValueError("Did not recognize the aggregate function: {}".format(self.aggregate_func))
