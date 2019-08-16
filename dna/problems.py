@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import group_json_objects
-from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation, ndcg_score, average_precision
 from dna import utils
 
 
@@ -257,6 +257,8 @@ class RankProblem(PredictByGroupProblemBase):
         targets_by_group = self._group_data(targets)
         spearman_coefs = []
         spearman_ps = []
+        ndcg_list = []
+        ap_list = []
         per_dataset_scores = {}
 
         for group, group_predictions in predictions_by_group.items():
@@ -268,16 +270,22 @@ class RankProblem(PredictByGroupProblemBase):
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
             correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
+            ndcg_value = ndcg_score(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
+            ap_value = average_precision(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
 
             per_dataset_scores[group] = {
                 'spearman_correlation': {
                         'correlation_coefficient': correlation,
                         'p_value': p_value
-                    }
+                    },
+                'ndcg_score': ndcg_value,
+                'average_precision_score': ap_value
             }
 
             spearman_coefs.append(correlation)
             spearman_ps.append(p_value)
+            ndcg_list.append(ndcg_value)
+            ap_list.append(ap_value)
 
         mean_scores = {
             'spearman_correlation': {
@@ -285,7 +293,9 @@ class RankProblem(PredictByGroupProblemBase):
                 'std_dev': np.std(spearman_coefs, ddof=1),
                 'mean_p_value': np.mean(spearman_ps),
                 'std_dev_p_value': np.std(spearman_ps, ddof=1),
-            }
+            },
+            'ndcg_score': np.mean(ndcg_list),
+            'mean_average_precision_score': np.mean(ap_list)
         }
 
         return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}

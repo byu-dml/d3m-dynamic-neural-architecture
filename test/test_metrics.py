@@ -25,10 +25,19 @@ class MetricsTestCase(unittest.TestCase):
         :param actual_data: a list of the real rankings
         :param ranked_data: a list of the ranked predictions
         """
-        actual_data = pd.DataFrame({'test_f1_macro': actual_data})
-        ranked_data = pd.DataFrame({'rank': ranked_data})
+        actual_data, ranked_data = self.format_for_rank(actual_data, ranked_data)
         metric = metrics.spearman_correlation(ranked_data, actual_data)
         return metric
+
+    def format_and_get_ncdg(self, actual_data, ranked_data):
+        actual_data, ranked_data = self.format_for_rank(actual_data, ranked_data)
+        metric = metrics.ndcg(ranked_data, actual_data)
+        return metric
+
+    def format_for_rank(self, actual_data, ranked_data):
+        actual_data = pd.DataFrame({'test_f1_macro': actual_data})
+        ranked_data = pd.DataFrame({'rank': ranked_data})
+        return actual_data, ranked_data
 
     def test_rmse(self):
         values_pred = [.5]
@@ -118,6 +127,32 @@ class MetricsTestCase(unittest.TestCase):
             metric, true_metric,
             err_msg='failed to get spearman from tie example, was {}, shouldve been {}'.format(metric, true_metric)
         )
+
+    def test_ndcg(self):
+        """
+        Examples from Sklearns old metrics
+        """
+        true_metric = 1.0
+        ground_truth = [1, 0, 2]
+        predictions = [[0.15, 0.55, 0.2], [0.7, 0.2, 0.1], [0.06, 0.04, 0.9]]
+        metric = metrics.ndcg_score(ground_truth, predictions, k=2)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct ndcg for perfect, was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = float(2) / 3
+        ground_truth = [1, 0, 2]
+        predictions = [[0.9, 0.5, 0.8], [0.7, 0.2, 0.1], [0.06, 0.04, 0.9]]
+        metric = metrics.ndcg_score(ground_truth, predictions, k=2)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct ndcg for perfect, was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+    
+    
 
     def test_pearson_correlation(self):
         """

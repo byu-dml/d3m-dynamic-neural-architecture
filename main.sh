@@ -34,98 +34,98 @@ python3 -m dna split-data \
     --split-seed $test_split_seed
 
 
-python3 -m dna evaluate \
-    --model autosklearn \
-    --problem regression rank subset \
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp \
-    --skip-test-ootsp
+# python3 -m dna evaluate \
+#     --model autosklearn \
+#     --problem regression rank subset \
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp \
+#     --skip-test-ootsp
 
 
-python3 -m dna evaluate \
-    --model mean_regression \
-    --problem regression \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model mean_regression \
+#     --problem regression \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model median_regression \
-    --problem regression \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model median_regression \
+#     --problem regression \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model per_primitive_regression \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model per_primitive_regression \
+#     --problem regression rank subset \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model linear_regression \
-    --problem regression rank subset\
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model linear_regression \
+#     --problem regression rank subset\
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model meta_autosklearn \
-    --model-config-path ./model_configs/meta_autosklearn_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model meta_autosklearn \
+#     --model-config-path ./model_configs/meta_autosklearn_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model random \
-    --problem rank subset \
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model random \
+#     --problem rank subset \
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
 python3 -m dna evaluate \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
-    --problem regression rank subset \
+    --problem rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -136,83 +136,83 @@ python3 -m dna evaluate \
     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model lstm \
-    --model-config-path ./model_configs/lstm_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model lstm \
+#     --model-config-path ./model_configs/lstm_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model daglstm_regression \
-    --model-config-path ./model_configs/daglstm_regression_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --metafeature-subset $metafeature_subset \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model daglstm_regression \
+#     --model-config-path ./model_configs/daglstm_regression_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --metafeature-subset $metafeature_subset \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model hidden_daglstm_regression \
-    --model-config-path ./model_configs/hidden_daglstm_regression_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model hidden_daglstm_regression \
+#     --model-config-path ./model_configs/hidden_daglstm_regression_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model attention_regression \
-    --model-config-path ./model_configs/attention_regression_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model attention_regression \
+#     --model-config-path ./model_configs/attention_regression_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model dag_attention_regression \
-    --model-config-path ./model_configs/dag_attention_regression_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp
+# python3 -m dna evaluate \
+#     --model dag_attention_regression \
+#     --model-config-path ./model_configs/dag_attention_regression_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model probabilistic_matrix_factorization \
-    --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --skip-test \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp \
-    --skip-test-ootsp
+# python3 -m dna evaluate \
+#     --model probabilistic_matrix_factorization \
+#     --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
+#     --problem regression rank subset \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --skip-test \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp \
+#     --skip-test-ootsp
