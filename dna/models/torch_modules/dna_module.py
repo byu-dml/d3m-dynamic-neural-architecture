@@ -76,7 +76,7 @@ class DNAModule(nn.Module):
                 return torch.cat(tuple((inputs)), dim=1)
             elif self.aggregate_func == "max":
                 def op(inputs): 
-                    return torch.max(inputs, dim=0).values()
+                    return torch.max(inputs, dim=0).values
             elif self.aggregate_func == "mean":
                 def op(inputs): return torch.mean(inputs, dim=0)
             elif self.aggregate_func == "sum":
