@@ -1,3 +1,6 @@
+import os
+import shutil
+
 import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
@@ -137,7 +140,12 @@ class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
-        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder='./tmp')
+
+        tmp_dir = './tmp'
+        if os.path.isdir(tmp_dir):
+            shutil.rmtree(tmp_dir)
+
+        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder=tmp_dir)
         self.fitted = False
 
 
