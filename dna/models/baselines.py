@@ -1,8 +1,10 @@
+import os
+import shutil
+
 import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
 from sklearn import linear_model
-import os
 
 from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase
 from dna import utils
@@ -141,7 +143,8 @@ class MetaAutoSklearn(SklearnBase):
 
         tmp_dir = './tmp'
         if os.path.isdir(tmp_dir):
-            os.system('rm -r {}'.format(tmp_dir))
+            shutil.rmtree(tmp_dir)
+
         self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder=tmp_dir)
         self.fitted = False
 
