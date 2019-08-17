@@ -107,7 +107,6 @@ python3 -m dna evaluate \
     --output-dir $results_dir \
     --verbose \
     $use_ootsp
-rm -r ./tmp
 
 
 python3 -m dna evaluate \
