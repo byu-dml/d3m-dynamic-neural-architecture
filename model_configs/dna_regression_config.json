@@ -6,7 +6,7 @@
         "use_batch_norm": true,
         "use_skip": true,
         "dropout": 0.5,
-        "aggregate_function": "max"
+        "reduction_name": "max"
     },
     "fit": {
         "batch_size": 7,
