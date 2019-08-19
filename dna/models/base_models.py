@@ -8,7 +8,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from dna import utils
-from dna.data import split_data_by_group, RNNDataLoader
+from dna.data import split_data_by_group, RNNDataLoader, group_json_objects
 
 
 class ModelBase:
@@ -422,6 +422,22 @@ class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
             primitive_name_to_enc[primitive_name] = primitive_encoding
 
         return primitive_name_to_enc
+
+    def _get_pipeline_structures(self, train_data):
+        # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
+        self.pipeline_structures = {}
+        grouped_by_structure = group_json_objects(train_data, self.batch_group_key)
+        for (group, group_indices) in grouped_by_structure.items():
+            index = group_indices[0]
+            item = train_data[index]
+            pipeline = item[self.pipeline_key][self.steps_key]
+            group_structure = [primitive[self.prim_inputs_key] for primitive in pipeline]
+            self._modify_pipeline_structure(group_structure)
+            self.pipeline_structures[group] = group_structure
+
+    @staticmethod
+    def _modify_pipeline_structure(structure):
+        pass
 
     def _get_loss_function(self):
         objective = torch.nn.MSELoss(reduction="mean")
