@@ -48,9 +48,6 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def _get_loss_function(self):
         return self.PMFLoss
 
-    def _get_optimizer(self, learning_rate):
-        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
-
     def _get_data_loader(self, data, batch_size=0, drop_last=False, shuffle=True):
         with PyTorchRandomStateContext(self.seed):
             data_loader = PMFDataLoader(
