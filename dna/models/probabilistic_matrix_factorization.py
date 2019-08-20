@@ -7,6 +7,30 @@ from .torch_modules.pmf import PMF
 from dna.data import PMFDataLoader
 
 
+class PMFLoss(torch.nn.Module):
+    def __init__(self, loss_function_params: dict, model):
+        super().__init__()
+
+        self.probabilitistic = loss_function_params['probabilitistic']
+        self.lam_u = loss_function_params['lam_u']
+        self.lam_v = loss_function_params['lam_v']
+        self.mse_loss = torch.nn.MSELoss(reduction='mean')
+        self.dataset_factors_weight = model.dataset_factors.weight
+        self.pipeline_factors_weight = model.pipeline_factors.weight
+
+    def forward(self, y_hat, y):
+        # TODO: can we optimize the loss function by not initializing every call?
+        rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
+        # PMF loss includes two extra regularlization
+        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated)
+        if self.probabilitistic:
+            u_regularization = self.lam_u * torch.sum(self.dataset_factors_weight.norm(dim=1))
+            v_regularization = self.lam_v * torch.sum(self.pipeline_factors_weight.norm(dim=1))
+            return rmse_loss + u_regularization + v_regularization
+
+        return rmse_loss
+
+
 class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     """
     Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
@@ -27,26 +51,10 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def __init__(self, k: int, loss_function_params, *,  device: str = 'cuda:0', seed=0):
         super().__init__(y_dtype=torch.float32, device=device, seed=seed)
         self.k = k
-        self.probabilitistic = loss_function_params['probabilitistic']
-        self.lam_u = loss_function_params['lam_u']
-        self.lam_v = loss_function_params['lam_v']
-
-        self.mse_loss = torch.nn.MSELoss(reduction='mean')
-
-    # TODO: can we optimize the loss function by not initializing every call?
-    def PMFLoss(self, y_hat, y):
-        rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
-        # PMF loss includes two extra regularlization
-        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated)
-        if self.probabilitistic:
-            u_regularization = self.lam_u * torch.sum(self.model.dataset_factors.weight.norm(dim=1))
-            v_regularization = self.lam_v * torch.sum(self.model.pipeline_factors.weight.norm(dim=1))
-            return rmse_loss + u_regularization + v_regularization
-
-        return rmse_loss
+        self.loss_function_params = loss_function_params
 
     def _get_loss_function(self):
-        return self.PMFLoss
+        return PMFLoss(self.loss_function_params, self.model)
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
