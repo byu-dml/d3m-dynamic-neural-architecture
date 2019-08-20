@@ -41,11 +41,9 @@ def configure_split_parser(parser):
     )
 
 
-def split_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data
-):
+def split_handler(arguments: argparse.Namespace):
     data_path = getattr(arguments, 'data_path')
-    data = data_resolver(data_path)
+    data = get_data(data_path)
     train_data, test_data = split_data_by_group(data, 'dataset_id', arguments.test_size, arguments.split_seed)
 
     train_path = getattr(arguments, 'train_path')
@@ -218,18 +216,8 @@ def evaluate(
     )
 
 
-def evaluate_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data,
-    model_resolver=get_model, problem_resolver=get_problem,
-):
+def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
     run_id = str(uuid.uuid4())
-
-    model_config_path = getattr(arguments, 'model_config_path', None)
-    if model_config_path is None:
-        model_config = {}
-    else:
-        with open(model_config_path) as f:
-            model_config = json.load(f)
 
     output_dir = arguments.output_dir
     model_output_dir = None
@@ -245,7 +233,7 @@ def evaluate_handler(
 
     train_data, test_data = get_train_and_test_data(
         arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
-        arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache, data_resolver
+        arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache
     )
     if arguments.skip_test:
         test_data = None
@@ -258,13 +246,13 @@ def evaluate_handler(
             ootsp_test_data = None
 
     model_name = getattr(arguments, 'model')
-    model = model_resolver(model_name, model_config, seed=getattr(arguments, 'model_seed'))
+    model = get_model(model_name, model_config, seed=getattr(arguments, 'model_seed'))
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
         if arguments.verbose:
             print('{} {} {}'.format(model_name, problem_name, run_id))
-        problem = problem_resolver(problem_name, **vars(arguments))
+        problem = get_problem(problem_name, **vars(arguments))
         evaluate_result = evaluate(
             problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
             model_output_dir=model_output_dir, plot_dir=plot_dir
@@ -292,6 +280,20 @@ def evaluate_handler(
         if not os.listdir(plot_dir):
             os.rmdir(plot_dir)
 
+    return result_scores
+
+
+def evaluate_handler(arguments: argparse.Namespace):
+    model_config_path = getattr(arguments, 'model_config_path', None)
+    if model_config_path is None:
+        model_config = {}
+    else:
+        with open(model_config_path) as f:
+            model_config = json.load(f)
+
+    handle_evaluate(model_config, arguments)
+
+
 def configure_tuning_parser(parser):
     parser.add_argument(
         '--tuning-config-path', type=str, action='store', required=True,
@@ -299,73 +301,26 @@ def configure_tuning_parser(parser):
     )
     configure_evaluate_parser(parser)
 
-def tuning_handler(arguments_global: argparse.Namespace, data_resolver=get_data):
+def tuning_handler(arguments: argparse.Namespace):
     # gather config files
-    with open(arguments_global.model_config_path, "r") as file:
+    with open(arguments.model_config_path, 'r') as file:
         model_config = json.load(file)
-    with open(arguments_global.tuning_config_path, "r") as file:
+    with open(arguments.tuning_config_path, 'r') as file:
         tuning_config = json.load(file)
 
     # define function to evaluate fitness
     def _evaluate_model(model_config):
-        try:
-            parser = argparse.ArgumentParser()
-            configure_evaluate_parser(parser)
-            argv_list = [
-                '--model', str(arguments_global.model),
-                '--model-config-path', "DO_NOT_USE",
-                '--model-seed', str(arguments_global.model_seed),
-                '--problem', 'regression', "rank", "subset",
-                '--k', str(arguments_global.k),
-                '--train-path', str(arguments_global.train_path),
-                '--test-size', str(arguments_global.test_size),
-                '--split-seed', str(arguments_global.split_seed),
-                '--metafeature-subset', str(arguments_global.metafeature_subset),
-            ]
-            arguments = parser.parse_args(argv_list)
-            init_output_dir = arguments_global.output_dir
-            model = get_model(arguments.model, model_config, seed=arguments.model_seed)
+        result_scores = handle_evaluate(model_config, arguments)
+        for scores in result_scores:
+            if scores['problem_name'] == 'regression':
+                return (scores['test_scores']['total_scores']['total_rmse'],)  # todo make configurable
+        raise Exception('regression problem not found')
 
-            train_data, test_data = get_train_and_test_data(
-                arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
-                arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache
-            )
-
-            run_uuid = str(uuid.uuid4())
-            output_dir = os.path.join(init_output_dir, run_uuid)
-            result_scores = []
-            for problem_name in getattr(arguments, 'problem'):
-                problem = get_problem(problem_name, **vars(arguments))
-                evaluate_result = evaluate(
-                    problem, model, model_config, train_data, test_data
-                )
-                result_scores.append({
-                    'problem_name': problem_name,
-                    'model_name':  arguments_global.model,
-                    **evaluate_result.__dict__,
-                })
-            run_id = arguments_global.model + run_uuid
-            record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
-
-            if arguments.verbose:
-                results = evaluate_result.__dict__
-                del results['train_predictions']
-                del results['test_predictions']
-                del results['ootsp_test_predictions']
-                print(json.dumps(results, indent=4), "\n")
-
-            if output_dir is not None:
-                record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
-
-            return (result_scores[0]["test_scores"]["total_scores"]["total_rmse"], )
-
-        except Exception as e:
-            print("Function failed to run due to: {}".format(e))
-            raise(e)
-
-    tune = TuningDeap(_evaluate_model, tuning_config, model_config)
+    tune = TuningDeap(_evaluate_model, tuning_config, model_config)  # TODO: shouldn't this be the place to indicate maximize or minimize?
     best_config, best_score = tune.run_evolutionary()
-    print("The best config found was {} with a score of {}".format(" ".join([str(item) for item in best_config]), best_score))
+    print('The best config found was {} with a score of {}'.format(
+        ' '.join([str(item) for item in best_config]), best_score
+    ))
 
 
 def configure_rescore_parser(parser):
@@ -379,14 +334,14 @@ def configure_rescore_parser(parser):
     )
 
 
-def rescore_handler(arguments: argparse.Namespace, data_resolver=get_data):
+def rescore_handler(arguments: argparse.Namespace):
     with open(arguments.results_path) as f:
         results = json.load(f)
 
     train_data, test_data = get_train_and_test_data(
         results['arguments']['train_path'], results['arguments']['test_path'], results['arguments']['test_size'],
         results['arguments']['split_seed'], results['arguments']['metafeature_subset'],
-        results['arguments']['cache_dir'], results['arguments']['no_cache'], data_resolver
+        results['arguments']['cache_dir'], results['arguments']['no_cache']
     )
 
     # Create the output directory for the results of the re-score
@@ -435,7 +390,7 @@ def check_scores(scores: dict, rescores: dict, score_type: str):
 
 
 def get_train_and_test_data(
-    train_path, test_path, test_size, split_seed, metafeature_subset, cache_dir, no_cache: bool, data_resolver=get_data
+    train_path, test_path, test_size, split_seed, metafeature_subset, cache_dir, no_cache: bool
 ):
     data_arg_str = str(train_path) + str(test_path) + str(test_size) + str(split_seed) + str(metafeature_subset)
     cache_id = hashlib.sha256(data_arg_str.encode('utf8')).hexdigest()
@@ -454,12 +409,12 @@ def get_train_and_test_data(
         in_test_path = test_path
 
     # when loading raw data and test_path is not provided, split train into train and test data
-    train_data = data_resolver(in_train_path)
+    train_data = get_data(in_train_path)
     if in_test_path is None:
         assert not load_cached_data
         train_data, test_data = split_data_by_group(train_data, 'dataset_id', test_size, split_seed)
     else:
-        test_data = data_resolver(in_test_path)
+        test_data = get_data(in_test_path)
 
     if not load_cached_data:
         train_data, test_data = preprocess_data(train_data, test_data, metafeature_subset)
@@ -516,18 +471,16 @@ def record_run(
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
-    subparser = parser._subparsers._group_actions[0].choices[arguments.command]
-
     if arguments.command == 'split-data':
-        split_handler(arguments, subparser)
+        split_handler(arguments)
 
     elif arguments.command == 'evaluate':
-        evaluate_handler(arguments, subparser)
+        evaluate_handler(arguments)
 
     elif arguments.command == 'rescore':
         rescore_handler(arguments)
 
-    elif arguments.command == "tune":
+    elif arguments.command == 'tune':
         tuning_handler(arguments)
 
     else:

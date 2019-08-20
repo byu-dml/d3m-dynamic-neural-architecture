@@ -24,8 +24,9 @@ else
     validation_split_seed=5460650386
     k=2
     metafeature_subset=all
-    results_dir=./tuning_results
+    results_dir=./dev_tuning_results
 fi
+
 
 python3 -m dna split-data \
     --data-path $raw_data_path \
@@ -36,7 +37,7 @@ python3 -m dna split-data \
 python3 -m dna tune \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
-    --tuning-config-path ./model_configs/dna_tuning_config.json \
+    --tuning-config-path ./tuning_configs/dna_tuning_config.json \
     --problem regression rank subset \
     --train-path $train_path \
     --k $k \
