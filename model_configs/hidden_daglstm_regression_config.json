@@ -3,6 +3,7 @@
         "activation_name": "relu",
         "use_batch_norm": true,
         "use_skip": false,
+        "loss_function_name": "rmse",
 
         "input_n_hidden_layers": 1,
         "input_hidden_layer_size": 16,
