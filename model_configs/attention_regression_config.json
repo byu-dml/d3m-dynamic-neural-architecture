@@ -7,10 +7,10 @@
     "loss_function_name": "rmse",
     "use_mask": true,
 
-    "n_layers": 6,
-    "n_heads": 4,
-    "attention_in_features": 128,
-    "attention_hidden_features": 32,
+    "n_layers": 2,
+    "n_heads": 2,
+    "attention_in_features": 8,
+    "attention_hidden_features": 8,
     "attention_activation_name": null,
     "reduction_name": "sum",
 

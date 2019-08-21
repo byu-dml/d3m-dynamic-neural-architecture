@@ -41,7 +41,7 @@ class SubsetModelBase(ModelBase):
 
 class PyTorchModelBase:
 
-    def __init__(self, *, y_dtype, device, seed, loss_function_name: str, loss_function_params: dict):
+    def __init__(self, *, y_dtype, device, seed, loss_function_name: str, loss_function_args: dict):
         """
         Parameters
         ----------
@@ -53,7 +53,7 @@ class PyTorchModelBase:
         self.seed = seed
         self._validation_split_seed = seed + 1
         self._loss_function_name = loss_function_name
-        self._loss_function_params = loss_function_params
+        self._loss_function_args = loss_function_args
 
         self._model = None
 
@@ -235,11 +235,11 @@ class PyTorchModelBase:
 
 class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
 
-    def __init__(self, y_dtype, device, seed, loss_function_name=None, loss_function_params=None):
+    def __init__(self, y_dtype, device, seed, loss_function_name=None, loss_function_args=None):
         # different arguments means different function calls
         PyTorchModelBase.__init__(
             self, y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name,
-            loss_function_params=loss_function_params
+            loss_function_args=loss_function_args
         )
         RegressionModelBase.__init__(self, seed=seed)
 

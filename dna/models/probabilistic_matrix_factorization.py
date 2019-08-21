@@ -8,12 +8,12 @@ from dna.data import PMFDataLoader
 
 
 class PMFLoss(torch.nn.Module):
-    def __init__(self, loss_function_params: dict, model):
+    def __init__(self, loss_function_args: dict, model):
         super().__init__()
 
-        self.probabilitistic = loss_function_params['probabilitistic']
-        self.lam_u = loss_function_params['lam_u']
-        self.lam_v = loss_function_params['lam_v']
+        self.probabilitistic = loss_function_args['probabilitistic']
+        self.lam_u = loss_function_args['lam_u']
+        self.lam_v = loss_function_args['lam_v']
         self.mse_loss = torch.nn.MSELoss(reduction='mean')
         self.dataset_factors_weight = model.dataset_factors.weight
         self.pipeline_factors_weight = model.pipeline_factors.weight
@@ -48,13 +48,13 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         a regularization term used when probabilistic is True
     """
 
-    def __init__(self, k: int, loss_function_params, *,  device: str = 'cuda:0', seed=0):
+    def __init__(self, k: int, loss_function_args, *,  device: str = 'cuda:0', seed=0):
         super().__init__(y_dtype=torch.float32, device=device, seed=seed)
         self.k = k
-        self.loss_function_params = loss_function_params
+        self.loss_function_args = loss_function_args
 
     def _get_loss_function(self):
-        return PMFLoss(self.loss_function_params, self.model)
+        return PMFLoss(self.loss_function_args, self.model)
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
