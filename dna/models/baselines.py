@@ -1,7 +1,11 @@
+import os
+import shutil
+
 import autosklearn.regression as autosklearn
 import numpy as np
 import pandas as pd
 from sklearn import linear_model
+from sklearn.ensemble import RandomForestRegressor
 
 from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase
 from dna import utils
@@ -133,11 +137,23 @@ class LinearRegressionBaseline(SklearnBase):
         self.fitted = False
 
 
+class RandomForestBaseline(SklearnBase):
+    def __init__(self, seed=0):
+        super().__init__(seed=seed)
+        self.regressor = RandomForestRegressor(random_state=seed)
+        self.fitted = False
+
+
 class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
-        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder='./tmp')
+
+        tmp_dir = './tmp'
+        if os.path.isdir(tmp_dir):
+            shutil.rmtree(tmp_dir)
+
+        self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder=tmp_dir)
         self.fitted = False
 
 
