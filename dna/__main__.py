@@ -316,7 +316,7 @@ def tuning_handler(arguments: argparse.Namespace):
                 return (scores['test_scores']['total_scores']['total_rmse'],)  # todo make configurable
         raise Exception('regression problem not found')
 
-    tune = TuningDeap(_evaluate_model, tuning_config, model_config)  # TODO: shouldn't this be the place to indicate maximize or minimize?
+    tune = TuningDeap(_evaluate_model, tuning_config, model_config, minimize=True, output_dir="./tuning_results", verbose=True)
     best_config, best_score = tune.run_evolutionary()
     print('The best config found was {} with a score of {}'.format(
         ' '.join([str(item) for item in best_config]), best_score

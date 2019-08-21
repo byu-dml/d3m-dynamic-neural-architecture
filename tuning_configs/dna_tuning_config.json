@@ -1,8 +1,6 @@
 {
     "population_size": 2,
     "n_generations": 5,
-    "output_path": "./tuning_results_test",
-    "output": true,
     "attributes": {
         "hidden_layer_size": {
             "type": "int",
