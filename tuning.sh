@@ -1,6 +1,7 @@
 #!/bin/bash
 
 use_complete_data=false
+objective=top_k_regret
 
 if $use_complete_data; then
     # complete has 194 datasets
@@ -12,7 +13,7 @@ if $use_complete_data; then
     validation_split_seed=3101978347
     k=25
     metafeature_subset=all
-    results_dir=./tuning_results
+    results_dir=./results
 
 else
     # small has 11 datasets
@@ -24,7 +25,7 @@ else
     validation_split_seed=5460650386
     k=2
     metafeature_subset=all
-    results_dir=./dev_tuning_results
+    results_dir=./dev_results
 fi
 
 
@@ -38,7 +39,9 @@ python3 -m dna tune \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
     --tuning-config-path ./tuning_configs/dna_tuning_config.json \
+    --tuning-output-dir ./tuning_output \
     --problem regression rank subset \
+    --objective $objective \
     --train-path $train_path \
     --k $k \
     --metafeature-subset $metafeature_subset \

@@ -299,7 +299,16 @@ def configure_tuning_parser(parser):
         '--tuning-config-path', type=str, action='store', required=True,
         help='the directory to read in the tuning config'
     )
+    parser.add_argument(
+        '--objective', type=str, action='store', required=True,
+        choices=['total_rmse', 'top_k_regret', 'spearman_mean']
+    )
+    parser.add_argument(
+        '--tuning-output-dir', type=str, default=None,
+        help='directory path to write outputs from tuningDEAP'
+    )
     configure_evaluate_parser(parser)
+
 
 def tuning_handler(arguments: argparse.Namespace):
     # gather config files
@@ -308,19 +317,40 @@ def tuning_handler(arguments: argparse.Namespace):
     with open(arguments.tuning_config_path, 'r') as file:
         tuning_config = json.load(file)
 
-    # define function to evaluate fitness
+    if arguments.objective == 'total_rmse':
+        score_problem = 'regression'
+        score_path = ('test_scores', 'total_scores', 'total_rmse')
+        minimize = True
+    elif arguments.objective == 'top_k_regret':
+        score_problem = 'subset'
+        score_path = ('test_scores', 'top_k_regret', 'mean')
+        minimize = True
+    elif arguments.objective == 'spearman_mean':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'mean_scores', 'spearman_correlation', 'mean')
+        minimize = False
+    else:
+        raise ValueError('unknown objective {}'.format(arguments.objective))
+
     def _evaluate_model(model_config):
         result_scores = handle_evaluate(model_config, arguments)
         for scores in result_scores:
-            if scores['problem_name'] == 'regression':
-                return (scores['test_scores']['total_scores']['total_rmse'],)  # todo make configurable
-        raise Exception('regression problem not found')
+            if scores['problem_name'] == score_problem:
+                score = scores
+                for key in score_path:
+                    score = score[key]
+                return (score,)
+        raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
 
-    tune = TuningDeap(_evaluate_model, tuning_config, model_config, minimize=True, output_dir="./tuning_results", verbose=True)
+    tune = TuningDeap(
+        _evaluate_model, tuning_config, model_config, minimize=minimize, output_dir=arguments.tuning_output_dir,
+        verbose=arguments.verbose
+    )
     best_config, best_score = tune.run_evolutionary()
-    print('The best config found was {} with a score of {}'.format(
-        ' '.join([str(item) for item in best_config]), best_score
-    ))
+    if arguments.verbose:
+        print('The best config found was {} with a score of {}'.format(
+            ' '.join([str(item) for item in best_config]), best_score
+        ))
 
 
 def configure_rescore_parser(parser):
