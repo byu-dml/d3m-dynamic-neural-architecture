@@ -1,0 +1,30 @@
+{
+    "population_size": 2,
+    "n_generations": 2,
+    "attributes": {
+        "hidden_layer_size": {
+            "type": "int",
+            "min": 1,
+            "max": 32,
+            "step": 1
+        },
+        "n_hidden_layers": {
+            "type": "int",
+            "min": 1,
+            "max": 8,
+            "step": 1
+        },
+        "use_batch_norm": {
+            "type": "bool"
+        },
+        "use_skip": {
+            "type": "bool" 
+        },
+        "dropout": {
+            "type": "float",
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+        }
+    }
+}
