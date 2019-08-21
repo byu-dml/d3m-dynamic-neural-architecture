@@ -6,7 +6,8 @@
         "use_batch_norm": true,
         "use_skip": true,
         "dropout": 0.5,
-        "reduction_name": "max"
+        "reduction_name": "max",
+        "loss_function_name": "rmse"
     },
     "fit": {
         "batch_size": 7,

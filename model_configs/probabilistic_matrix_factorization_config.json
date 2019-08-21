@@ -1,9 +1,10 @@
 {
     "__init__": {
         "k": 100,
-        "probabilitistic": true,
-        "lam_u": 0.3,
-        "lam_v": 0.3
+        "loss_function_args": {
+            "lam_u": 0.3,
+            "lam_v": 0.3
+        }
     },
     "fit": {
         "learning_rate": 0.001,
