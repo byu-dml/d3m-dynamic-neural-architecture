@@ -7,6 +7,30 @@ from .torch_modules.pmf import PMF
 from dna.data import PMFDataLoader
 
 
+class PMFLoss(torch.nn.Module):
+
+    def __init__(self, lam_u, u_weights, lam_v, v_weights):
+        super().__init__()
+        self.lam_u = lam_u
+        self.u_weights = u_weights
+        self.lam_v = lam_v
+        self.v_weights = v_weights
+        self.mse_loss = torch.nn.MSELoss(reduction='mean')
+
+    def forward(self, y_hat, y):
+        rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
+
+        u_loss = 0
+        if self.lam_u > 0:
+            u_loss = self.lam_u * torch.sum(self.u_weights.norm(dim=1))
+
+        v_loss = 0
+        if self.lam_v > 0:
+            v_loss = self.lam_v * torch.sum(self.v_weights.norm(dim=1))
+
+        return rmse_loss + u_loss + v_loss
+
+
 class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     """
     Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
@@ -24,29 +48,16 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
         a regularization term used when probabilistic is True
     """
 
-    def __init__(self, k: int, probabilitistic: bool, lam_u: float, lam_v: float, *, device: str = 'cuda:0', seed=0):
+    def __init__(self, k: int, loss_function_args, *,  device: str = 'cuda:0', seed=0):
         super().__init__(y_dtype=torch.float32, device=device, seed=seed)
         self.k = k
-        self.probabilitistic = probabilitistic
-        self.lam_u = lam_u
-        self.lam_v = lam_v
-
-        self.mse_loss = torch.nn.MSELoss(reduction='mean')
-
-    # TODO: can we optimize the loss function by not initializing every call?
-    def PMFLoss(self, y_hat, y):
-        rmse_loss = torch.sqrt(self.mse_loss(y_hat, y))
-        # PMF loss includes two extra regularlization
-        # NOTE: using probabilitistic loss will make the loss look worse, even though it performs well on RMSE (because of the inflated)
-        if self.probabilitistic:
-            u_regularization = self.lam_u * torch.sum(self.model.dataset_factors.weight.norm(dim=1))
-            v_regularization = self.lam_v * torch.sum(self.model.pipeline_factors.weight.norm(dim=1))
-            return rmse_loss + u_regularization + v_regularization
-
-        return rmse_loss
+        self.loss_function_args = loss_function_args
 
     def _get_loss_function(self):
-        return self.PMFLoss
+        return PMFLoss(
+            self.loss_function_args.get('lam_u', 0), self.model.dataset_factors.weight,
+            self.loss_function_args.get('lam_v', 0), self.model.pipeline_factors.weight
+        )
 
     def _get_optimizer(self, learning_rate):
         return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
