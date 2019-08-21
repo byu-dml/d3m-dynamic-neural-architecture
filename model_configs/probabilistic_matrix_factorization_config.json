@@ -2,7 +2,6 @@
     "__init__": {
         "k": 100,
         "loss_function_args": {
-            "probabilitistic": true,
             "lam_u": 0.3,
             "lam_v": 0.3
         }
