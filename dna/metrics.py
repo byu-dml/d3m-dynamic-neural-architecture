@@ -110,7 +110,6 @@ def ndcg_score(y_true, y_score, k=10, gains="linear"):
     """
     best = dcg_score(y_true, y_true, k, gains, idcg=True)
     actual = dcg_score(y_true, y_score, k, gains)
-    print(best, actual)
     return actual / best
 
 def average_precision(y_true, y_score, k):

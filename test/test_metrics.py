@@ -29,11 +29,6 @@ class MetricsTestCase(unittest.TestCase):
         metric = metrics.spearman_correlation(ranked_data, actual_data)
         return metric
 
-    def format_and_get_ncdg(self, actual_data, ranked_data):
-        actual_data, ranked_data = self.format_for_rank(actual_data, ranked_data)
-        metric = metrics.ndcg(ranked_data, actual_data)
-        return metric
-
     def format_for_rank(self, actual_data, ranked_data):
         actual_data = pd.DataFrame({'test_f1_macro': actual_data})
         ranked_data = pd.DataFrame({'rank': ranked_data})
