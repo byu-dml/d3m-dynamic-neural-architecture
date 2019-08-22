@@ -6,8 +6,12 @@ import numpy as np
 import pandas as pd
 from sklearn import linear_model
 from sklearn.ensemble import RandomForestRegressor
+import torch
+from .torch_modules.mlp import MLP
 
-from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase
+from .base_models import (
+    RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase, PyTorchRegressionRankSubsetModelBase
+)
 from dna import utils
 from dna.kND import KNearestDatasets
 
@@ -241,3 +245,28 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase
         metafeatures = pd.DataFrame(metafeatures['metafeatures'].tolist(), metafeatures.index)
         metafeatures.drop_duplicates(inplace=True)
         return metafeatures
+
+class MLPRegressionModel(PyTorchRegressionRankSubsetModelBase):
+
+    def __init__(
+            self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
+            loss_function_name: str, use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
+    ):
+        super().__init__(y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name)
+
+        self.n_hidden_layers = n_hidden_layers
+        self.hidden_layer_size = hidden_layer_size
+        self.activation_name = activation_name
+        self.use_batch_norm = use_batch_norm
+        self.use_skip = use_skip
+        self.dropout = dropout
+        self.output_layer_size = 1
+
+    def _get_model(self, train_data):
+        self.input_layer_size = len(train_data[0]['metafeatures'])
+        layer_sizes = [self.input_layer_size] + ([self.hidden_layer_size] * self.n_hidden_layers) + \
+                      [self.output_layer_size]
+        return MLP(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
+            seed=self.seed
+        )

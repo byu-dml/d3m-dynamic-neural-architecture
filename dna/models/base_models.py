@@ -8,7 +8,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from dna import utils
-from dna.data import split_data_by_group, RNNDataLoader, group_json_objects
+from dna.data import split_data_by_group, RNNDataLoader, group_json_objects, Dataset, GroupDataLoader
 
 
 class ModelBase:
@@ -149,10 +149,24 @@ class PyTorchModelBase:
             raise ValueError('No valid loss function name provided. Got {}'.format(self._loss_function_name))
 
     def _get_optimizer(self, learning_rate):
-        raise NotImplementedError()
+        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
-    def _get_data_loader(self, data, batch_size, drop_last, shuffle):
-        raise NotImplementedError()
+    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
+        return GroupDataLoader(
+            data = data,
+            group_key = 'pipeline.id',
+            dataset_class = Dataset,
+            dataset_params = {
+                'features_key': 'metafeatures',
+                'target_key': 'test_f1_macro',
+                'y_dtype': self.y_dtype,
+                'device': self.device
+            },
+            batch_size = batch_size,
+            drop_last = drop_last,
+            shuffle = shuffle,
+            seed = self.seed + 2
+        )
 
     def _train_epoch(self, data_loader, model: nn.Module, loss_function, optimizer, *, verbose=True):
         model.train()
@@ -451,9 +465,6 @@ class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
     @staticmethod
     def _modify_pipeline_structure(structure):
         pass
-
-    def _get_optimizer(self, learning_rate):
-        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
 
     def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
         return RNNDataLoader(
