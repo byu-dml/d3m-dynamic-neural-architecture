@@ -249,9 +249,10 @@ class PredictByGroupProblemBase(ProblemBase):
 
 class RankProblem(PredictByGroupProblemBase):
 
-    def __init__(self, group_key):
+    def __init__(self, group_key, k):
         super().__init__(group_key)
         self._predict_method_name = 'predict_rank'
+        self.k = k
 
     def score(self, predictions_by_group, targets):
         targets_by_group = self._group_data(targets)
@@ -266,13 +267,16 @@ class RankProblem(PredictByGroupProblemBase):
             # have to sort by id in cases of ties
             group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
             group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
+            group_predictions.sort_values(["rank"], ascending=True, inplace=True)
+
+            # get IR metrics
+            ndcg_value = ndcg_score(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']) + 1, self.k) # add the one to start indexing at 1
+            ap_value = average_precision(group_targets['pipeline_id'].tolist(), group_predictions['pipeline_id'].tolist(), self.k)
 
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
             correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
-            ndcg_value = ndcg_score(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
-            ap_value = average_precision(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
-
+            
             per_dataset_scores[group] = {
                 'spearman_correlation': {
                         'correlation_coefficient': correlation,
@@ -386,6 +390,6 @@ def get_problem(problem_name: str, **kwargs):
     if problem_name == 'regression':
         return RegressionProblem()
     if problem_name == 'rank':
-        return RankProblem(group_key)
+        return RankProblem(group_key, kwargs['k'])
     if problem_name == 'subset':
         return SubsetProblem(group_key, kwargs['k'])

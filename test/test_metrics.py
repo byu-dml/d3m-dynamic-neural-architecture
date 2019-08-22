@@ -128,31 +128,136 @@ class MetricsTestCase(unittest.TestCase):
             err_msg='failed to get spearman from tie example, was {}, shouldve been {}'.format(metric, true_metric)
         )
 
-    def test_ndcg(self):
+    def test_dcg(self):
         """
-        Examples from Sklearns old metrics
+        Examples from:
+        https://gist.github.com/mblondel/7337391
+        https://machinelearningmedium.com/2017/07/24/discounted-cumulative-gain/
+        https://en.wikipedia.org/wiki/Discounted_cumulative_gain
         """
-        true_metric = 1.0
-        ground_truth = [1, 0, 2]
-        predictions = [[0.15, 0.55, 0.2], [0.7, 0.2, 0.1], [0.06, 0.04, 0.9]]
-        metric = metrics.ndcg_score(ground_truth, predictions, k=2)
+        # Check that some rankings are better than others
+        assert metrics.dcg_score([5, 3, 2], [2, 1, 0]) > metrics.dcg_score([4, 3, 2], [2, 1, 0])
+        assert metrics.dcg_score([4, 3, 2], [2, 1, 0]) > metrics.dcg_score([1, 3, 2], [2, 1, 0])
+        assert metrics.dcg_score([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_score([4, 3, 2], [2, 1, 0], k=2)
+        assert metrics.dcg_score([4, 3, 2], [2, 1, 0], k=2) == metrics.dcg_score([1, 3, 2], [2, 1, 0], k=2)
+
+        # Check that sample order is irrelevant
+        assert metrics.dcg_score([5, 3, 2], [2, 1, 0]) == metrics.dcg_score([2, 3, 5], [0, 1, 2])
+        assert metrics.dcg_score([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_score([2, 3, 5], [0, 1, 2], k=2)
+
+        # wikipedia example
+        true_metric = 6.86112668859
+        ground_truth = [3, 2, 3, 0, 1, 2]
+        predictions = [1, 2, 3, 4, 5, 6]
+        metric = metrics.dcg_score(ground_truth, predictions, k=6)
         np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get the correct ndcg for perfect, was {}, shouldve been {}'.format(
+            metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
                 metric, true_metric
             )
         )
 
-        true_metric = float(2) / 3
-        ground_truth = [1, 0, 2]
-        predictions = [[0.9, 0.5, 0.8], [0.7, 0.2, 0.1], [0.06, 0.04, 0.9]]
-        metric = metrics.ndcg_score(ground_truth, predictions, k=2)
+
+    def test_ndcg(self):
+        """
+        Examples from:
+        https://gist.github.com/mblondel/7337391
+        https://machinelearningmedium.com/2017/07/24/discounted-cumulative-gain/
+        https://en.wikipedia.org/wiki/Discounted_cumulative_gain
+        """
+        # Perfect rankings
+        assert metrics.ndcg_score([5, 3, 2], [0, 1, 2]) == 1.0
+        assert metrics.ndcg_score([2, 3, 5], [2, 1, 0]) == 1.0
+        assert metrics.ndcg_score([5, 3, 2], [0, 1, 2], k=2) == 1.0
+        assert metrics.ndcg_score([2, 3, 5], [2, 1, 0], k=2) == 1.0
+
+        # wikipedia example
+        true_metric = 0.96080819
+        ground_truth = [3, 2, 3, 0, 1, 2]
+        predictions = [1, 2, 3, 4, 5, 6]
+        metric = metrics.ndcg_score(ground_truth, predictions, k=6)
         np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get the correct ndcg for perfect, was {}, shouldve been {}'.format(
+            metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
                 metric, true_metric
             )
         )
     
-    
+
+    def test_mean_average_precision(self):
+        """
+        Examples pulled from
+        https://makarandtapaswi.wordpress.com/2012/07/02/intuition-behind-average-precision-and-map/ # note that the strikethrough is true for this case
+        http://sdsawtelle.github.io/blog/output/mean-average-precision-MAP-for-recommender-systems.html#Average-Precision
+        """
+        true_metric = 0.461111111
+        y_true = ["a", "b", "c", "d", "e", "f"]
+        y_pred = ["a", "z", "x", "d", "e", "f"]
+        metric = metrics.average_precision(y_true, y_pred, k=6)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = 0.1111111111
+        y_true = ["a", "b", "c"]
+        y_pred = ["d", "e", "a"]
+        metric = metrics.average_precision(y_true, y_pred, k=7)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = 1.0 / 3.0
+        y_true = ["a", "b", "c"]
+        y_pred = ["a", "e", "f"]
+        metric = metrics.average_precision(y_true, y_pred, k=7)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = 1.0 / 6.0
+        y_true = ["a", "b", "c"]
+        y_pred = ["g", "b", "f"]
+        metric = metrics.average_precision(y_true, y_pred, k=7)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = 0.3888888888
+        y_true = ["a", "b", "c"]
+        y_pred = ["d", "b", "a"]
+        metric = metrics.average_precision(y_true, y_pred, k=3)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision was {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = 1
+        y_true = ["a", "b", "c"]
+        y_pred = ["a", "b", "c"]
+        metric = metrics.average_precision(y_true, y_pred, k=3)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision for perfect, {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
+        true_metric = 0
+        y_true = ["a", "b", "c"]
+        y_pred = ["d", "e", "h"]
+        metric = metrics.average_precision(y_true, y_pred, k=3)
+        np.testing.assert_almost_equal(
+            metric, true_metric, err_msg='failed to get the correct average precision for perfect, {}, shouldve been {}'.format(
+                metric, true_metric
+            )
+        )
+
 
     def test_pearson_correlation(self):
         """
