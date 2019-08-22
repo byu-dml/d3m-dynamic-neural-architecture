@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import scipy.stats
 from sklearn.metrics import accuracy_score, mean_squared_error
-from sklearn.preprocessing import LabelBinarizer
 
 from dna import utils
 
