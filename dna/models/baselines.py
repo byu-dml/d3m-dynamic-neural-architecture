@@ -9,8 +9,9 @@ from sklearn.ensemble import RandomForestRegressor
 import torch
 from .torch_modules.mlp import MLP
 
-from .base_models import RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase,\
-    PyTorchRegressionRankSubsetModelBase
+from .base_models import (
+    RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase, PyTorchRegressionRankSubsetModelBase
+)
 from dna import utils
 from dna.kND import KNearestDatasets
 
