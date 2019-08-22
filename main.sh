@@ -84,7 +84,7 @@ python3 -m dna evaluate \
 
 python3 -m dna evaluate \
     --model linear_regression \
-    --problem rank subset \
+    --problem regression rank subset \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -138,7 +138,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
-    --problem rank \
+    --problem regression rank subset \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
