@@ -108,10 +108,11 @@ python3 -m dna evaluate \
     $use_ootsp
 
 
+# mlp outputs a constant value for a dataset, so it cannot rank and subset is just random
 python3 -m dna evaluate \
     --model mlp_regression \
     --model-config-path ./model_configs/mlp_regression_config.json \
-    --problem regression rank subset \
+    --problem regression \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
