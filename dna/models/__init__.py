@@ -2,7 +2,7 @@ import typing
 
 from .baselines import (
     AutoSklearnMetalearner, LinearRegressionBaseline, MeanBaseline, MedianBaseline, MetaAutoSklearn,
-    PerPrimitiveBaseline, RandomBaseline
+    PerPrimitiveBaseline, RandomBaseline, RandomForestBaseline
 )
 from .dna_regression_model import DNARegressionModel
 from .lstm_model import LSTMModel
@@ -30,6 +30,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'attention_regression': AttentionRegressionModel,
         'dag_attention_regression': DAGAttentionRegressionModel,
         'linear_regression': LinearRegressionBaseline,
+        'random_forest': RandomForestBaseline,
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,
         'probabilistic_matrix_factorization': ProbabilisticMatrixFactorization,

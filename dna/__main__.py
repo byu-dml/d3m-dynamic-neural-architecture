@@ -9,6 +9,8 @@ import uuid
 
 import numpy as np
 
+from tuningdeap import TuningDeap
+
 from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models import get_model
@@ -39,11 +41,9 @@ def configure_split_parser(parser):
     )
 
 
-def split_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data
-):
+def split_handler(arguments: argparse.Namespace):
     data_path = getattr(arguments, 'data_path')
-    data = data_resolver(data_path)
+    data = get_data(data_path)
     train_data, test_data = split_data_by_group(data, 'dataset_id', arguments.test_size, arguments.split_seed)
 
     train_path = getattr(arguments, 'train_path')
@@ -216,18 +216,8 @@ def evaluate(
     )
 
 
-def evaluate_handler(
-    arguments: argparse.Namespace, parser: argparse.ArgumentParser, *, data_resolver=get_data,
-    model_resolver=get_model, problem_resolver=get_problem,
-):
+def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
     run_id = str(uuid.uuid4())
-
-    model_config_path = getattr(arguments, 'model_config_path', None)
-    if model_config_path is None:
-        model_config = {}
-    else:
-        with open(model_config_path) as f:
-            model_config = json.load(f)
 
     output_dir = arguments.output_dir
     model_output_dir = None
@@ -243,7 +233,7 @@ def evaluate_handler(
 
     train_data, test_data = get_train_and_test_data(
         arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
-        arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache, data_resolver
+        arguments.metafeature_subset, arguments.cache_dir, arguments.no_cache
     )
     if arguments.skip_test:
         test_data = None
@@ -256,13 +246,13 @@ def evaluate_handler(
             ootsp_test_data = None
 
     model_name = getattr(arguments, 'model')
-    model = model_resolver(model_name, model_config, seed=getattr(arguments, 'model_seed'))
+    model = get_model(model_name, model_config, seed=getattr(arguments, 'model_seed'))
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
         if arguments.verbose:
             print('{} {} {}'.format(model_name, problem_name, run_id))
-        problem = problem_resolver(problem_name, **vars(arguments))
+        problem = get_problem(problem_name, **vars(arguments))
         evaluate_result = evaluate(
             problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
             model_output_dir=model_output_dir, plot_dir=plot_dir
@@ -290,6 +280,78 @@ def evaluate_handler(
         if not os.listdir(plot_dir):
             os.rmdir(plot_dir)
 
+    return result_scores
+
+
+def evaluate_handler(arguments: argparse.Namespace):
+    model_config_path = getattr(arguments, 'model_config_path', None)
+    if model_config_path is None:
+        model_config = {}
+    else:
+        with open(model_config_path) as f:
+            model_config = json.load(f)
+
+    handle_evaluate(model_config, arguments)
+
+
+def configure_tuning_parser(parser):
+    parser.add_argument(
+        '--tuning-config-path', type=str, action='store', required=True,
+        help='the directory to read in the tuning config'
+    )
+    parser.add_argument(
+        '--objective', type=str, action='store', required=True,
+        choices=['total_rmse', 'top_k_regret', 'spearman_mean']
+    )
+    parser.add_argument(
+        '--tuning-output-dir', type=str, default=None,
+        help='directory path to write outputs from tuningDEAP'
+    )
+    configure_evaluate_parser(parser)
+
+
+def tuning_handler(arguments: argparse.Namespace):
+    # gather config files
+    with open(arguments.model_config_path, 'r') as file:
+        model_config = json.load(file)
+    with open(arguments.tuning_config_path, 'r') as file:
+        tuning_config = json.load(file)
+
+    if arguments.objective == 'total_rmse':
+        score_problem = 'regression'
+        score_path = ('test_scores', 'total_scores', 'total_rmse')
+        minimize = True
+    elif arguments.objective == 'top_k_regret':
+        score_problem = 'subset'
+        score_path = ('test_scores', 'top_k_regret', 'mean')
+        minimize = True
+    elif arguments.objective == 'spearman_mean':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'mean_scores', 'spearman_correlation', 'mean')
+        minimize = False
+    else:
+        raise ValueError('unknown objective {}'.format(arguments.objective))
+
+    def _evaluate_model(model_config):
+        result_scores = handle_evaluate(model_config, arguments)
+        for scores in result_scores:
+            if scores['problem_name'] == score_problem:
+                score = scores
+                for key in score_path:
+                    score = score[key]
+                return (score,)
+        raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
+
+    tune = TuningDeap(
+        _evaluate_model, tuning_config, model_config, minimize=minimize, output_dir=arguments.tuning_output_dir,
+        verbose=arguments.verbose
+    )
+    best_config, best_score = tune.run_evolutionary()
+    if arguments.verbose:
+        print('The best config found was {} with a score of {}'.format(
+            ' '.join([str(item) for item in best_config]), best_score
+        ))
+
 
 def configure_rescore_parser(parser):
     parser.add_argument(
@@ -302,14 +364,14 @@ def configure_rescore_parser(parser):
     )
 
 
-def rescore_handler(arguments: argparse.Namespace, data_resolver=get_data):
+def rescore_handler(arguments: argparse.Namespace):
     with open(arguments.results_path) as f:
         results = json.load(f)
 
     train_data, test_data = get_train_and_test_data(
         results['arguments']['train_path'], results['arguments']['test_path'], results['arguments']['test_size'],
         results['arguments']['split_seed'], results['arguments']['metafeature_subset'],
-        results['arguments']['cache_dir'], results['arguments']['no_cache'], data_resolver
+        results['arguments']['cache_dir'], results['arguments']['no_cache']
     )
 
     # Create the output directory for the results of the re-score
@@ -358,7 +420,7 @@ def check_scores(scores: dict, rescores: dict, score_type: str):
 
 
 def get_train_and_test_data(
-    train_path, test_path, test_size, split_seed, metafeature_subset, cache_dir, no_cache: bool, data_resolver=get_data
+    train_path, test_path, test_size, split_seed, metafeature_subset, cache_dir, no_cache: bool
 ):
     data_arg_str = str(train_path) + str(test_path) + str(test_size) + str(split_seed) + str(metafeature_subset)
     cache_id = hashlib.sha256(data_arg_str.encode('utf8')).hexdigest()
@@ -377,12 +439,12 @@ def get_train_and_test_data(
         in_test_path = test_path
 
     # when loading raw data and test_path is not provided, split train into train and test data
-    train_data = data_resolver(in_train_path)
+    train_data = get_data(in_train_path)
     if in_test_path is None:
         assert not load_cached_data
         train_data, test_data = split_data_by_group(train_data, 'dataset_id', test_size, split_seed)
     else:
-        test_data = data_resolver(in_test_path)
+        test_data = get_data(in_test_path)
 
     if not load_cached_data:
         train_data, test_data = preprocess_data(train_data, test_data, metafeature_subset)
@@ -439,16 +501,17 @@ def record_run(
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
-    subparser = parser._subparsers._group_actions[0].choices[arguments.command]
-
     if arguments.command == 'split-data':
-        split_handler(arguments, subparser)
+        split_handler(arguments)
 
     elif arguments.command == 'evaluate':
-        evaluate_handler(arguments, subparser)
+        evaluate_handler(arguments)
 
     elif arguments.command == 'rescore':
         rescore_handler(arguments)
+
+    elif arguments.command == 'tune':
+        tuning_handler(arguments)
 
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
@@ -475,6 +538,11 @@ def main(argv: typing.Sequence):
         'rescore', help='recompute scores from the file output by evaluate and remake the plots'
     )
     configure_rescore_parser(rescore_parser)
+
+    tuning_parser = subparsers.add_parser(
+        'tune', help='recompute scores from the file output by evaluate and remake the plots'
+    )
+    configure_tuning_parser(tuning_parser)
 
     arguments = parser.parse_args(argv[1:])
 

@@ -12,6 +12,10 @@ install:
   - sudo ln -s /usr/bin/swig3.0 /usr/bin/swig
   - curl https://raw.githubusercontent.com/automl/auto-sklearn/master/requirements.txt | xargs -n 1 -L 1 pip install > /dev/null
   - pip install -r requirements.txt > /dev/null
+  - pip install codecov
+  - pip install coverage
   
 script:
-  - python3 run_tests.py
+  - coverage run run_tests.py
+  - codecov
+  
