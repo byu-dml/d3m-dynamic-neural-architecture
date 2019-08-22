@@ -7,12 +7,12 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
     def __init__(
         self, n_layers: int, n_heads: int, attention_in_features: int, attention_hidden_features: int,
         attention_activation_name: str, reduction_name: str, use_mask: bool, activation_name: str, dropout: float,
-        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool, *,
-        device: str = 'cuda:0', seed: int = 0
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool,
+        loss_function_name, *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
             activation_name, dropout, output_n_hidden_layers, output_hidden_layer_size, use_batch_norm, use_skip,
-            device=device, seed=seed
+            device=device, seed=seed, loss_function_name=loss_function_name
         )
 
         self.n_layers = n_layers

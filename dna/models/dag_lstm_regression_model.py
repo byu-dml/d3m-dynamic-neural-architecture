@@ -6,12 +6,13 @@ class DAGLSTMRegressionModel(LSTMModel):
 
     def __init__(
         self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
-        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool = False,
-        reduction_name: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
+        output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, loss_function_name: str,
+        use_skip: bool = False, reduction_name: str = 'mean', *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__(
             activation_name, hidden_state_size, lstm_n_layers, dropout, output_n_hidden_layers,
-            output_hidden_layer_size, use_batch_norm, use_skip=use_skip, device=device, seed=seed
+            output_hidden_layer_size, use_batch_norm, use_skip=use_skip, device=device, seed=seed,
+            loss_function_name=loss_function_name
         )
 
         self.reduction_name = reduction_name

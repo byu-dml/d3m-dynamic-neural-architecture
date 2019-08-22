@@ -27,7 +27,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
             '--split-seed', "0"
         ]        
         cls.arguments = parser.parse_args(argv)
-        split_handler(cls.arguments, parser)
+        split_handler(cls.arguments)
         
 
     def test_dna_regression_determinism(self):
