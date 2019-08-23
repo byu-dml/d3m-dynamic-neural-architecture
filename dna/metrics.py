@@ -28,7 +28,7 @@ def pearson_correlation(y_hat, y):
 
 def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
     """
-    Assumes that the top_k_predicted list is sorted. 
+    Assumes that the top_k_predicted list is sorted.
     """
     top_k_predicted = top_k_predicted[:k]
     assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
@@ -38,7 +38,7 @@ def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k
 
 def top_k_regret(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
     """
-    Assumes that the top_k_predicted list is sorted. 
+    Assumes that the top_k_predicted list is sorted.
     """
     top_k_predicted = top_k_predicted[:k]
     assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
@@ -55,50 +55,62 @@ def spearman_correlation(x: typing.Sequence, y: typing.Sequence):
     spearman = scipy.stats.spearmanr(x, y)
     return spearman.correlation, spearman.pvalue
 
-def dcg_score(y_true, y_score, k=10, gains="linear", idcg=False):
-    """Discounted cumulative gain (DCG) at rank k
+
+def dcg_score(
+    actual_relevance: typing.Sequence, predicted_rank: typing.Sequence, k: int = None, gains: str = 'exponential',
+    idcg=False
+):
+    """Discounted cumulative gain (DCG) at rank position k
+
     Parameters
     ----------
-    y_true : array-like, shape = [n_samples]
+    actual_relevance: Sequence
         Ground truth (true relevance labels, for us, the actual f1 scores)
-    y_score : array-like, shape = [n_samples]
+    predicted_rank: Sequence
         Predicted rank for the predicted f1 scores.
-    k : int
-        Rank.
-    gains : str
+    k: int
+        Rank position.
+    gains: str
         Whether gains should be "exponential" (default) or "linear".
-    idcg : the ideal ordering of the dcg, used for calculating the ndcg
+    idcg: bool
+        the ideal ordering of the dcg, used for calculating the ndcg
+
     Returns
     -------
     DCG @k : float
     """
+    if k is None:
+        k = len(predicted_rank)
     if idcg:
-        # get ranking by sorting y_true, largest first
+        # get ranking by sorting actual_relevance, largest first
         # TODO: If we don't like this param we'd have to find the inverse of the argsort command so that we could pass that in
-        order = np.argsort(y_score)[::-1]
+        order = np.argsort(predicted_rank)[::-1]
     else:
         # already given a ranking to use - use it
-        order = np.argsort(y_score)
-    y_true = np.take(y_true, order[:k])
+        order = np.argsort(predicted_rank)
+    actual_relevance = np.take(actual_relevance, order[:k])
 
-    if gains == "exponential":
-        gains = 2 ** y_true - 1
-    elif gains == "linear":
-        gains = y_true
+    if gains == 'exponential':
+        gains = 2 ** actual_relevance - 1
+    elif gains == 'linear':
+        gains = actual_relevance
     else:
-        raise ValueError("Invalid gains option.")
+        raise ValueError('Invalid gains option.')
 
     # highest rank is 1 so +2 instead of +1
-    discounts = np.log2(np.arange(len(y_true)) + 2)
+    discounts = np.log2(np.arange(len(actual_relevance)) + 2)
     return np.sum(gains / discounts)
 
-def ndcg_score(y_true, y_score, k=10, gains="linear"):
+
+def ndcg_score(
+    actual_relevance: typing.Sequence, predicted_rank: typing.Sequence, k: int = None, gains: str = 'exponential'
+):
     """Normalized discounted cumulative gain (NDCG) at rank k
     Parameters
     ----------
-    y_true : array-like, shape = [n_samples]
+    actual_relevance : array-like, shape = [n_samples]
         Ground truth (true relevance labels, for us, the actual f1 scores)
-    y_score : array-like, shape = [n_samples]
+    predicted_rank : array-like, shape = [n_samples]
         Predicted rank for the predicted f1 scores.
     k : int
         Rank.
@@ -108,9 +120,10 @@ def ndcg_score(y_true, y_score, k=10, gains="linear"):
     -------
     NDCG @k : float
     """
-    best = dcg_score(y_true, y_true, k, gains, idcg=True)
-    actual = dcg_score(y_true, y_score, k, gains)
+    best = dcg_score(actual_relevance, actual_relevance, k, gains, idcg=True)
+    actual = dcg_score(actual_relevance, predicted_rank, k, gains)
     return actual / best
+
 
 def average_precision(y_true, y_score, k):
     """
@@ -130,11 +143,11 @@ def average_precision(y_true, y_score, k):
 
     Mean average precision will be calculated after all the average precisions are calculated in `problems.py` since it is just a simple mean
     """
-    assert len(y_true) != 0 and k != 0 and len(y_score) != 0, "given a zero length input"
+    assert len(y_true) != 0 and k != 0 and len(y_score) != 0, 'given a zero length input'
     # truncate to k piplines
     y_true = y_true[:k]
     y_score = y_score[:k]
-    assert len(y_true) == len(y_score), "given arrays for AP were not the same length: {} vs {}".format(len(y_true), len(y_score))
+    assert len(y_true) == len(y_score), 'given arrays for AP were not the same length: {} vs {}'.format(len(y_true), len(y_score))
     current_set = set()
     relevance_mask = []
     precision_list = []
@@ -144,7 +157,6 @@ def average_precision(y_true, y_score, k):
         relevance_mask.append(1 if id_value in current_set else 0)
         precision_at_k = len(set(y_score[:k]).intersection(current_set)) / k
         precision_list.append(precision_at_k)
-    
+
     precision = np.dot(np.array(relevance_mask), np.array(precision_list))
     return precision / k
-    

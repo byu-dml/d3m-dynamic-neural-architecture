@@ -144,13 +144,14 @@ class MetricsTestCase(unittest.TestCase):
         true_metric = 6.86112668859
         ground_truth = [3, 2, 3, 0, 1, 2]
         predictions = [1, 2, 3, 4, 5, 6]
-        metric = metrics.dcg_score(ground_truth, predictions, k=6)
+        metric = metrics.dcg_score(ground_truth, predictions, k=6, gains='linear')
         np.testing.assert_almost_equal(
             metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
                 metric, true_metric
             )
         )
 
+    # TODO: test exponential (n)dcg
 
     def test_ndcg(self):
         """
@@ -169,7 +170,7 @@ class MetricsTestCase(unittest.TestCase):
         true_metric = 0.96080819
         ground_truth = [3, 2, 3, 0, 1, 2]
         predictions = [1, 2, 3, 4, 5, 6]
-        metric = metrics.ndcg_score(ground_truth, predictions, k=6)
+        metric = metrics.ndcg_score(ground_truth, predictions, k=6, gains='linear')
         np.testing.assert_almost_equal(
             metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
                 metric, true_metric
