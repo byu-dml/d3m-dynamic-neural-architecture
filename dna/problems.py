@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import group_json_objects
-from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation, ndcg_at_k, average_precision
+from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation, ndcg_at_k
 from dna import utils
 
 
@@ -259,7 +259,6 @@ class RankProblem(PredictByGroupProblemBase):
         spearman_coefs = []
         spearman_ps = []
         ndcg_list = []
-        ap_list = []
         per_dataset_scores = {}
 
         for group, group_predictions in predictions_by_group.items():
@@ -271,7 +270,6 @@ class RankProblem(PredictByGroupProblemBase):
 
             # get IR metrics
             ndcg_value = ndcg_at_k(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']) + 1, self.k) # add the one to start indexing at 1
-            ap_value = average_precision(group_targets['pipeline_id'].tolist(), group_predictions['pipeline_id'].tolist(), self.k)
 
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
@@ -283,13 +281,11 @@ class RankProblem(PredictByGroupProblemBase):
                         'p_value': p_value
                     },
                 'ndcg_at_k': ndcg_value,
-                'average_precision_score': ap_value
             }
 
             spearman_coefs.append(correlation)
             spearman_ps.append(p_value)
             ndcg_list.append(ndcg_value)
-            ap_list.append(ap_value)
 
         mean_scores = {
             'spearman_correlation': {
@@ -299,7 +295,6 @@ class RankProblem(PredictByGroupProblemBase):
                 'std_dev_p_value': np.std(spearman_ps, ddof=1),
             },
             'ndcg_at_k': np.mean(ndcg_list),
-            'mean_average_precision_score': np.mean(ap_list)
         }
 
         return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
