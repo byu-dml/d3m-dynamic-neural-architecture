@@ -196,7 +196,7 @@ class RegressionProblem(ProblemBase):
         }
 
         return per_dataset_scores, mean_scores
-    
+
     def plot(self, predictions, data, scores, plot_dir: str):
         total_scores, per_dataset_scores = scores['total_scores'], scores['per_dataset_scores']
 
@@ -273,7 +273,7 @@ class RankProblem(PredictByGroupProblemBase):
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
             correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
-            
+
             per_dataset_scores[group] = {
                 'spearman_correlation': {
                         'correlation_coefficient': correlation,
