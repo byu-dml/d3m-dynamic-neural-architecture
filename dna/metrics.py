@@ -56,18 +56,17 @@ def spearman_correlation(x: typing.Sequence, y: typing.Sequence):
     return spearman.correlation, spearman.pvalue
 
 
-def dcg_score(
-    actual_relevance: typing.Sequence, predicted_rank: typing.Sequence, k: int = None, gains: str = 'exponential',
-    idcg=False
+def dcg_at_k(
+    relevance: typing.Sequence, rank: typing.Sequence = None, k: int = None, gains_f: str = 'exponential'
 ):
-    """Discounted cumulative gain (DCG) at rank position k
+    """Discounted cumulative gain (DCG) at rank k
 
     Parameters
     ----------
     actual_relevance: Sequence
-        Ground truth (true relevance labels, for us, the actual f1 scores)
+        True relevance labels
     predicted_rank: Sequence
-        Predicted rank for the predicted f1 scores.
+        Predicted rank for actual_relevance. If not provided, actual_relevance is assumed to be in rank order.
     k: int
         Rank position.
     gains: str
@@ -77,52 +76,52 @@ def dcg_score(
 
     Returns
     -------
-    DCG @k : float
+    DCG@k: float
     """
     if k is None:
-        k = len(predicted_rank)
-    if idcg:
-        # get ranking by sorting actual_relevance, largest first
-        # TODO: If we don't like this param we'd have to find the inverse of the argsort command so that we could pass that in
-        order = np.argsort(predicted_rank)[::-1]
-    else:
-        # already given a ranking to use - use it
-        order = np.argsort(predicted_rank)
-    actual_relevance = np.take(actual_relevance, order[:k])
+        k = len(relevance)
 
-    if gains == 'exponential':
-        gains = 2 ** actual_relevance - 1
-    elif gains == 'linear':
-        gains = actual_relevance
+    relevance = np.array(relevance)
+    if rank is None:
+        relevance_at_k = relevance[:k]
     else:
-        raise ValueError('Invalid gains option.')
+        rank_order = np.argsort(rank)
+        relevance_at_k = relevance[rank_order[:k]]
 
-    # highest rank is 1 so +2 instead of +1
-    discounts = np.log2(np.arange(len(actual_relevance)) + 2)
+    if gains_f == 'exponential':
+        gains = 2 ** relevance_at_k - 1
+    elif gains_f == 'linear':
+        gains = relevance_at_k
+    else:
+        raise ValueError('Invalid gains_f: {}'.format(gains_f))
+
+    # discount = log2(i + 1), with i starting at 1
+    discounts = np.log2(np.arange(2, k + 2))
     return np.sum(gains / discounts)
 
 
-def ndcg_score(
-    actual_relevance: typing.Sequence, predicted_rank: typing.Sequence, k: int = None, gains: str = 'exponential'
+def ndcg_at_k(
+    relevance: typing.Sequence, rank: typing.Sequence = None, k: int = None, gains_f: str = 'exponential'
 ):
     """Normalized discounted cumulative gain (NDCG) at rank k
     Parameters
     ----------
-    actual_relevance : array-like, shape = [n_samples]
-        Ground truth (true relevance labels, for us, the actual f1 scores)
-    predicted_rank : array-like, shape = [n_samples]
-        Predicted rank for the predicted f1 scores.
-    k : int
-        Rank.
-    gains : str
+    relevance: Sequence
+        True relevance labels
+    rank: Sequence
+        Predicted rank for relevance. If not provided, relevance is assumed to be in rank order.
+    k: int
+        Rank position.
+    gains: str
         Whether gains should be "exponential" (default) or "linear".
+
     Returns
     -------
-    NDCG @k : float
+    NDCG@k: float
     """
-    best = dcg_score(actual_relevance, actual_relevance, k, gains, idcg=True)
-    actual = dcg_score(actual_relevance, predicted_rank, k, gains)
-    return actual / best
+    dcg = dcg_at_k(relevance, rank, k=k, gains_f=gains_f)
+    idcg = dcg_at_k(np.sort(relevance)[::-1], k=k, gains_f=gains_f)
+    return dcg / idcg
 
 
 def average_precision(y_true, y_score, k):

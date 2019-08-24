@@ -131,20 +131,20 @@ class MetricsTestCase(unittest.TestCase):
         https://en.wikipedia.org/wiki/Discounted_cumulative_gain
         """
         # Check that some rankings are better than others
-        assert metrics.dcg_score([5, 3, 2], [2, 1, 0]) > metrics.dcg_score([4, 3, 2], [2, 1, 0])
-        assert metrics.dcg_score([4, 3, 2], [2, 1, 0]) > metrics.dcg_score([1, 3, 2], [2, 1, 0])
-        assert metrics.dcg_score([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_score([4, 3, 2], [2, 1, 0], k=2)
-        assert metrics.dcg_score([4, 3, 2], [2, 1, 0], k=2) == metrics.dcg_score([1, 3, 2], [2, 1, 0], k=2)
+        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0]) > metrics.dcg_at_k([4, 3, 2], [2, 1, 0])
+        assert metrics.dcg_at_k([4, 3, 2], [2, 1, 0]) > metrics.dcg_at_k([1, 3, 2], [2, 1, 0])
+        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_at_k([4, 3, 2], [2, 1, 0], k=2)
+        assert metrics.dcg_at_k([4, 3, 2], [2, 1, 0], k=2) == metrics.dcg_at_k([1, 3, 2], [2, 1, 0], k=2)
 
         # Check that sample order is irrelevant
-        assert metrics.dcg_score([5, 3, 2], [2, 1, 0]) == metrics.dcg_score([2, 3, 5], [0, 1, 2])
-        assert metrics.dcg_score([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_score([2, 3, 5], [0, 1, 2], k=2)
+        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0]) == metrics.dcg_at_k([2, 3, 5], [0, 1, 2])
+        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_at_k([2, 3, 5], [0, 1, 2], k=2)
 
         # wikipedia example
         true_metric = 6.86112668859
         ground_truth = [3, 2, 3, 0, 1, 2]
         predictions = [1, 2, 3, 4, 5, 6]
-        metric = metrics.dcg_score(ground_truth, predictions, k=6, gains='linear')
+        metric = metrics.dcg_at_k(ground_truth, predictions, k=6, gains_f='linear')
         np.testing.assert_almost_equal(
             metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
                 metric, true_metric
@@ -161,16 +161,16 @@ class MetricsTestCase(unittest.TestCase):
         https://en.wikipedia.org/wiki/Discounted_cumulative_gain
         """
         # Perfect rankings
-        assert metrics.ndcg_score([5, 3, 2], [0, 1, 2]) == 1.0
-        assert metrics.ndcg_score([2, 3, 5], [2, 1, 0]) == 1.0
-        assert metrics.ndcg_score([5, 3, 2], [0, 1, 2], k=2) == 1.0
-        assert metrics.ndcg_score([2, 3, 5], [2, 1, 0], k=2) == 1.0
+        assert metrics.ndcg_at_k([5, 3, 2], [0, 1, 2]) == 1.0
+        assert metrics.ndcg_at_k([2, 3, 5], [2, 1, 0]) == 1.0
+        assert metrics.ndcg_at_k([5, 3, 2], [0, 1, 2], k=2) == 1.0
+        assert metrics.ndcg_at_k([2, 3, 5], [2, 1, 0], k=2) == 1.0
 
         # wikipedia example
         true_metric = 0.96080819
         ground_truth = [3, 2, 3, 0, 1, 2]
         predictions = [1, 2, 3, 4, 5, 6]
-        metric = metrics.ndcg_score(ground_truth, predictions, k=6, gains='linear')
+        metric = metrics.ndcg_at_k(ground_truth, predictions, k=6, gains_f='linear')
         np.testing.assert_almost_equal(
             metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
                 metric, true_metric
