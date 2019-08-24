@@ -249,10 +249,9 @@ class PredictByGroupProblemBase(ProblemBase):
 
 class RankProblem(PredictByGroupProblemBase):
 
-    def __init__(self, group_key, k):
+    def __init__(self, group_key):
         super().__init__(group_key)
         self._predict_method_name = 'predict_rank'
-        self.k = k
 
     def score(self, predictions_by_group, targets):
         targets_by_group = self._group_data(targets)
@@ -269,7 +268,7 @@ class RankProblem(PredictByGroupProblemBase):
             group_predictions.sort_values(["rank"], ascending=True, inplace=True)
 
             # get IR metrics
-            ndcg_value = ndcg_at_k(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']) + 1, self.k) # add the one to start indexing at 1
+            ndcg_value = ndcg_at_k(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']))
 
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
@@ -280,7 +279,7 @@ class RankProblem(PredictByGroupProblemBase):
                         'correlation_coefficient': correlation,
                         'p_value': p_value
                     },
-                'ndcg_at_k': ndcg_value,
+                'ndcg': ndcg_value,
             }
 
             spearman_coefs.append(correlation)
@@ -294,7 +293,7 @@ class RankProblem(PredictByGroupProblemBase):
                 'mean_p_value': np.mean(spearman_ps),
                 'std_dev_p_value': np.std(spearman_ps, ddof=1),
             },
-            'ndcg_at_k': np.mean(ndcg_list),
+            'ndcg': np.mean(ndcg_list),
         }
 
         return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
@@ -348,6 +347,7 @@ class SubsetProblem(PredictByGroupProblemBase):
         top_1_regrets = []
         top_k_regrets = []
         top_k_counts = []
+        # TODO: ndcg@k
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = pd.DataFrame(targets_by_group[group])
@@ -385,6 +385,6 @@ def get_problem(problem_name: str, **kwargs):
     if problem_name == 'regression':
         return RegressionProblem()
     if problem_name == 'rank':
-        return RankProblem(group_key, kwargs['k'])
+        return RankProblem(group_key)
     if problem_name == 'subset':
         return SubsetProblem(group_key, kwargs['k'])
