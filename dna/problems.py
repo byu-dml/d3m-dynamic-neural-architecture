@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import group_json_objects
-from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation
+from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation, ndcg_at_k
 from dna import utils
 
 
@@ -196,7 +196,7 @@ class RegressionProblem(ProblemBase):
         }
 
         return per_dataset_scores, mean_scores
-    
+
     def plot(self, predictions, data, scores, plot_dir: str):
         total_scores, per_dataset_scores = scores['total_scores'], scores['per_dataset_scores']
 
@@ -257,13 +257,18 @@ class RankProblem(PredictByGroupProblemBase):
         targets_by_group = self._group_data(targets)
         spearman_coefs = []
         spearman_ps = []
+        ndcg_list = []
         per_dataset_scores = {}
 
         for group, group_predictions in predictions_by_group.items():
             group_predictions = pd.DataFrame(group_predictions)
             # have to sort by id in cases of ties
-            group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
-            group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
+            group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
+            group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
+            group_predictions.sort_values(['rank'], ascending=True, inplace=True)
+
+            # get IR metrics
+            ndcg_value = ndcg_at_k(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']))
 
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
@@ -273,11 +278,13 @@ class RankProblem(PredictByGroupProblemBase):
                 'spearman_correlation': {
                         'correlation_coefficient': correlation,
                         'p_value': p_value
-                    }
+                    },
+                'ndcg': ndcg_value,
             }
 
             spearman_coefs.append(correlation)
             spearman_ps.append(p_value)
+            ndcg_list.append(ndcg_value)
 
         mean_scores = {
             'spearman_correlation': {
@@ -285,7 +292,8 @@ class RankProblem(PredictByGroupProblemBase):
                 'std_dev': np.std(spearman_coefs, ddof=1),
                 'mean_p_value': np.mean(spearman_ps),
                 'std_dev_p_value': np.std(spearman_ps, ddof=1),
-            }
+            },
+            'ndcg': np.mean(ndcg_list),
         }
 
         return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
@@ -339,16 +347,18 @@ class SubsetProblem(PredictByGroupProblemBase):
         top_1_regrets = []
         top_k_regrets = []
         top_k_counts = []
+        ndcg_at_ks = []
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = pd.DataFrame(targets_by_group[group])
             # have to sort by id in cases of ties
-            group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
-            group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
+            group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
+            group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
 
             top_1_regrets.append(top_k_regret(group_predictions, group_targets, 1))
             top_k_regrets.append(top_k_regret(group_predictions, group_targets, self.k))
             top_k_counts.append(top_k_correct(group_predictions, group_targets, self.k))
+            ndcg_at_ks.append(self._ndcg_score(group_predictions, group_targets))
 
         return {
             'top_1_regret': {
@@ -365,10 +375,24 @@ class SubsetProblem(PredictByGroupProblemBase):
                 'mean': np.mean(top_k_counts),
                 'std_dev': np.std(top_k_counts, ddof=1),
             },
+            'ndcg_at_k': {
+                'k': self.k,
+                'mean': np.mean(ndcg_at_ks),
+                'std_dev': np.std(ndcg_at_ks, ddof=1),
+            }
         }
 
     def plot(self, *args, **kwargs):
         pass
+
+    def _ndcg_score(self, group_predictions, group_targets):
+        rank_map = {pipeline_id: i for i, pipeline_id in enumerate(group_predictions)}
+        relevance = []
+        rank = []
+        for i, (idx, row) in enumerate(group_targets.iterrows()):
+            relevance.append(row['test_f1_macro'])
+            rank.append(rank_map.get(row['pipeline_id'], i + self.k))
+        return ndcg_at_k(relevance, rank, k=self.k)
 
 
 def get_problem(problem_name: str, **kwargs):
