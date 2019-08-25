@@ -14,6 +14,7 @@ if $use_complete_data; then
     k=25
     metafeature_subset=all
     results_dir=./results
+    tuning_output_dir=./tuning_output
 
 else
     # small has 11 datasets
@@ -26,6 +27,7 @@ else
     k=2
     metafeature_subset=all
     results_dir=./dev_results
+    tuning_output_dir=./dev_tuning_output
 fi
 
 
@@ -39,7 +41,7 @@ python3 -m dna tune \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
     --tuning-config-path ./tuning_configs/dna_tuning_config.json \
-    --tuning-output-dir ./tuning_output \
+    --tuning-output-dir $tuning_output_dir \
     --problem regression rank subset \
     --objective $objective \
     --train-path $train_path \
