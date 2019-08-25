@@ -386,12 +386,14 @@ class SubsetProblem(PredictByGroupProblemBase):
         pass
 
     def _ndcg_score(self, group_predictions, group_targets):
+        rank_map = {pipeline_id: i for i, pipeline_id in enumerate(group_predictions)}
         relevance = []
-        for pipeline_id in group_predictions:
-            f1_macro = group_targets[group_targets['pipeline_id'] == pipeline_id]['test_f1_macro']
-            assert len(f1_macro) == 1
-            relevance.append(f1_macro.values[0])
-        return ndcg_at_k(relevance, k=self.k)
+        rank = []
+        for i, (idx, row) in enumerate(group_targets.iterrows()):
+            relevance.append(row['test_f1_macro'])
+            rank.append(rank_map.get(row['pipeline_id'], i + self.k))
+        return ndcg_at_k(relevance, rank, k=self.k)
+
 
 def get_problem(problem_name: str, **kwargs):
     group_key = 'dataset_id'
