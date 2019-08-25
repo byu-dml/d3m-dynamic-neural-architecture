@@ -263,9 +263,9 @@ class RankProblem(PredictByGroupProblemBase):
         for group, group_predictions in predictions_by_group.items():
             group_predictions = pd.DataFrame(group_predictions)
             # have to sort by id in cases of ties
-            group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
-            group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
-            group_predictions.sort_values(["rank"], ascending=True, inplace=True)
+            group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
+            group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
+            group_predictions.sort_values(['rank'], ascending=True, inplace=True)
 
             # get IR metrics
             ndcg_value = ndcg_at_k(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']))
@@ -347,17 +347,18 @@ class SubsetProblem(PredictByGroupProblemBase):
         top_1_regrets = []
         top_k_regrets = []
         top_k_counts = []
-        # TODO: ndcg@k
+        ndcg_at_ks = []
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = pd.DataFrame(targets_by_group[group])
             # have to sort by id in cases of ties
-            group_targets = pd.DataFrame(targets_by_group[group])[["pipeline_id", "test_f1_macro"]]
-            group_targets.sort_values(["test_f1_macro", "pipeline_id"], ascending=False, inplace=True)
+            group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
+            group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
 
             top_1_regrets.append(top_k_regret(group_predictions, group_targets, 1))
             top_k_regrets.append(top_k_regret(group_predictions, group_targets, self.k))
             top_k_counts.append(top_k_correct(group_predictions, group_targets, self.k))
+            ndcg_at_ks.append(self._ndcg_score(group_predictions, group_targets))
 
         return {
             'top_1_regret': {
@@ -374,11 +375,23 @@ class SubsetProblem(PredictByGroupProblemBase):
                 'mean': np.mean(top_k_counts),
                 'std_dev': np.std(top_k_counts, ddof=1),
             },
+            'ndcg_at_k': {
+                'k': self.k,
+                'mean': np.mean(ndcg_at_ks),
+                'std_dev': np.std(ndcg_at_ks, ddof=1),
+            }
         }
 
     def plot(self, *args, **kwargs):
         pass
 
+    def _ndcg_score(self, group_predictions, group_targets):
+        relevance = []
+        for pipeline_id in group_predictions:
+            f1_macro = group_targets[group_targets['pipeline_id'] == pipeline_id]['test_f1_macro']
+            assert len(f1_macro) == 1
+            relevance.append(f1_macro.values[0])
+        return ndcg_at_k(relevance, k=self.k)
 
 def get_problem(problem_name: str, **kwargs):
     group_key = 'dataset_id'
