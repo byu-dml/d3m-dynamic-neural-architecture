@@ -2,7 +2,6 @@ import torch
 
 from .base_models import PyTorchRegressionRankSubsetModelBase
 from .torch_modules.dna_module import DNAModule
-from dna.data import Dataset, GroupDataLoader
 
 
 class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
@@ -34,24 +33,4 @@ class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
             submodule_input_sizes, self.n_hidden_layers + 1, self.input_layer_size, self.hidden_layer_size,
             self.output_layer_size, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout,
             self.reduction_name, device=self.device, seed=self._model_seed
-        )
-
-    def _get_optimizer(self, learning_rate):
-        return torch.optim.Adam(self._model.parameters(), lr=learning_rate)
-
-    def _get_data_loader(self, data, batch_size, drop_last, shuffle=True):
-        return GroupDataLoader(
-            data = data,
-            group_key = 'pipeline.id',
-            dataset_class = Dataset,
-            dataset_params = {
-                'features_key': 'metafeatures',
-                'target_key': 'test_f1_macro',
-                'y_dtype': self.y_dtype,
-                'device': self.device
-            },
-            batch_size = batch_size,
-            drop_last = drop_last,
-            shuffle = shuffle,
-            seed = self.seed + 2
         )
