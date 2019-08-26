@@ -2,8 +2,7 @@ import typing
 
 import torch.nn as nn
 
-from . import PyTorchRandomStateContext
-from . import ACTIVATIONS
+from .torch_utils import PyTorchRandomStateContext, get_activation
 
 
 class Submodule(nn.Module):
@@ -16,7 +15,7 @@ class Submodule(nn.Module):
 
         with PyTorchRandomStateContext(seed):
             n_layers = len(layer_sizes) - 1
-            activation = ACTIVATIONS[activation_name]
+            activation = get_activation(activation_name)
 
             layers = []
             for i in range(n_layers):

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from . import get_reduction_function, PyTorchRandomStateContext
+from .torch_utils import PyTorchRandomStateContext, get_reduction
 
 
 class DAGLSTM(nn.Module):
@@ -15,7 +15,8 @@ class DAGLSTM(nn.Module):
     ):
         super().__init__()
 
-        self.reduction = get_reduction_function(reduction_name)
+        self.reduction = get_reduction(reduction_name)
+        self.reduction_dim = 0
 
         if dropout > 0:
             # Disable cuDNN so that the LSTM layer is deterministic, see https://github.com/pytorch/pytorch/issues/18110
@@ -48,13 +49,9 @@ class DAGLSTM(nn.Module):
         Computes the aggregate hidden state for a node in the DAG.
         """
         mean_hidden_state = self.reduction(
-            torch.stack(
-                [prev_lstm_states[i][0] for i in node_inputs]
-            ), dim=0
+            torch.stack([prev_lstm_states[i][0] for i in node_inputs]), dim=self.reduction_dim
         )
         mean_cell_state = self.reduction(
-            torch.stack(
-                [prev_lstm_states[i][1] for i in node_inputs]
-            ), dim=0
+            torch.stack([prev_lstm_states[i][1] for i in node_inputs]), dim=self.reduction_dim
         )
         return (mean_hidden_state, mean_cell_state)
