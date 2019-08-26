@@ -9,13 +9,13 @@ class DAGAttentionMLP(AttentionMLP):
     """
 
     def __init__(
-        self, n_layers: int, n_heads: int, in_features: int, attention_in_features: int, attention_hidden_features,
+        self, n_layers: int, n_heads: int, in_features: int, features_per_head: int, attention_hidden_features,
         attention_activation_name: str, dropout: float, reduction_name: str, use_mask: bool,
         mlp_extra_input_size: int, mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str,
         output_size: int, mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
     ):
         super().__init__(
-            n_layers, n_heads, in_features, attention_in_features, attention_hidden_features,
+            n_layers, n_heads, in_features, features_per_head, attention_hidden_features,
             attention_activation_name, dropout, reduction_name, use_mask, mlp_extra_input_size,
             mlp_hidden_layer_size, mlp_n_hidden_layers, mlp_activation_name, output_size, mlp_use_batch_norm,
             mlp_use_skip, device=device, seed=seed
