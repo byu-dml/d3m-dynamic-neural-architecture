@@ -2,9 +2,10 @@ import torch
 
 from .base_models import PyTorchModelBase
 from .base_models import PyTorchRegressionRankSubsetModelBase
-from .torch_modules import PyTorchRandomStateContext
+from .torch_modules.torch_utils import PyTorchRandomStateContext
 from .torch_modules.pmf import PMF
 from dna.data import PMFDataLoader
+#TODO: move all low-level torch stuff to torch_modules.pmf
 
 
 class PMFLoss(torch.nn.Module):

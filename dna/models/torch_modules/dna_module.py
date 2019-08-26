@@ -3,7 +3,7 @@ import typing
 import torch
 import torch.nn as nn
 
-from . import F_ACTIVATIONS, get_reduction
+from .torch_utils import get_activation, get_reduction
 from .submodule import Submodule
 
 
@@ -21,7 +21,7 @@ class DNAModule(nn.Module):
         self.hidden_layer_size = hidden_layer_size
         self.output_layer_size = output_layer_size
         self.activation_name = activation_name
-        self._activation = F_ACTIVATIONS[activation_name]
+        self._activation = get_activation(activation_name, functional=True)
         self.reduction_name = reduction_name
         if self.reduction_name == 'concat':
             self.reduction = torch.cat

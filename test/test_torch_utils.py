@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from dna.models.torch_modules import get_reduction
+from dna.models.torch_modules.torch_utils import get_reduction
 
 
 class TorchUtilsGetReductionTestCase(unittest.TestCase):

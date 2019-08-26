@@ -3,8 +3,8 @@ from torch import nn
 from torch_transformer import Encoder
 from torch_multi_head_attention import MultiHeadAttention
 
-from . import F_ACTIVATIONS, PyTorchRandomStateContext, get_reduction
 from .submodule import Submodule
+from .torch_utils import PyTorchRandomStateContext, get_activation, get_reduction
 
 
 class AttentionMLP(nn.Module):
@@ -45,8 +45,8 @@ class AttentionMLP(nn.Module):
                 hidden_features=attention_hidden_features,
                 encoder_num=n_layers,
                 head_num=n_heads,
-                attention_activation=F_ACTIVATIONS[attention_activation_name] if attention_activation_name is not None else None,
-                feed_forward_activation=F_ACTIVATIONS[mlp_activation_name],
+                attention_activation=get_activation(attention_activation_name, functional=True) if attention_activation_name is not None else None,
+                feed_forward_activation=get_activation(mlp_activation_name, functional=True),
                 dropout_rate=dropout
             )
         self.attention = self.attention.to(device)

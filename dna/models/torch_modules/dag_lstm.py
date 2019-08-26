@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from . import PyTorchRandomStateContext, get_reduction
+from .torch_utils import PyTorchRandomStateContext, get_reduction
 
 
 class DAGLSTM(nn.Module):
