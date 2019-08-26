@@ -3,8 +3,9 @@ import typing
 import torch
 import torch.nn as nn
 
+from . import F_ACTIVATIONS, get_reduction
 from .submodule import Submodule
-from . import F_ACTIVATIONS
+
 
 class DNAModule(nn.Module):
 
@@ -21,6 +22,13 @@ class DNAModule(nn.Module):
         self.output_layer_size = output_layer_size
         self.activation_name = activation_name
         self._activation = F_ACTIVATIONS[activation_name]
+        self.reduction_name = reduction_name
+        if self.reduction_name == 'concat':
+            self.reduction = torch.cat
+            self.reduction_dim = 1
+        else:
+            self.reduction = get_reduction(reduction_name)
+            self.reduction_dim = 0
         self.reduction_name = reduction_name
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
@@ -62,29 +70,19 @@ class DNAModule(nn.Module):
         pipeline_id, pipeline, x = args
         outputs = {'inputs.0': self._input_submodule(x)}
         for i, step in enumerate(pipeline['steps']):
-            inputs = self.reduction([outputs[j] for j in step['inputs']])
+            inputs = self._reduce([outputs[j] for j in step['inputs']])
             submodule = self._dynamic_submodules[step['name']]
             h = self._activation(submodule(inputs))
             outputs[i] = h
         return torch.squeeze(self._output_submodule(h))
 
-    def reduction(self, inputs: tuple):
-        if len(inputs) > 1:
-            # more than one tensor to aggregate
-            complete_tensor = torch.stack(inputs)
-            if self.reduction_name == 'concat':
-                return torch.cat(tuple((inputs)), dim=1)
-            elif self.reduction_name == 'max':
-                def op(inputs): 
-                    return torch.max(inputs, dim=0).values
-            elif self.reduction_name == 'mean':
-                def op(inputs): return torch.mean(inputs, dim=0)
-            elif self.reduction_name == 'sum':
-                def op(inputs): return torch.sum(inputs, dim=0)
-            else:
-                raise ValueError('Did not recognize the aggregate function: {}'.format(self.reduction_name))
-
-            return op(complete_tensor)
+    def _reduce(self, tensors: typing.Sequence[torch.Tensor]):
+        if len(tensors) == 1:
+            return tensors[0]
         else:
-            # only one tensor - no need for an aggregate
-            return inputs[0]
+            if self.reduction_name == 'concat':
+                reducible = tuple(tensors)
+            else:
+                reducible = torch.stack(tensors)
+            reduced = self.reduction(reducible, dim=self.reduction_dim)
+            return reduced

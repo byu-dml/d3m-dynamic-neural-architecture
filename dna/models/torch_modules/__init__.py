@@ -21,12 +21,19 @@ class PyTorchRandomStateContext:
         torch.random.set_rng_state(self._state)
 
 
-def get_reduction_function(reduction: str):
-    if reduction == 'mean':
+def get_reduction(reduction_name: str):
+    if reduction_name == 'mean':
         return torch.mean
-    elif reduction == 'sum':
+    if reduction_name == 'sum':
         return torch.sum
-    elif reduction == 'mul':
-        return torch.mul
-    else:
-        raise ValueError('unknown reduction: {}'.format(reduction))
+    if reduction_name == 'prod':
+        return torch.prod
+    if reduction_name == 'max':
+        def torch_max(input, dim, keepdim=False, out=None):
+            return torch.max(input=input, dim=dim, keepdim=keepdim, out=out).values
+        return torch_max
+    if reduction_name == 'median':
+        def torch_median(input, dim, keepdim=False, out=None):
+            return torch.median(input=input, dim=dim, keepdim=keepdim, out=out).values
+        return torch_median
+    raise ValueError('unknown reduction name: {}'.format(reduction_name))

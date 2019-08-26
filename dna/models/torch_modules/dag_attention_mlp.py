@@ -32,5 +32,5 @@ class DAGAttentionMLP(AttentionMLP):
             encoded_input = self._get_encoded_sequence(embedded_inputs, self.attention)
             embedded_dag[:, i] = encoded_input
 
-        encoded_dag = self.reduction(embedded_dag, dim=self.seq_len_dim)
+        encoded_dag = self.reduction(embedded_dag, dim=self.reduction_dim)
         return self._get_final_output(encoded_dag, features)

@@ -3,10 +3,8 @@ from torch import nn
 from torch_transformer import Encoder
 from torch_multi_head_attention import MultiHeadAttention
 
-from . import PyTorchRandomStateContext
-from . import F_ACTIVATIONS
+from . import F_ACTIVATIONS, PyTorchRandomStateContext, get_reduction
 from .submodule import Submodule
-from . import get_reduction_function
 
 
 class AttentionMLP(nn.Module):
@@ -38,7 +36,8 @@ class AttentionMLP(nn.Module):
         # This would be problematic because attention_in_features must be divisible by n_heads
         self.embedder = Submodule([in_features, attention_in_features], 'relu', False, False, 0, device=device, seed=seed)
 
-        self.reduction = get_reduction_function(reduction_name)
+        self.reduction = get_reduction(reduction_name)
+        self.reduction_dim = 1
 
         with PyTorchRandomStateContext(seed=seed):
             self.attention = Encoder(
@@ -59,7 +58,6 @@ class AttentionMLP(nn.Module):
         )
 
         self.device = device
-        self.seq_len_dim = 1
 
     def _get_encoded_sequence(self, sequence, attention):
         mask = None
@@ -67,7 +65,7 @@ class AttentionMLP(nn.Module):
             mask = MultiHeadAttention.gen_history_mask(sequence).to(self.device)
 
         attended_sequence = attention(sequence, mask=mask)
-        encoded_sequence = self.reduction(attended_sequence, dim=self.seq_len_dim)
+        encoded_sequence = self.reduction(attended_sequence, dim=self.reduction_dim)
         return encoded_sequence
 
     def _get_final_output(self, encoded_sequence, features):
