@@ -15,7 +15,7 @@ class AttentionMLP(nn.Module):
     """
 
     def __init__(
-        self, n_layers: int, n_heads: int, in_features: int, attention_in_features: int, attention_hidden_features,
+        self, n_layers: int, n_heads: int, in_features: int, features_per_head: int, attention_hidden_features,
         attention_activation_name: str, dropout: float, reduction_name: str, use_mask: bool, mlp_extra_input_size: int,
         mlp_hidden_layer_size: int, mlp_n_hidden_layers: int, mlp_activation_name: str, output_size: int,
         mlp_use_batch_norm: bool, mlp_use_skip: bool, *, device: str, seed: int
@@ -24,16 +24,8 @@ class AttentionMLP(nn.Module):
 
         self.use_mask = use_mask
 
-        if attention_in_features % n_heads != 0:
-            raise ValueError(
-                'attention_in_features must be divisible by n_heads. {0} is not divisible by {1}'.format(
-                    attention_in_features, n_heads
-                )
-            )
+        attention_in_features = features_per_head * n_heads
 
-        # The embedder maps one hot encoded inputs to a feature space with a dimension size that the encoder can handle
-        # Without the embedder, the encoder input feature size is restricted to the number of one hot encodings
-        # This would be problematic because attention_in_features must be divisible by n_heads
         self.embedder = Submodule([in_features, attention_in_features], 'relu', False, False, 0, device=device, seed=seed)
 
         self.reduction = get_reduction(reduction_name)

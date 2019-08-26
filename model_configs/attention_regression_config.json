@@ -9,7 +9,7 @@
 
     "n_layers": 2,
     "n_heads": 2,
-    "attention_in_features": 8,
+    "features_per_head": 4,
     "attention_hidden_features": 8,
     "attention_activation_name": null,
     "reduction_name": "sum",

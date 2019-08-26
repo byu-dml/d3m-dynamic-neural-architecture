@@ -33,7 +33,7 @@ class DAGAttentionRegressionModel(AttentionRegressionModel):
             n_layers=self.n_layers,
             n_heads=self.n_heads,
             in_features=self.num_primitives,
-            attention_in_features=self.attention_in_features,
+            features_per_head=self.features_per_head,
             attention_activation_name=self.attention_activation_name,
             attention_hidden_features=self.attention_hidden_features,
             dropout=self.dropout,

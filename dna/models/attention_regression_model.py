@@ -5,7 +5,7 @@ from .torch_modules.attention_mlp import AttentionMLP
 class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
 
     def __init__(
-        self, n_layers: int, n_heads: int, attention_in_features: int, attention_hidden_features: int,
+        self, n_layers: int, n_heads: int, features_per_head: int, attention_hidden_features: int,
         attention_activation_name: str, reduction_name: str, use_mask: bool, activation_name: str, dropout: float,
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, use_skip: bool,
         loss_function_name, *, device: str = 'cuda:0', seed: int = 0
@@ -17,7 +17,7 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
 
         self.n_layers = n_layers
         self.n_heads = n_heads
-        self.attention_in_features = attention_in_features
+        self.features_per_head = features_per_head
         self.attention_hidden_features = attention_hidden_features
         self.attention_activation_name = attention_activation_name
         self.reduction_name = reduction_name
@@ -29,7 +29,7 @@ class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
             n_layers=self.n_layers,
             n_heads=self.n_heads,
             in_features=self.num_primitives,
-            attention_in_features=self.attention_in_features,
+            features_per_head=self.features_per_head,
             attention_activation_name=self.attention_activation_name,
             attention_hidden_features=self.attention_hidden_features,
             dropout=self.dropout,
