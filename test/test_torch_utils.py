@@ -16,17 +16,14 @@ class TorchUtilsGetReductionTestCase(unittest.TestCase):
     def test_mean(self):
         reduction = get_reduction('mean')
         self.assertEqual(reduction, torch.mean)
-        self._assert_tensors_equal(reduction(self.tensor, dim=0), torch.mean(self.tensor, dim=0))
 
     def test_sum(self):
         reduction = get_reduction('sum')
         self.assertEqual(reduction, torch.sum)
-        self._assert_tensors_equal(reduction(self.tensor, dim=0), torch.sum(self.tensor, dim=0))
 
     def test_prod(self):
         reduction = get_reduction('prod')
         self.assertEqual(reduction, torch.prod)
-        self._assert_tensors_equal(reduction(self.tensor, dim=0), torch.prod(self.tensor, dim=0))
 
     def test_max(self):
         reduction = get_reduction('max')
