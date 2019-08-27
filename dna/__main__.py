@@ -301,7 +301,7 @@ def configure_tuning_parser(parser):
     )
     parser.add_argument(
         '--objective', type=str, action='store', required=True,
-        choices=['total_rmse', 'top_k_regret', 'spearman_mean']
+        choices=['total_rmse', 'top_k_regret', 'spearman_mean', 'ndcg', 'ndcg@k']
     )
     parser.add_argument(
         '--tuning-output-dir', type=str, default=None,
@@ -310,13 +310,14 @@ def configure_tuning_parser(parser):
     configure_evaluate_parser(parser)
 
 
-def tuning_handler(arguments: argparse.Namespace):
-    # gather config files
-    with open(arguments.model_config_path, 'r') as file:
-        model_config = json.load(file)
-    with open(arguments.tuning_config_path, 'r') as file:
-        tuning_config = json.load(file)
+def _get_tuning_objective(arguments: argparse.Namespace):
+    """Creates the objective function used for tuning.
 
+    Returns
+    -------
+    (objective, minimize): tuple(Callable, bool)
+        a tuple containing the objective function and a Boolean indicating whether the objective should be minimized
+    """
     if arguments.objective == 'total_rmse':
         score_problem = 'regression'
         score_path = ('test_scores', 'total_scores', 'total_rmse')
@@ -329,10 +330,18 @@ def tuning_handler(arguments: argparse.Namespace):
         score_problem = 'rank'
         score_path = ('test_scores', 'mean_scores', 'spearman_correlation', 'mean')
         minimize = False
+    elif arguments.objective == 'ndcg':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'mean_scores', 'ndcg')
+        minimize = False
+    elif arguments.objective == 'ndcg@k':
+        score_problem = 'subset'
+        score_path = ('test_scores', 'ndcg_at_k', 'mean')
+        minimize = False
     else:
         raise ValueError('unknown objective {}'.format(arguments.objective))
 
-    def _evaluate_model(model_config):
+    def objective(model_config):
         result_scores = handle_evaluate(model_config, arguments)
         for scores in result_scores:
             if scores['problem_name'] == score_problem:
@@ -342,8 +351,20 @@ def tuning_handler(arguments: argparse.Namespace):
                 return (score,)
         raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
 
+    return objective, minimize
+
+
+def tuning_handler(arguments: argparse.Namespace):
+    # gather config files
+    with open(arguments.model_config_path, 'r') as file:
+        model_config = json.load(file)
+    with open(arguments.tuning_config_path, 'r') as file:
+        tuning_config = json.load(file)
+
+    objective, minimize = _get_tuning_objective(arguments)
+
     tune = TuningDeap(
-        _evaluate_model, tuning_config, model_config, minimize=minimize, output_dir=arguments.tuning_output_dir,
+        objective, tuning_config, model_config, minimize=minimize, output_dir=arguments.tuning_output_dir,
         verbose=arguments.verbose
     )
     best_config, best_score = tune.run_evolutionary()

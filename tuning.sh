@@ -1,7 +1,7 @@
 #!/bin/bash
 
 use_complete_data=false
-objective=top_k_regret
+objective=ndcg
 
 if $use_complete_data; then
     # complete has 194 datasets
@@ -37,10 +37,13 @@ python3 -m dna split-data \
     --split-seed $test_split_seed
 
 
+model=dna_regression
+
+
 python3 -m dna tune \
-    --model dna_regression \
-    --model-config-path ./model_configs/dna_regression_config.json \
-    --tuning-config-path ./tuning_configs/dna_tuning_config.json \
+    --model $model \
+    --model-config-path ./model_configs/${model}_config.json \
+    --tuning-config-path ./tuning_configs/${model}_tuning_config.json \
     --tuning-output-dir $tuning_output_dir \
     --problem regression rank subset \
     --objective $objective \
