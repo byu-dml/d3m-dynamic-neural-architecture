@@ -216,8 +216,8 @@ def evaluate(
     )
 
 
-def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
-    run_id = str(uuid.uuid4())
+def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace, run_id=None):
+    run_id = str(uuid.uuid4()) if run_id is None else run_id
 
     output_dir = arguments.output_dir
     model_output_dir = None
@@ -460,7 +460,8 @@ def rerun_handler(args: argparse.Namespace):
 
     arguments = utils.dict_to_namespace(arguments)
 
-    handle_evaluate(model_config, arguments)
+    result_scores = handle_evaluate(model_config, arguments)
+    return result_scores
 
 
 def get_train_and_test_data(

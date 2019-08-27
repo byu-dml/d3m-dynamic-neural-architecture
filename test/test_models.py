@@ -1,13 +1,13 @@
 import argparse
-import json
-import os
 import unittest
+import json
 
 import torch
 
-from dna.__main__ import configure_evaluate_parser, evaluate, get_train_and_test_data, split_handler, configure_split_parser
+from dna.__main__ import split_handler, configure_split_parser, evaluate, get_train_and_test_data
 from dna.models import get_model
 from dna.problems import get_problem
+from test.utils import get_evaluate_args
 
 
 class ModelDeterminismTestCase(unittest.TestCase):
@@ -44,21 +44,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
 
     def _test_determinism(self, model: str, model_config_path: str):
         # Set the arguments for this test
-        parser = argparse.ArgumentParser()
-        configure_evaluate_parser(parser)
-        argv = [
-            '--model', model,
-            '--model-config-path', model_config_path,
-            '--model-seed', '0',
-            '--problem', 'regression', 'rank', 'subset',
-            '--k', '2',
-            '--train-path', self.data_path_train,
-            '--test-size', '2',
-            '--split-seed', '0',
-            '--metafeature-subset', 'all',
-            '--no-cache',
-        ]
-        arguments = parser.parse_args(argv)
+        arguments = get_evaluate_args(model, model_config_path, self.data_path_train)
 
         results1 = self._evaluate_model(arguments)
         results2 = self._evaluate_model(arguments)
