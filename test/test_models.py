@@ -1,13 +1,11 @@
-import argparse
 import unittest
-import json
 
 import torch
 
 from dna.__main__ import evaluate, get_train_and_test_data
 from dna.models import get_model
 from dna.problems import get_problem
-from test.utils import get_evaluate_args, split_data
+from test.utils import get_evaluate_args, split_data, get_model_config
 
 
 class ModelDeterminismTestCase(unittest.TestCase):
@@ -41,15 +39,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
     @staticmethod
     def _evaluate_model(arguments):
         model_config_path = getattr(arguments, 'model_config_path', None)
-        if model_config_path is None:
-            model_config = {}
-        else:
-            with open(model_config_path) as f:
-                model_config = json.load(f)
-                if not torch.cuda.is_available():
-                    if '__init__' not in model_config:
-                        model_config['__init__'] = {}
-                    model_config['__init__']['device'] = 'cpu'
+        model_config = get_model_config(model_config_path)
         model = get_model(arguments.model, model_config, seed=arguments.model_seed)
 
         train_data, test_data = get_train_and_test_data(

@@ -1,4 +1,7 @@
 import argparse
+import json
+
+import torch
 
 from dna.__main__ import configure_evaluate_parser, configure_split_parser, split_handler
 
@@ -36,3 +39,16 @@ def split_data(data_path_train: str, raw_data_path: str):
     ]
     arguments = parser.parse_args(argv)
     split_handler(arguments)
+
+
+def get_model_config(model_config_path: str):
+    if model_config_path is None:
+        model_config = {}
+    else:
+        with open(model_config_path) as f:
+            model_config = json.load(f)
+            if not torch.cuda.is_available():
+                if '__init__' not in model_config:
+                    model_config['__init__'] = {}
+                model_config['__init__']['device'] = 'cpu'
+    return model_config

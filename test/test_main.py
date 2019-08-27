@@ -5,7 +5,7 @@ import os
 import shutil
 
 from dna.__main__ import handle_evaluate, configure_rerun_parser, rerun_handler, EvaluateResult
-from test.utils import get_evaluate_args, split_data
+from test.utils import get_evaluate_args, split_data, get_model_config
 
 
 class RerunTestCase(unittest.TestCase):
@@ -31,8 +31,7 @@ class RerunTestCase(unittest.TestCase):
         shutil.rmtree(output_dir, ignore_errors=True)
 
         # Get the results from the command handler and save the results in a run.json
-        with open(model_config_path) as f:
-            model_config = json.load(f)
+        model_config = get_model_config(model_config_path)
         run_id = 'abc123'
         results1 = handle_evaluate(model_config, evaluate_args, run_id=run_id)
 
