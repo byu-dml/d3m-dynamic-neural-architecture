@@ -307,6 +307,14 @@ def configure_tuning_parser(parser):
         '--tuning-output-dir', type=str, default=None,
         help='directory path to write outputs from tuningDEAP'
     )
+    parser.add_argument(
+        '--n-generations', type=int, default=1,
+        help='How many generations to tune for'
+    )
+    parser.add_argument(
+        '--population-size', type=int, default=1,
+        help='the number of individuals to generate each population'
+    )
     configure_evaluate_parser(parser)
 
 
@@ -367,10 +375,11 @@ def tuning_handler(arguments: argparse.Namespace):
         tuning_config = json.load(file)
 
     objective, minimize = _get_tuning_objective(arguments)
+    uuid_of_run = str(uuid.uuid4())
 
     tune = TuningDeap(
-        objective, tuning_config, model_config, minimize=minimize, output_dir=arguments.tuning_output_dir,
-        verbose=arguments.verbose
+        objective, tuning_config, model_config, minimize=minimize, output_dir=os.path.join(arguments.tuning_output_dir, arguments.model + uuid_of_run),
+        verbose=arguments.verbose, population_size=arguments.population_size, n_generations=arguments.n_generations
     )
     best_config, best_score = tune.run_evolutionary()
     if arguments.verbose:
