@@ -5,10 +5,16 @@ import os
 import shutil
 
 from dna.__main__ import handle_evaluate, configure_rerun_parser, rerun_handler, EvaluateResult
-from test.utils import get_evaluate_args
+from test.utils import get_evaluate_args, split_data
 
 
 class RerunTestCase(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        data_path_train = 'data/small_classification_train.json'
+        raw_data_path =  'data/small_classification.tar.xz'
+        split_data(data_path_train, raw_data_path)
 
     def test_rerun(self):
         # Get the arguments for the evaluate command

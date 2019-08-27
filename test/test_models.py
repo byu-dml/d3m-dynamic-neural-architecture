@@ -4,31 +4,19 @@ import json
 
 import torch
 
-from dna.__main__ import split_handler, configure_split_parser, evaluate, get_train_and_test_data
+from dna.__main__ import evaluate, get_train_and_test_data
 from dna.models import get_model
 from dna.problems import get_problem
-from test.utils import get_evaluate_args
+from test.utils import get_evaluate_args, split_data
 
 
 class ModelDeterminismTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # make sure the data is unzipped and ready
         cls.data_path_train = 'data/small_classification_train.json'
         cls.raw_data_path =  'data/small_classification.tar.xz'
-        parser = argparse.ArgumentParser()
-        configure_split_parser(parser)
-        argv = [
-            "--data-path", "data/small_classification.tar.xz",
-            "--train-path", cls.data_path_train,
-            "--test-path", 'data/small_classification_test.json',
-            "--test-size", "2",
-            '--split-seed', "0"
-        ]        
-        cls.arguments = parser.parse_args(argv)
-        split_handler(cls.arguments)
-        
+        split_data(cls.data_path_train, cls.raw_data_path)
 
     def test_dna_regression_determinism(self):
         self._test_determinism(
