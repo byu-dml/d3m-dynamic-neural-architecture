@@ -342,14 +342,19 @@ def _get_tuning_objective(arguments: argparse.Namespace):
         raise ValueError('unknown objective {}'.format(arguments.objective))
 
     def objective(model_config):
-        result_scores = handle_evaluate(model_config, arguments)
-        for scores in result_scores:
-            if scores['problem_name'] == score_problem:
-                score = scores
-                for key in score_path:
-                    score = score[key]
-                return (score,)
-        raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
+        try:
+            result_scores = handle_evaluate(model_config, arguments)
+            for scores in result_scores:
+                if scores['problem_name'] == score_problem:
+                    score = scores
+                    for key in score_path:
+                        score = score[key]
+                    return (score,)
+            raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e from e
 
     return objective, minimize
 
