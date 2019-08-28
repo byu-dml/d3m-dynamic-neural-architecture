@@ -38,7 +38,8 @@ python3 -m dna split-data \
 
 
 model=dna_regression
-
+n_generations=2
+population_size=2
 
 python3 -m dna tune \
     --model $model \
@@ -54,4 +55,6 @@ python3 -m dna tune \
     --split-seed $validation_split_seed \
     --model-seed $validation_split_seed \
     --output-dir $results_dir \
+    --n-generations $n_generations \
+    --population-size $population_size \
     --verbose
