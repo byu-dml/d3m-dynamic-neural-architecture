@@ -376,10 +376,13 @@ def tuning_handler(arguments: argparse.Namespace):
         tuning_config = json.load(file)
 
     objective, minimize = _get_tuning_objective(arguments)
-    uuid_of_run = str(uuid.uuid4())
+    tuning_run_id = str(uuid.uuid4())
+    tuning_output_dir = os.path.join(arguments.tuning_output_dir, arguments.model, tuning_run_id)
+    if not os.path.isdir(tuning_output_dir):
+        os.makedirs(tuning_output_dir)
 
     tune = TuningDeap(
-        objective, tuning_config, model_config, minimize=minimize, output_dir=os.path.join(arguments.tuning_output_dir, arguments.model + uuid_of_run),
+        objective, tuning_config, model_config, minimize=minimize, output_dir=tuning_output_dir,
         verbose=arguments.verbose, population_size=arguments.population_size, n_generations=arguments.n_generations
     )
     best_config, best_score = tune.run_evolutionary()

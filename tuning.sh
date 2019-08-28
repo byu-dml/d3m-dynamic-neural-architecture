@@ -38,8 +38,8 @@ python3 -m dna split-data \
 
 
 model=dna_regression
-n_generations=5
-population_size=10
+n_generations=2
+population_size=2
 
 python3 -m dna tune \
     --model $model \
