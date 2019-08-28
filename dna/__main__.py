@@ -6,6 +6,7 @@ import random
 import sys
 import typing
 import uuid
+import warnings
 
 import numpy as np
 
@@ -422,12 +423,12 @@ def rescore_handler(arguments: argparse.Namespace):
         problem.plot(test_predictions, test_data, test_rescores, os.path.join(plot_dir, 'test'))
 
     # Save the re-scored json file
-    rescore_path = os.path.join(output_dir, 'rescore.json')
+    rescore_path = os.path.join(output_dir, 'run.json')
     with open(rescore_path, 'w') as f:
         json.dump(results, f, indent=4)
 
 
-def rescore(score: dict, data: list, score_type: str, problem):
+def rescore(score: dict, data: list, score_type: str, problem: ProblemBase):
     predictions_key = score_type + '_predictions'
     predictions = score[predictions_key]
     rescores = problem.score(predictions, data)
@@ -436,13 +437,17 @@ def rescore(score: dict, data: list, score_type: str, problem):
     return predictions, rescores
 
 
-def check_scores(scores: dict, rescores: dict, score_type: str):
+def check_scores(scores: dict, rescores: dict, score_type: str, *, _path: str = ''):
     for k, v1 in scores.items():
+        if _path == '':
+            path = k
+        else:
+            path = '{}.{}'.format(_path, k)
         v2 = rescores[k]
         if type(v1) == dict:
-            check_scores(v1, v2, score_type)
+            check_scores(v1, v2, score_type, _path=path)
         elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
-            raise ValueError('{} {} score value {} does not equal rescore value {}'.format(score_type, k, v1, v2))
+            warnings.warn('{} {} score value {} does not equal rescore value {}'.format(score_type, path, v1, v2))
 
 
 def get_train_and_test_data(
