@@ -413,11 +413,13 @@ def rescore_handler(arguments: argparse.Namespace):
     for score in results['scores']:
         problem = get_problem(score['problem_name'], **results['arguments'])
 
-        train_predictions, train_scores = rescore(score, train_data, 'train', problem)
-        test_predictions, test_scores = rescore(score, test_data, 'test', problem)
+        train_predictions, train_rescores = rescore(score, train_data, 'train', problem)
+        score['train_scores'] = train_rescores
+        test_predictions, test_rescores = rescore(score, test_data, 'test', problem)
+        score['test_scores'] = test_rescores
 
-        problem.plot(train_predictions, train_data, train_scores, os.path.join(plot_dir, 'train'))
-        problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
+        problem.plot(train_predictions, train_data, train_rescores, os.path.join(plot_dir, 'train'))
+        problem.plot(test_predictions, test_data, test_rescores, os.path.join(plot_dir, 'test'))
 
     # Save the re-scored json file
     rescore_path = os.path.join(output_dir, 'rescore.json')
@@ -428,12 +430,10 @@ def rescore_handler(arguments: argparse.Namespace):
 def rescore(score: dict, data: list, score_type: str, problem):
     predictions_key = score_type + '_predictions'
     predictions = score[predictions_key]
-    scores = problem.score(predictions, data)
+    rescores = problem.score(predictions, data)
     score_key = score_type + '_scores'
-    check_scores(scores, score[score_key], score_type)
-    score[score_key] = scores
-
-    return predictions, scores
+    check_scores(score[score_key], rescores, score_type)
+    return predictions, rescores
 
 
 def check_scores(scores: dict, rescores: dict, score_type: str):
