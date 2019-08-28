@@ -31,8 +31,8 @@ def handler(arguments: argparse.Namespace):
     regression_results, rank_results, subset_results = load_results(result_paths)
 
     regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.total_rmse', min)
-    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.spearman_correlation.mean', max)
-    subset_leaderboard = make_leaderboard(subset_results, 'model_name', 'test.top_k_regret.mean', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.ndcg', max)
+    subset_leaderboard = make_leaderboard(subset_results, 'model_name', 'test.ndcg_at_k.mean', max)
 
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
@@ -146,11 +146,23 @@ def parse_subset_scores(scores: typing.Dict):
 
 
 def make_leaderboard(results: pd.DataFrame, id_col: str, score_col: str, opt: typing.Callable):
-    leader_indices = results.groupby(id_col)[score_col].transform(opt) == results[score_col]
+    grouped_results = results.groupby(id_col)
+    counts = grouped_results.size().astype(int)
+    counts.name = 'count'
+    leader_indices = grouped_results[score_col].transform(opt) == results[score_col]
     leaderboard = results[leader_indices].drop_duplicates([id_col, score_col])
     leaderboard.sort_values([score_col, id_col], ascending=opt==min, inplace=True)
     leaderboard.reset_index(drop=True, inplace=True)
-    return leaderboard.round(6)
+    leaderboard = leaderboard.join(counts, on=id_col)
+
+    columns = list(leaderboard.columns)
+    columns.remove(id_col)
+    columns.remove(score_col)
+    columns.remove(counts.name)
+
+    leaderboard = leaderboard[[id_col, counts.name, score_col] + sorted(columns)]
+
+    return leaderboard.round(8)
 
 
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
