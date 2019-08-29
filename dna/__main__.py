@@ -10,7 +10,7 @@ import warnings
 
 import numpy as np
 
-from tuningdeap import TuningDeap
+from tuningdeap import TuningDeap, TuningBayes
 
 from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
@@ -316,6 +316,18 @@ def configure_tuning_parser(parser):
         '--population-size', type=int, default=1,
         help='the number of individuals to generate each population'
     )
+    parser.add_argument(
+        '--tuning-type', type=str, default="genetic",
+        help="which algorithm to tune with: genetic or bayesian", choices=["genetic", "bayesian"]
+    )
+    parser.add_argument(
+        '--n-calls', type=int, default=1,
+        help='the number of iterations to use with the bayesian tuner'
+    )
+    parser.add_argument(
+        '--warm-start-path', type=str, default=None,
+        help="path to csv file to warm start with. Must match tuning config file",
+    )
     configure_evaluate_parser(parser)
 
 
@@ -358,7 +370,7 @@ def _get_tuning_objective(arguments: argparse.Namespace):
                     score = scores
                     for key in score_path:
                         score = score[key]
-                    return (score,)
+                    return score
             raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
         except Exception as e:
             import traceback
@@ -381,11 +393,20 @@ def tuning_handler(arguments: argparse.Namespace):
     if not os.path.isdir(tuning_output_dir):
         os.makedirs(tuning_output_dir)
 
-    tune = TuningDeap(
-        objective, tuning_config, model_config, minimize=minimize, output_dir=tuning_output_dir,
-        verbose=arguments.verbose, population_size=arguments.population_size, n_generations=arguments.n_generations
-    )
-    best_config, best_score = tune.run_evolutionary()
+    if arguments.warm_start_path is not None:
+        warm_start = {"warm_start_path": arguments.warm_start_path}
+
+    if arguments.tuning_type == "genetic":
+        tune = TuningDeap(
+            objective, tuning_config, model_config, minimize=minimize, output_dir=tuning_output_dir,
+            verbose=arguments.verbose, population_size=arguments.population_size, n_generations=arguments.n_generations, **warm_start
+        )
+    else:
+        tune = TuningBayes(
+            objective, tuning_config, model_config, minimize=minimize, output_dir=tuning_output_dir,
+            verbose=arguments.verbose, n_calls=arguments.n_calls, **warm_start
+        )
+    best_config, best_score = tune.run()
     if arguments.verbose:
         print('The best config found was {} with a score of {}'.format(
             ' '.join([str(item) for item in best_config]), best_score

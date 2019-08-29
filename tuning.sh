@@ -40,9 +40,15 @@ python3 -m dna split-data \
 model=dna_regression
 n_generations=2
 population_size=2
+warm_start_path="./tmp/bayes.csv"
+tuning_type=genetic
+# tuning_type=bayesian
+
 
 python3 -m dna tune \
     --model $model \
+    --tuning-type $tuning_type \
+    # --warm-start-path $warm_start_path \
     --model-config-path ./model_configs/${model}_config.json \
     --tuning-config-path ./tuning_configs/${model}_tuning_config.json \
     --tuning-output-dir $tuning_output_dir \
