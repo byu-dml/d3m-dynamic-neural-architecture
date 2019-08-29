@@ -377,6 +377,7 @@ def tuning_handler(arguments: argparse.Namespace):
         print('The best config found was {} with a score of {}'.format(
             ' '.join([str(item) for item in best_config]), best_score
         ))
+    return best_config, best_score
 
 
 def configure_rescore_parser(parser):

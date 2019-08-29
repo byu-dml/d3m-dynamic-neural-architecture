@@ -6,10 +6,7 @@ import torch
 from dna.__main__ import configure_evaluate_parser, configure_split_parser, split_handler
 
 
-def get_evaluate_args(model: str, model_config_path: str, data_path_train):
-    parser = argparse.ArgumentParser()
-
-    configure_evaluate_parser(parser)
+def get_evaluate_argv(model: str, model_config_path: str, data_path_train: str):
     argv = [
         '--model', model,
         '--model-config-path', model_config_path,
@@ -22,8 +19,17 @@ def get_evaluate_args(model: str, model_config_path: str, data_path_train):
         '--metafeature-subset', 'all',
         '--no-cache',
     ]
+    return argv
+
+def parse_args(argv, configure_parser_method):
+    parser = argparse.ArgumentParser()
+    configure_parser_method(parser)
     arguments = parser.parse_args(argv)
     return arguments
+
+def get_evaluate_args(model: str, model_config_path: str, data_path_train):
+    argv = get_evaluate_argv(model, model_config_path, data_path_train)
+    return parse_args(argv, configure_evaluate_parser)
 
 
 def split_data(data_path_train: str, raw_data_path: str):
