@@ -10,7 +10,7 @@ import warnings
 
 import numpy as np
 
-from tuningdeap import TuningDeap, TuningBayes
+from configtune import TuningDeap, TuningBayes
 
 from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
@@ -393,6 +393,7 @@ def tuning_handler(arguments: argparse.Namespace):
     if not os.path.isdir(tuning_output_dir):
         os.makedirs(tuning_output_dir)
 
+    warm_start = {}
     if arguments.warm_start_path is not None:
         warm_start = {"warm_start_path": arguments.warm_start_path}
 
