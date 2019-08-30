@@ -15,7 +15,7 @@ def init_tests():
     rerun_output_dir = 'tmp_output'
     rerun_id = 'abc123'
     model = 'lstm'
-    model_config_path = 'model_configs/lstm_config.json'
+    model_config_path = 'test/model_configs/lstm_config.json'
 
     # Split the data
     data_path = 'data/small_classification_train.json'
