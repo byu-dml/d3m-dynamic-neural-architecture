@@ -267,12 +267,11 @@ class RankProblem(PredictByGroupProblemBase):
             group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
             group_predictions.sort_values(['rank'], ascending=True, inplace=True)
 
-            # get IR metrics
-            ndcg_value = ndcg_at_k(group_targets['test_f1_macro'], utils.rank(group_predictions['rank']))
-
             # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
             correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
+
+            ndcg_value = ndcg_at_k(merged_data['test_f1_macro'], merged_data['rank'])
 
             per_dataset_scores[group] = {
                 'spearman_correlation': {
