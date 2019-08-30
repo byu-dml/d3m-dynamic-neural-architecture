@@ -98,6 +98,7 @@ def load_result(result_path: str):
             parsed_scores = parse_rank_scores(problem_scores)
         elif problem_name == 'subset':
             parsed_scores = parse_subset_scores(problem_scores)
+        result_path = os.path.abspath(result_path)
         parsed_scores['path'] = os.path.dirname(result_path)
         result[problem_name] = parsed_scores
     return result
