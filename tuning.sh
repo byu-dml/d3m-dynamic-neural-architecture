@@ -1,7 +1,7 @@
 #!/bin/bash
 
 use_complete_data=false
-objective=total_rmse
+objective=ndcg
 
 if $use_complete_data; then
     # complete has 194 datasets
@@ -42,6 +42,7 @@ n_generations=2
 population_size=2
 # tuning_type=genetic
 tuning_type=bayesian
+n_calls=5
 # warm_start="--warm-start-path ''./tmp/bayes.csv'"
 
 
@@ -63,4 +64,5 @@ python3 -m dna tune \
     --output-dir $results_dir \
     --n-generations $n_generations \
     --population-size $population_size \
+    --n-calls $n_calls \
     --verbose

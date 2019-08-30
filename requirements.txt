@@ -60,4 +60,4 @@ tqdm==4.32.2
 typing==3.7.4
 urllib3==1.25.3
 xgboost==0.90
-configtune==0.0.7
+configtune==0.0.8

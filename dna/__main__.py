@@ -543,6 +543,11 @@ def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
 
     return new_train_data, itsp_test_data, ootsp_test_data
 
+def serialize_numpy(o):
+    if isinstance(o, np.int64):
+        return int(o)  
+    else: 
+        return o
 
 def record_run(
     run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
@@ -562,7 +567,7 @@ def record_run(
         run['scores'] = scores
 
     with open(path, 'w') as f:
-        json.dump(run, f, indent=4, sort_keys=True)
+        json.dump(run, f, indent=4, sort_keys=True, default=serialize_numpy)
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
