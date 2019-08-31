@@ -217,8 +217,8 @@ def evaluate(
     )
 
 
-def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
-    run_id = str(uuid.uuid4())
+def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace, run_id=None):
+    run_id = str(uuid.uuid4()) if run_id is None else run_id
 
     output_dir = arguments.output_dir
     model_output_dir = None
@@ -390,6 +390,7 @@ def tuning_handler(arguments: argparse.Namespace):
         print('The best config found was {} with a score of {}'.format(
             ' '.join([str(item) for item in best_config]), best_score
         ))
+    return best_config, best_score
 
 
 def configure_rescore_parser(parser):
@@ -460,6 +461,25 @@ def check_scores(scores: dict, rescores: dict, score_type: str, *, _path: str = 
             check_scores(v1, v2, score_type, _path=path)
         elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
             warnings.warn('{} {} score value {} does not equal rescore value {}'.format(score_type, path, v1, v2))
+
+
+def configure_rerun_parser(parser):
+    parser.add_argument(
+        '--run-path', type=str, action='store', required=True,
+        help='path to the run.json file which contains the configuration to rerun'
+    )
+
+
+def rerun_handler(args: argparse.Namespace):
+    with open(args.run_path) as f:
+        run_results = json.load(f)
+    arguments = run_results['arguments']
+    model_config = run_results['model_config']
+
+    arguments = utils.dict_to_namespace(arguments)
+
+    result_scores = handle_evaluate(model_config, arguments)
+    return result_scores
 
 
 def get_train_and_test_data(
@@ -556,6 +576,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
     elif arguments.command == 'tune':
         tuning_handler(arguments)
 
+    elif arguments.command == 'rerun':
+        rerun_handler(arguments)
+
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
 
@@ -586,6 +609,11 @@ def main(argv: typing.Sequence):
         'tune', help='recompute scores from the file output by evaluate and remake the plots'
     )
     configure_tuning_parser(tuning_parser)
+
+    rerun_parser = subparsers.add_parser(
+        'rerun', help='rerun a model to ensure it produces the same results'
+    )
+    configure_rerun_parser(rerun_parser)
 
     arguments = parser.parse_args(argv[1:])
 
