@@ -37,16 +37,17 @@ python3 -m dna split-data \
     --split-seed $test_split_seed
 
 
-model=dna_regression
+model=lstm
 n_generations=2
 population_size=2
+
 
 python3 -m dna tune \
     --model $model \
     --model-config-path ./model_configs/${model}_config.json \
     --tuning-config-path ./tuning_configs/${model}_tuning_config.json \
     --tuning-output-dir $tuning_output_dir \
-    --problem regression rank subset \
+    --problem regression rank \
     --objective $objective \
     --train-path $train_path \
     --k $k \

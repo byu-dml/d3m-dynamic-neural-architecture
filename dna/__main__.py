@@ -85,7 +85,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--problem', nargs='+', required=True,
-        choices=['regression', 'rank', 'subset'],  # TODO: 'binary-classification'],
+        choices=['regression', 'rank'],
         help='the type of problem'
     )
     parser.add_argument(
@@ -302,7 +302,7 @@ def configure_tuning_parser(parser):
     )
     parser.add_argument(
         '--objective', type=str, action='store', required=True,
-        choices=['total_rmse', 'top_k_regret', 'spearman_mean', 'ndcg', 'ndcg@k']
+        choices=['total_rmse', 'top_k_regret', 'spearman', 'ndcg', 'ndcg@k']
     )
     parser.add_argument(
         '--tuning-output-dir', type=str, default=None,
@@ -332,20 +332,20 @@ def _get_tuning_objective(arguments: argparse.Namespace):
         score_path = ('test_scores', 'total_scores', 'total_rmse')
         minimize = True
     elif arguments.objective == 'top_k_regret':
-        score_problem = 'subset'
-        score_path = ('test_scores', 'top_k_regret', 'mean')
+        score_problem = 'rank'
+        score_path = ('test_scores', 'mean_scores', 'mean_top_k_regrets', arguments.k)
         minimize = True
-    elif arguments.objective == 'spearman_mean':
+    elif arguments.objective == 'spearman':
         score_problem = 'rank'
         score_path = ('test_scores', 'mean_scores', 'spearman_correlation', 'mean')
         minimize = False
     elif arguments.objective == 'ndcg':
         score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'ndcg')
+        score_path = ('test_scores', 'mean_scores', 'mean_ndcg')
         minimize = False
     elif arguments.objective == 'ndcg@k':
-        score_problem = 'subset'
-        score_path = ('test_scores', 'ndcg_at_k', 'mean')
+        score_problem = 'rank'
+        score_path = ('test_scores', 'mean_scores', 'ndcg_over_k', arguments.k)
         minimize = False
     else:
         raise ValueError('unknown objective {}'.format(arguments.objective))
@@ -455,11 +455,12 @@ def check_scores(scores: dict, rescores: dict, score_type: str, *, _path: str = 
             path = k
         else:
             path = '{}.{}'.format(_path, k)
-        v2 = rescores[k]
-        if type(v1) == dict:
-            check_scores(v1, v2, score_type, _path=path)
-        elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
-            warnings.warn('{} {} score value {} does not equal rescore value {}'.format(score_type, path, v1, v2))
+        if k in rescores:
+            v2 = rescores[k]
+            if type(v1) == dict:
+                check_scores(v1, v2, score_type, _path=path)
+            elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
+                warnings.warn('{} {} score value {} does not equal rescore value {}'.format(score_type, path, v1, v2))
 
 
 def get_train_and_test_data(

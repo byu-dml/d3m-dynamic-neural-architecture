@@ -9,9 +9,7 @@ from sklearn.ensemble import RandomForestRegressor
 import torch
 from .torch_modules.mlp import MLP
 
-from .base_models import (
-    RankModelBase, RegressionModelBase, SklearnBase, SubsetModelBase, PyTorchRegressionRankSubsetModelBase
-)
+from .base_models import RankModelBase, RegressionModelBase, SklearnBase, PyTorchRegressionRankModelBase
 from dna import utils
 from dna.kND import KNearestDatasets
 
@@ -51,7 +49,7 @@ class MedianBaseline(RegressionModelBase):
         return [self.median] * len(data)
 
 
-class PerPrimitiveBaseline(RegressionModelBase, RankModelBase, SubsetModelBase):
+class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
@@ -101,14 +99,6 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase, SubsetModelBase):
             'rank': ranks,
         }
 
-    def predict_subset(self, data, k, **kwargs):
-        if not self.fitted:
-            raise Exception('model not fit')
-
-        ranked_data = self.predict_rank(data, **kwargs)
-        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
-        return top_k.tolist()
-
 
 class RandomBaseline(RankModelBase):
 
@@ -127,10 +117,6 @@ class RandomBaseline(RankModelBase):
             'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': predictions,
         }
-
-    def predict_subset(self, data, k, **kwargs):
-        predictions = self._random_state.choice(data, k)
-        return [instance['pipeline_id'] for instance in predictions]
 
 
 class LinearRegressionBaseline(SklearnBase):
@@ -161,7 +147,7 @@ class MetaAutoSklearn(SklearnBase):
         self.fitted = False
 
 
-class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase):
+class AutoSklearnMetalearner(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
@@ -198,19 +184,11 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase
             predictions.append(cached_predictions[dataset_id].get(pipeline_id, None))
         return predictions
 
-    def predict_subset(self, data, k, **kwargs):
-        """
-        Recommends at most k pipelines from data expected to perform well for the provided dataset.
-        """
-        return self._predict(data, method='k', k=k)
-
     def predict_rank(self, data, **kwargs):
         """
-        Ranks all pipelines in data.
+        Attempts to rank all pipelines in data, but can only rank pipelines found in the training data.
         """
-        ranked_pipelines = self._predict(data, method='all')
-
-        assert len(ranked_pipelines) == len(data), '{} {}'.format(len(ranked_pipelines), len(data))
+        ranked_pipelines = self._predict(data, method='k', k=len(data))
 
         return {
             'pipeline_id': ranked_pipelines,
@@ -246,7 +224,7 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase, SubsetModelBase
         metafeatures.drop_duplicates(inplace=True)
         return metafeatures
 
-class MLPRegressionModel(PyTorchRegressionRankSubsetModelBase):
+class MLPRegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
             self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,

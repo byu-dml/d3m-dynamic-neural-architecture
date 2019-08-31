@@ -26,29 +26,33 @@ def pearson_correlation(y_hat, y):
         return scipy.stats.pearsonr(y_hat, y)
 
 
-def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
-    """
-    Assumes that the top_k_predicted list is sorted.
-    """
-    top_k_predicted = top_k_predicted[:k]
-    assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
-    top_actual = actual_data.nlargest(k, columns='test_f1_macro', keep='all')['pipeline_id']
-    return len(set(top_actual).intersection(set(top_k_predicted)))
+def _get_relevance_at_k(relevance: typing.Sequence, rank: typing.Sequence, k: int):
+    relevance = np.array(relevance)
+    if rank is None:
+        relevance_at_k = relevance[:k]
+    else:
+        rank_order = np.argsort(rank)
+        relevance_at_k = relevance[rank_order[:k]]
+
+    return relevance_at_k
 
 
-def top_k_regret(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
-    """
-    Assumes that the top_k_predicted list is sorted.
-    """
-    top_k_predicted = top_k_predicted[:k]
-    assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
-    actual_best_score = actual_data['test_f1_macro'].max()
-    min_regret = float('inf')
-    for pipeline_id in top_k_predicted:
-        pipeline_score = actual_data[actual_data['pipeline_id'] == pipeline_id]['test_f1_macro'].iloc[0]
-        regret = actual_best_score - pipeline_score
-        min_regret = min(min_regret, regret)
-    return min_regret
+def top_k_correct(relevance: typing.Sequence, rank: typing.Sequence, k: int = None):
+    if k is None:
+        k = len(relevance)
+
+    k_best_indices = set(np.argsort(relevance)[-k:])
+    k_ranked_indices = set(np.argsort(rank)[:k])
+    return len(k_best_indices.intersection(k_ranked_indices))
+
+
+def top_k_regret(relevance: typing.Sequence, rank: typing.Sequence = None, k: int = None):
+    if k is None:
+        k = len(relevance)
+
+    best = max(relevance)
+    relevance_at_k = _get_relevance_at_k(relevance, rank, k)
+    return best - max(relevance_at_k)
 
 
 def spearman_correlation(x: typing.Sequence, y: typing.Sequence):
@@ -63,9 +67,9 @@ def dcg_at_k(
 
     Parameters
     ----------
-    actual_relevance: Sequence
+    relevance: Sequence
         True relevance labels
-    predicted_rank: Sequence
+    rank: Sequence
         Predicted rank for actual_relevance. If not provided, actual_relevance is assumed to be in rank order.
     k: int
         Rank position.
@@ -81,12 +85,7 @@ def dcg_at_k(
     if k is None:
         k = len(relevance)
 
-    relevance = np.array(relevance)
-    if rank is None:
-        relevance_at_k = relevance[:k]
-    else:
-        rank_order = np.argsort(rank)
-        relevance_at_k = relevance[rank_order[:k]]
+    relevance_at_k = _get_relevance_at_k(relevance, rank, k)
 
     if gains_f == 'exponential':
         gains = 2 ** relevance_at_k - 1

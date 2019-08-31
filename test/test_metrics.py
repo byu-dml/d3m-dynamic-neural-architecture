@@ -206,9 +206,7 @@ class MetricsTestCase(unittest.TestCase):
 
     def test_top_k_correct(self):
         k = 1
-        metric = self.format_and_get_top_k(
-            predicted_top_k=[1], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_correct
-        )
+        metric = metrics.top_k_correct([.5, 1], [0], k)
         true_metric = 0
         np.testing.assert_almost_equal(
             metric, true_metric, err_msg='failed to get top_1 ranking from 0 example: was {}, shouldve been {}'.format(
@@ -216,9 +214,8 @@ class MetricsTestCase(unittest.TestCase):
             )
         )
 
-        metric = self.format_and_get_top_k(
-            predicted_top_k=[2], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_correct
-        )
+        k = 2
+        metric = metrics.top_k_correct([0, .5, 1], [1, 0], k)
         true_metric = 1
         np.testing.assert_almost_equal(
             metric, true_metric,
@@ -228,9 +225,7 @@ class MetricsTestCase(unittest.TestCase):
         )
 
         k = 3
-        metric = self.format_and_get_top_k(
-            predicted_top_k=[1, 2, 0], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_correct
-        )
+        metric = metrics.top_k_correct([.5, 1, 0], [1, 0, 2], k)
         true_metric = 3
         np.testing.assert_almost_equal(
             metric, true_metric,
@@ -241,9 +236,7 @@ class MetricsTestCase(unittest.TestCase):
 
     def test_top_k_regret(self):
         k = 1
-        metric = self.format_and_get_top_k(
-            predicted_top_k=[1], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_regret
-        )
+        metric = metrics.top_k_regret([.5, 1], [0], k)
         true_metric = .5
         np.testing.assert_almost_equal(
             metric, true_metric, err_msg='failed to get top_1 ranking from 0 example: was {}, shouldve been {}'.format(
@@ -251,9 +244,8 @@ class MetricsTestCase(unittest.TestCase):
             )
         )
 
-        metric = self.format_and_get_top_k(
-            predicted_top_k=[2], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_regret
-        )
+        k=2
+        metric = metrics.top_k_regret([.5, 1, 0], [1, 0], k)
         true_metric = 0
         np.testing.assert_almost_equal(
             metric, true_metric,
@@ -263,9 +255,7 @@ class MetricsTestCase(unittest.TestCase):
         )
 
         k = 3
-        metric = self.format_and_get_top_k(
-            predicted_top_k=[1, 2, 0], target_ids=[0, 1, 2], target_scores=[0, .5, 1], k=k, top_k_function=metrics.top_k_regret
-        )
+        metric = metrics.top_k_regret([.5, 1, 0], [1, 0, 2], k)
         true_metric = 0
         np.testing.assert_almost_equal(
             metric, true_metric,
