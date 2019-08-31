@@ -407,6 +407,10 @@ def configure_rescore_parser(parser: argparse.ArgumentParser):
         '--output-dir', type=str, action='store', default='./rescore',
         help='the base directory to write the recomputed scores and plots'
     )
+    parser.add_argument(
+        '--plot', default=False, action='store_true', help='whether to remake the plots'
+    )
+
 
 
 def rescore_handler(arguments: argparse.Namespace):
@@ -418,10 +422,10 @@ def rescore_handler(arguments: argparse.Namespace):
         result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
 
     for results_path in result_paths:
-        handle_rescore(results_path, arguments.output_dir)
+        handle_rescore(results_path, arguments.output_dir, arguments.plot)
 
 
-def handle_rescore(results_path: str, output_dir: str):
+def handle_rescore(results_path: str, output_dir: str, plot: bool):
     with open(results_path) as f:
         results = json.load(f)
 
@@ -436,9 +440,10 @@ def handle_rescore(results_path: str, output_dir: str):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 
-    plot_dir = os.path.join(output_dir, 'plots')
-    if not os.path.isdir(plot_dir):
-        os.mkdir(plot_dir)
+    if plot:
+        plot_dir = os.path.join(output_dir, 'plots')
+        if not os.path.isdir(plot_dir):
+            os.mkdir(plot_dir)
 
     # For each problem, re-score using the predictions and data and ensure the scores are the same as before
     for problem_scores in results['scores']:
@@ -449,12 +454,14 @@ def handle_rescore(results_path: str, output_dir: str):
         train_predictions = problem_scores['train_predictions']
         train_rescores = problem.score(train_predictions, train_data)
         problem_scores['train_scores'] = train_rescores
-        problem.plot(train_predictions, train_data, train_rescores, os.path.join(plot_dir, 'train'))
+        if plot:
+            problem.plot(train_predictions, train_data, train_rescores, os.path.join(plot_dir, 'train'))
 
         test_predictions = problem_scores['test_predictions']
         test_rescores = problem.score(test_predictions, test_data)
         problem_scores['test_scores'] = test_rescores
-        problem.plot(test_predictions, test_data, test_rescores, os.path.join(plot_dir, 'test'))
+        if plot:
+            problem.plot(test_predictions, test_data, test_rescores, os.path.join(plot_dir, 'test'))
 
     # Save the re-scored json file
     rescore_path = os.path.join(output_dir, 'run.json')
