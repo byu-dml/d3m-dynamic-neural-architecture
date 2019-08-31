@@ -1,12 +1,12 @@
 import numpy as np
 import torch
 
-from .base_models import RNNRegressionRankSubsetModelBase
+from .base_models import RNNRegressionRankModelBase
 from .torch_modules.lstm_mlp import LSTMMLP
 from dna.data import RNNDataLoader
 
 
-class LSTMModel(RNNRegressionRankSubsetModelBase):
+class LSTMModel(RNNRegressionRankModelBase):
     def __init__(
         self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, loss_function_name: str,

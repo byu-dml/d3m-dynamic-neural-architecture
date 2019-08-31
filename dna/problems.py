@@ -257,7 +257,9 @@ class RankProblem(PredictByGroupProblemBase):
         targets_by_group = self._group_data(targets)
         spearman_coefs = []
         spearman_ps = []
-        ndcg_list = []
+        ndcgs_by_k = {}
+        top_k_regrets_by_k = {}
+        top_k_counts_by_k = {}
         per_dataset_scores = {}
 
         for group, group_predictions in predictions_by_group.items():
@@ -266,24 +268,43 @@ class RankProblem(PredictByGroupProblemBase):
             group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
             group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
             group_predictions.sort_values(['rank'], ascending=True, inplace=True)
-
-            # TODO: remove hard-coded values
             merged_data = group_targets.merge(group_predictions, on='pipeline_id')
+
             correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
 
-            ndcg_value = ndcg_at_k(merged_data['test_f1_macro'], merged_data['rank'])
+            ndcg_over_k = self._ndcg_over_k(merged_data['test_f1_macro'], merged_data['rank'])
+            for i, ndcg in enumerate(ndcg_over_k):
+                k = i + 1
+                if k not in ndcgs_by_k:
+                    ndcgs_by_k[k] = []
+                ndcgs_by_k[k].append(ndcg)
+
+            top_k_regrets = self._top_k_regret(merged_data['test_f1_macro'], merged_data['rank'])
+            for i, tkr in enumerate(top_k_regrets):
+                k = i + 1
+                if k not in top_k_regrets_by_k:
+                    top_k_regrets_by_k[k] = []
+                top_k_regrets_by_k[k].append(tkr)
+
+            top_k_counts = self._top_k_counts(merged_data['test_f1_macro'], merged_data['rank'])
+            for i, tkc in enumerate(top_k_counts):
+                k = i + 1
+                if k not in top_k_counts_by_k:
+                    top_k_counts_by_k[k] = []
+                top_k_counts_by_k[k].append(tkc)
 
             per_dataset_scores[group] = {
                 'spearman_correlation': {
                         'correlation_coefficient': correlation,
                         'p_value': p_value
                     },
-                'ndcg': ndcg_value,
+                'ndcg_over_k': ndcg_over_k,
+                'top_k_regrets': top_k_regrets,
+                'top_k_counts': top_k_counts,
             }
 
             spearman_coefs.append(correlation)
             spearman_ps.append(p_value)
-            ndcg_list.append(ndcg_value)
 
         mean_scores = {
             'spearman_correlation': {
@@ -292,10 +313,31 @@ class RankProblem(PredictByGroupProblemBase):
                 'mean_p_value': np.mean(spearman_ps),
                 'std_dev_p_value': np.std(spearman_ps, ddof=1),
             },
-            'ndcg': np.mean(ndcg_list),
+            'ndcg_over_k': self._mean_values_over_k(ndcgs_by_k),
+            'mean_ndcg': self._mean_ndcg(ndcgs_by_k),
+            'mean_top_k_regrets': self._mean_values_over_k(top_k_regrets_by_k),
+            'mean_top_k_counts': self._mean_values_over_k(top_k_counts_by_k),
         }
 
         return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
+
+    def _ndcg_over_k(self, relevance, rank):
+        return [ndcg_at_k(relevance, rank, k) for k in range(1, len(rank) + 1)]
+
+    def _mean_values_over_k(self, values_by_k):
+        return [np.mean(values) for k, values in sorted(values_by_k.items())]
+
+    def _mean_ndcg(self, ndcgs_by_k):
+        ndcgs = []
+        for k, ndcg_at_k in ndcgs_by_k.items():
+            ndcgs += ndcg_at_k
+        return np.mean(ndcgs)
+
+    def _top_k_regret(self, relevance, rank):
+        return [top_k_regret(relevance, rank, k) for k in range(1, len(rank) + 1)]
+
+    def _top_k_counts(self, relevance, rank):
+        return [top_k_correct(relevance, rank, k) for k in range(1, len(rank) + 1)]
 
     def plot(self, predictions, targets, scores, plot_dir: str):
         per_dataset_scores = scores['per_dataset_scores']
@@ -314,91 +356,9 @@ class RankProblem(PredictByGroupProblemBase):
             super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, group_scores, type(self).__name__)
 
 
-class SubsetProblem(PredictByGroupProblemBase):
-
-    def __init__(self, group_key, k):
-        super().__init__(group_key)
-        self._predict_method_name = 'predict_subset'
-        self.k = k
-
-    def predict(self, data, model, model_config, *, verbose=False, model_output_dir=None):
-        # TODO: the only difference between this method and PredictByGroupProblemBase's is the use of k
-        # How can we remove the duplicate code?
-        self._validate_model_has_method(model, self._predict_method_name)
-
-        model_predict_config = model_config.get(self._predict_method_name, {})
-        model_predict_method = getattr(model, self._predict_method_name)
-
-        grouped_data = self._group_data(data)
-
-        start_timestamp = time.time()
-
-        predictions_by_group = {
-            group: model_predict_method(group_data, k=self.k, verbose=verbose, **model_predict_config) for group, group_data in grouped_data.items()
-        }
-
-        predict_time = time.time() - start_timestamp
-
-        return predictions_by_group, predict_time
-
-    def score(self, predictions_by_group, targets):
-        targets_by_group = self._group_data(targets)
-        top_1_regrets = []
-        top_k_regrets = []
-        top_k_counts = []
-        ndcg_at_ks = []
-
-        for group, group_predictions in predictions_by_group.items():
-            group_targets = pd.DataFrame(targets_by_group[group])
-            # have to sort by id in cases of ties
-            group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
-            group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
-
-            top_1_regrets.append(top_k_regret(group_predictions, group_targets, 1))
-            top_k_regrets.append(top_k_regret(group_predictions, group_targets, self.k))
-            top_k_counts.append(top_k_correct(group_predictions, group_targets, self.k))
-            ndcg_at_ks.append(self._ndcg_score(group_predictions, group_targets))
-
-        return {
-            'top_1_regret': {
-                'mean': np.mean(top_1_regrets),
-                'std_dev': np.std(top_1_regrets, ddof=1),
-            },
-            'top_k_regret': {
-                'k': self.k,
-                'mean': np.mean(top_k_regrets),
-                'std_dev': np.std(top_k_regrets, ddof=1),
-            },
-            'top_k_count': {
-                'k': self.k,
-                'mean': np.mean(top_k_counts),
-                'std_dev': np.std(top_k_counts, ddof=1),
-            },
-            'ndcg_at_k': {
-                'k': self.k,
-                'mean': np.mean(ndcg_at_ks),
-                'std_dev': np.std(ndcg_at_ks, ddof=1),
-            }
-        }
-
-    def plot(self, *args, **kwargs):
-        pass
-
-    def _ndcg_score(self, group_predictions, group_targets):
-        rank_map = {pipeline_id: i for i, pipeline_id in enumerate(group_predictions)}
-        relevance = []
-        rank = []
-        for i, (idx, row) in enumerate(group_targets.iterrows()):
-            relevance.append(row['test_f1_macro'])
-            rank.append(rank_map.get(row['pipeline_id'], i + self.k))
-        return ndcg_at_k(relevance, rank, k=self.k)
-
-
 def get_problem(problem_name: str, **kwargs):
     group_key = 'dataset_id'
     if problem_name == 'regression':
         return RegressionProblem()
     if problem_name == 'rank':
         return RankProblem(group_key)
-    if problem_name == 'subset':
-        return SubsetProblem(group_key, kwargs['k'])

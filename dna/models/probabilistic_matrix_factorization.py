@@ -1,7 +1,7 @@
 import torch
 
 from .base_models import PyTorchModelBase
-from .base_models import PyTorchRegressionRankSubsetModelBase
+from .base_models import PyTorchRegressionRankModelBase
 from .torch_modules.torch_utils import PyTorchRandomStateContext
 from .torch_modules.pmf import PMF
 from dna.data import PMFDataLoader
@@ -32,7 +32,7 @@ class PMFLoss(torch.nn.Module):
         return rmse_loss + u_loss + v_loss
 
 
-class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
+class ProbabilisticMatrixFactorization(PyTorchRegressionRankModelBase):
     """
     Probabilitistic Matrix Factorization (see https://arxiv.org/abs/1705.05355 for the paper)
     Adapted from traditional Probabilitistic Matrix Factorization but instead of `Users` and `Items`, we have `Pipelines` and `Datasets`
@@ -125,6 +125,3 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankSubsetModelBase):
     def predict_rank(self, data, *, verbose, **kwargs):
         # no batch size needed
         return super().predict_rank(data, batch_size=0, verbose=verbose)
-
-    def predict_subset(self, data, k, *, verbose=False):
-        return super().predict_subset(data, k, batch_size=0, verbose=verbose)

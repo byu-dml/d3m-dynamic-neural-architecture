@@ -33,12 +33,6 @@ class RankModelBase(ModelBase):
         raise NotImplementedError()
 
 
-class SubsetModelBase(ModelBase):
-
-    def predict_subset(self, data, k, **kwargs):
-        raise NotImplementedError()
-
-
 class PyTorchModelBase:
 
     def __init__(self, *, y_dtype, device, seed, loss_function_name: str, loss_function_args: dict):
@@ -247,7 +241,7 @@ class PyTorchModelBase:
         return split_data_by_group(train_data, 'dataset_id', validation_ratio, split_seed)
 
 
-class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase, SubsetModelBase):
+class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
     def __init__(self, y_dtype, device, seed, loss_function_name=None, loss_function_args=None):
         # different arguments means different function calls
@@ -277,16 +271,8 @@ class PyTorchRegressionRankSubsetModelBase(PyTorchModelBase, RegressionModelBase
             'rank': ranks,
         }
 
-    def predict_subset(self, data, k, *, batch_size, verbose=False):
-        if self._model is None:
-            raise Exception('model not fit')
 
-        ranked_data = self.predict_rank(data, batch_size=batch_size, verbose=verbose)
-        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
-        return top_k.tolist()
-
-
-class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
+class SklearnBase(RegressionModelBase, RankModelBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
@@ -320,14 +306,6 @@ class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
             'pipeline_id': [instance['pipeline_id'] for instance in data],
             'rank': ranks,
         }
-
-    def predict_subset(self, data, k, **kwargs):
-        if not self.fitted:
-            raise Exception('model not fit')
-
-        ranked_data = self.predict_rank(data, **kwargs)
-        top_k = pd.DataFrame(ranked_data).nsmallest(k, columns='rank')['pipeline_id']
-        return top_k.tolist()
 
     def prepare_data(self, data):
         # expand the column of lists of metafeatures into a full dataframe
@@ -384,7 +362,7 @@ class SklearnBase(RegressionModelBase, RankModelBase, SubsetModelBase):
         return encoding
 
 
-class RNNRegressionRankSubsetModelBase(PyTorchRegressionRankSubsetModelBase):
+class RNNRegressionRankModelBase(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, activation_name, dropout, output_n_hidden_layers, output_hidden_layer_size, use_batch_norm,

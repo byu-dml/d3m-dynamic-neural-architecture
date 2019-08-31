@@ -1,10 +1,10 @@
 import torch
 
-from .base_models import PyTorchRegressionRankSubsetModelBase
+from .base_models import PyTorchRegressionRankModelBase
 from .torch_modules.dna_module import DNAModule
 
 
-class DNARegressionModel(PyTorchRegressionRankSubsetModelBase):
+class DNARegressionModel(PyTorchRegressionRankModelBase):
 
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,

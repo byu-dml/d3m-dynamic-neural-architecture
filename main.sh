@@ -36,7 +36,7 @@ python3 -m dna split-data \
 
 python3 -m dna evaluate \
     --model autosklearn \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -72,7 +72,7 @@ python3 -m dna evaluate \
 
 python3 -m dna evaluate \
     --model per_primitive_regression \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --train-path $train_path \
     --test-size $validation_size \
@@ -84,7 +84,7 @@ python3 -m dna evaluate \
 
 python3 -m dna evaluate \
     --model linear_regression \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -97,7 +97,7 @@ python3 -m dna evaluate \
 
 python3 -m dna evaluate \
     --model random_forest \
-    --problem regression rank subset\
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -108,7 +108,7 @@ python3 -m dna evaluate \
     $use_ootsp
 
 
-# mlp outputs a constant value for a dataset, so it cannot rank and subset is just random
+# mlp outputs a constant value for a dataset, so it cannot rank
 python3 -m dna evaluate \
     --model mlp_regression \
     --model-config-path ./model_configs/mlp_regression_config.json \
@@ -126,7 +126,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model meta_autosklearn \
     --model-config-path ./model_configs/meta_autosklearn_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -139,7 +139,7 @@ python3 -m dna evaluate \
 
 python3 -m dna evaluate \
     --model random \
-    --problem rank subset \
+    --problem rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -153,7 +153,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model dna_regression \
     --model-config-path ./model_configs/dna_regression_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -167,7 +167,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model lstm \
     --model-config-path ./model_configs/lstm_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -181,7 +181,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model daglstm_regression \
     --model-config-path ./model_configs/daglstm_regression_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
@@ -195,7 +195,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model hidden_daglstm_regression \
     --model-config-path ./model_configs/hidden_daglstm_regression_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --train-path $train_path \
     --test-size $validation_size \
@@ -208,7 +208,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model attention_regression \
     --model-config-path ./model_configs/attention_regression_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --train-path $train_path \
     --test-size $validation_size \
@@ -221,7 +221,7 @@ python3 -m dna evaluate \
 python3 -m dna evaluate \
     --model dag_attention_regression \
     --model-config-path ./model_configs/dag_attention_regression_config.json \
-    --problem regression rank subset \
+    --problem regression rank \
     --k $k \
     --train-path $train_path \
     --test-size $validation_size \
@@ -231,16 +231,16 @@ python3 -m dna evaluate \
     $use_ootsp
 
 
-python3 -m dna evaluate \
-    --model probabilistic_matrix_factorization \
-    --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
-    --problem regression rank subset \
-    --k $k \
-    --train-path $train_path \
-    --test-size $validation_size \
-    --split-seed $validation_split_seed \
-    --skip-test \
-    --output-dir $results_dir \
-    --verbose \
-    $use_ootsp \
-    --skip-test-ootsp
+# python3 -m dna evaluate \
+#     --model probabilistic_matrix_factorization \
+#     --model-config-path ./model_configs/probabilistic_matrix_factorization_config.json \
+#     --problem regression rank \
+#     --k $k \
+#     --train-path $train_path \
+#     --test-size $validation_size \
+#     --split-seed $validation_split_seed \
+#     --skip-test \
+#     --output-dir $results_dir \
+#     --verbose \
+#     $use_ootsp \
+#     --skip-test-ootsp
