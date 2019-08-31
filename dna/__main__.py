@@ -393,19 +393,36 @@ def tuning_handler(arguments: argparse.Namespace):
         ))
 
 
-def configure_rescore_parser(parser):
+def configure_rescore_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
-        '--results-path', type=str, action='store', required=True,
-        help='path to the file containing the results of a call to evaluate'
+        '--results-path', type=str, action='store', help='path of file to rescore'
     )
     parser.add_argument(
-        '--output-dir', type=str, action='store', required=True,
+        '--results-dir', type=str, help='directory of results to rescore'
+    )
+    parser.add_argument(
+        '--result-paths-csv', type=str, help='path to csv containing paths of files to rescore'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', default='./rescore',
         help='the base directory to write the recomputed scores and plots'
     )
 
 
 def rescore_handler(arguments: argparse.Namespace):
-    with open(arguments.results_path) as f:
+    if arguments.results_path is not None:
+        result_paths = [arguments.results_path]
+    elif arguments.results_dir is not None:
+        result_paths = get_result_paths_from_dir(arguments.results_dir)
+    elif arguments.result_paths_csv is not None:
+        result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
+
+    for results_path in result_paths:
+        handle_rescore(results_path, arguments.output_dir)
+
+
+def handle_rescore(results_path: str, output_dir: str):
+    with open(results_path) as f:
         results = json.load(f)
 
     train_data, test_data = get_train_and_test_data(
@@ -415,7 +432,7 @@ def rescore_handler(arguments: argparse.Namespace):
     )
 
     # Create the output directory for the results of the re-score
-    output_dir = os.path.join(arguments.output_dir, results['id'])
+    output_dir = os.path.join(output_dir, results['id'])
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 
@@ -424,44 +441,25 @@ def rescore_handler(arguments: argparse.Namespace):
         os.mkdir(plot_dir)
 
     # For each problem, re-score using the predictions and data and ensure the scores are the same as before
-    for score in results['scores']:
-        problem = get_problem(score['problem_name'], **results['arguments'])
+    for problem_scores in results['scores']:
+        problem = get_problem(problem_scores['problem_name'], **results['arguments'])
+        if problem is None:
+            continue
 
-        train_predictions, train_rescores = rescore(score, train_data, 'train', problem)
-        score['train_scores'] = train_rescores
-        test_predictions, test_rescores = rescore(score, test_data, 'test', problem)
-        score['test_scores'] = test_rescores
-
+        train_predictions = problem_scores['train_predictions']
+        train_rescores = problem.score(train_predictions, train_data)
+        problem_scores['train_scores'] = train_rescores
         problem.plot(train_predictions, train_data, train_rescores, os.path.join(plot_dir, 'train'))
+
+        test_predictions = problem_scores['test_predictions']
+        test_rescores = problem.score(test_predictions, test_data)
+        problem_scores['test_scores'] = test_rescores
         problem.plot(test_predictions, test_data, test_rescores, os.path.join(plot_dir, 'test'))
 
     # Save the re-scored json file
     rescore_path = os.path.join(output_dir, 'run.json')
     with open(rescore_path, 'w') as f:
-        json.dump(results, f, indent=4)
-
-
-def rescore(score: dict, data: list, score_type: str, problem: ProblemBase):
-    predictions_key = score_type + '_predictions'
-    predictions = score[predictions_key]
-    rescores = problem.score(predictions, data)
-    score_key = score_type + '_scores'
-    check_scores(score[score_key], rescores, score_type)
-    return predictions, rescores
-
-
-def check_scores(scores: dict, rescores: dict, score_type: str, *, _path: str = ''):
-    for k, v1 in scores.items():
-        if _path == '':
-            path = k
-        else:
-            path = '{}.{}'.format(_path, k)
-        if k in rescores:
-            v2 = rescores[k]
-            if type(v1) == dict:
-                check_scores(v1, v2, score_type, _path=path)
-            elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
-                warnings.warn('{} {} score value {} does not equal rescore value {}'.format(score_type, path, v1, v2))
+        json.dump(results, f, indent=4, sort_keys=True)
 
 
 def get_train_and_test_data(
