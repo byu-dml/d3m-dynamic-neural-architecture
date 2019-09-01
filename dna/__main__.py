@@ -164,14 +164,20 @@ class EvaluateResult:
         self.ootsp_test_predict_time = ootsp_test_predict_time
         self.ootsp_test_scores = ootsp_test_scores
 
+    def _to_json_for_eq(self):
+        return {
+            'train_predictions': self.train_predictions,
+            'train_scores': self.train_scores,
+            'test_predictions': self.test_predictions,
+            'test_scores': self.test_scores,
+            'ootsp_test_predictions': self.ootsp_test_predictions,
+            'ootsp_test_scores': self.ootsp_test_scores,
+        }
+
     def __eq__(self, other):
-        result = self.train_predictions == other.train_predictions
-        result &= self.train_scores == other.train_scores
-        result &= self.test_predictions == other.test_predictions
-        result &= self.test_scores == other.test_scores
-        result &= self.ootsp_test_predictions == other.ootsp_test_predictions
-        result &= self.ootsp_test_scores == other.ootsp_test_scores
-        return result
+        self_json = self._to_json_for_eq()
+        other_json = other._to_json_for_eq()
+        return json.dumps(self_json, sort_keys=True) == json.dumps(other_json, sort_keys=True)
 
 
 def evaluate(
@@ -266,10 +272,13 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         })
 
         if arguments.verbose:
+            # TODO: move to evaluate result __str__ method
             results = evaluate_result.__dict__
             del results['train_predictions']
             del results['test_predictions']
             del results['ootsp_test_predictions']
+            del results['train_scores'][problem.group_scores_key]
+            del results['test_scores'][problem.group_scores_key]
             print(json.dumps(results, indent=4))
             print()
 
@@ -303,7 +312,7 @@ def configure_tuning_parser(parser):
     )
     parser.add_argument(
         '--objective', type=str, action='store', required=True,
-        choices=['total_rmse', 'top_k_regret', 'spearman', 'ndcg', 'ndcg@k']
+        choices=['rmse', 'pearson', 'spearman', 'ndcg', 'ndcg_at_k', 'regret', 'regret_at_k']
     )
     parser.add_argument(
         '--tuning-output-dir', type=str, default=None,
@@ -328,26 +337,34 @@ def _get_tuning_objective(arguments: argparse.Namespace):
     (objective, minimize): tuple(Callable, bool)
         a tuple containing the objective function and a Boolean indicating whether the objective should be minimized
     """
-    if arguments.objective == 'total_rmse':
+    if arguments.objective == 'rmse':
         score_problem = 'regression'
-        score_path = ('test_scores', 'total_scores', 'total_rmse')
+        score_path = ('test_scores', 'total_scores', 'rmse')
         minimize = True
-    elif arguments.objective == 'top_k_regret':
-        score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'mean_top_k_regrets', arguments.k)
-        minimize = True
+    elif arguments.objective == 'pearson':
+        score_problem = 'regression'
+        score_path = ('test_scores', 'total_scores', 'pearson_correlation')
+        minimize = False
     elif arguments.objective == 'spearman':
         score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'spearman_correlation', 'mean')
+        score_path = ('test_scores', 'aggregate_scores', 'spearman_correlation_mean')
         minimize = False
     elif arguments.objective == 'ndcg':
         score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'mean_ndcg')
+        score_path = ('test_scores', 'total_scores', 'ndcg_at_k_mean')
         minimize = False
-    elif arguments.objective == 'ndcg@k':
+    elif arguments.objective == 'ndcg_at_k':
         score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'ndcg_over_k', arguments.k)
+        score_path = ('test_scores', 'aggregate_scores', 'ndcg_at_k_mean', arguments.k)
         minimize = False
+    elif arguments.objective == 'regret':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'total_scores', 'regret_at_k_mean')
+        minimize = True
+    elif arguments.objective == 'regret_at_k':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'aggregate_scores', 'regret_at_k_mean', arguments.k)
+        minimize = True
     else:
         raise ValueError('unknown objective {}'.format(arguments.objective))
 

@@ -1,7 +1,8 @@
 #!/bin/bash
 
 use_complete_data=false
-objective=ndcg
+# rmse, pearson, spearman, ndcg, ndcg_at_k, regret, regret_at_k
+objective=ndcg_at_k
 
 if $use_complete_data; then
     # complete has 194 datasets

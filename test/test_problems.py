@@ -1,6 +1,7 @@
+import typing
 import unittest
 
-from dna.metrics import ndcg_at_k, spearman_correlation, top_k_regret, top_k_correct
+from dna.metrics import n_correct_at_k, ndcg_at_k, regret_at_k, spearman_correlation
 from dna.problems import RankProblem
 from dna import utils
 
@@ -9,7 +10,7 @@ class RankProblemScoreTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        problem = RankProblem('dataset_id')
+        cls.problem = RankProblem('dataset_id')
         targets = [
             {
                 'dataset_id': 'dataset_1',
@@ -73,55 +74,43 @@ class RankProblemScoreTestCase(unittest.TestCase):
         cls.dataset_1_predicted_rank = predictions['dataset_1']['rank']
         cls.dataset_2_predicted_rank = predictions['dataset_2']['rank']
 
-        cls.problem_scores = problem.score(predictions, targets)
+        cls.problem_scores = cls.problem.score(predictions, targets)
 
     def test_spearman_correlation(self):
         dataset_1_spearman = spearman_correlation(self.dataset_1_predicted_rank, utils.rank(self.dataset_1_test_f1_macro))
-        self.assertEqual(dataset_1_spearman[0], self.problem_scores['per_dataset_scores']['dataset_1']['spearman_correlation']['correlation_coefficient'])
-        self.assertEqual(dataset_1_spearman[1], self.problem_scores['per_dataset_scores']['dataset_1']['spearman_correlation']['p_value'])
+        self.assertEqual(dataset_1_spearman[0], self.problem_scores[self.problem.group_scores_key]['dataset_1']['spearman_correlation'])
+        self.assertEqual(dataset_1_spearman[1], self.problem_scores[self.problem.group_scores_key]['dataset_1']['spearman_p_value'])
 
         dataset_2_spearman = spearman_correlation(self.dataset_2_predicted_rank, utils.rank(self.dataset_2_test_f1_macro))
-        self.assertEqual(dataset_2_spearman[0], self.problem_scores['per_dataset_scores']['dataset_2']['spearman_correlation']['correlation_coefficient'])
-        self.assertEqual(dataset_2_spearman[1], self.problem_scores['per_dataset_scores']['dataset_2']['spearman_correlation']['p_value'])
+        self.assertEqual(dataset_2_spearman[0], self.problem_scores[self.problem.group_scores_key]['dataset_2']['spearman_correlation'])
+        self.assertEqual(dataset_2_spearman[1], self.problem_scores[self.problem.group_scores_key]['dataset_2']['spearman_p_value'])
 
         mean_spearman = (dataset_1_spearman[0] + dataset_2_spearman[0]) / 2
-        self.assertEqual(mean_spearman, self.problem_scores['mean_scores']['spearman_correlation']['mean'])
+        self.assertEqual(mean_spearman, self.problem_scores[self.problem.agg_scores_key]['spearman_correlation_mean'])
+
+    def _test_metric_at_k(self, metric_at_k: typing.Callable):
+        metric_name = metric_at_k.__name__
+        all_values_at_k = []
+        for k in range(1,4):
+            dataset_1_value = metric_at_k(self.dataset_1_test_f1_macro, self.dataset_1_predicted_rank, k)
+            self.assertEqual(dataset_1_value, self.problem_scores[self.problem.group_scores_key]['dataset_1'][metric_name][k-1])
+            all_values_at_k.append(dataset_1_value)
+
+            dataset_2_value = metric_at_k(self.dataset_2_test_f1_macro, self.dataset_2_predicted_rank, k)
+            self.assertEqual(dataset_2_value, self.problem_scores[self.problem.group_scores_key]['dataset_2'][metric_name][k-1])
+            all_values_at_k.append(dataset_2_value)
+
+            values_at_k_mean = (dataset_1_value + dataset_2_value) / 2
+            self.assertEqual(values_at_k_mean, self.problem_scores[self.problem.agg_scores_key]['{}_mean'.format(metric_name)][k-1])
+
+        values_sum = sum(all_values_at_k) / len(all_values_at_k)
+        self.assertEqual(values_sum, self.problem_scores[self.problem.total_scores_key]['{}_mean'.format(metric_name)])
 
     def test_ndcg(self):
-        ndcgs = []
-        for k in range(1,4):
-            dataset_1_ndcg = ndcg_at_k(self.dataset_1_test_f1_macro, self.dataset_1_predicted_rank, k)
-            self.assertEqual(dataset_1_ndcg, self.problem_scores['per_dataset_scores']['dataset_1']['ndcg_over_k'][k-1])
-            ndcgs.append(dataset_1_ndcg)
+        self._test_metric_at_k(ndcg_at_k)
 
-            dataset_2_ndcg = ndcg_at_k(self.dataset_2_test_f1_macro, self.dataset_2_predicted_rank, k)
-            self.assertEqual(dataset_2_ndcg, self.problem_scores['per_dataset_scores']['dataset_2']['ndcg_over_k'][k-1])
-            ndcgs.append(dataset_2_ndcg)
+    def test_regret_at_k(self):
+        self._test_metric_at_k(regret_at_k)
 
-            mean_ndcg_over_k = (dataset_1_ndcg + dataset_2_ndcg) / 2
-            self.assertEqual(mean_ndcg_over_k, self.problem_scores['mean_scores']['ndcg_over_k'][k-1])
-
-        mean_ndcg = sum(ndcgs) / len(ndcgs)
-        self.assertEqual(mean_ndcg, self.problem_scores['mean_scores']['mean_ndcg'])
-
-    def test_top_k_regret(self):
-        for k in range(1,4):
-            regret_1 = top_k_regret(self.dataset_1_test_f1_macro, self.dataset_1_predicted_rank, k)
-            self.assertEqual(regret_1, self.problem_scores['per_dataset_scores']['dataset_1']['top_k_regrets'][k-1])
-
-            regret_2 = top_k_regret(self.dataset_2_test_f1_macro, self.dataset_2_predicted_rank, k)
-            self.assertEqual(regret_2, self.problem_scores['per_dataset_scores']['dataset_2']['top_k_regrets'][k-1])
-
-            mean_top_k_regret = (regret_1 + regret_2) / 2
-            self.assertEqual(mean_top_k_regret, self.problem_scores['mean_scores']['mean_top_k_regrets'][k-1])
-
-    def test_top_k_count(self):
-        for k in range(1,4):
-            count_1 = top_k_correct(self.dataset_1_test_f1_macro, self.dataset_1_predicted_rank, k)
-            self.assertEqual(count_1, self.problem_scores['per_dataset_scores']['dataset_1']['top_k_counts'][k-1])
-
-            count_2 = top_k_correct(self.dataset_2_test_f1_macro, self.dataset_2_predicted_rank, k)
-            self.assertEqual(count_2, self.problem_scores['per_dataset_scores']['dataset_2']['top_k_counts'][k-1])
-
-            mean_count = (count_1 + count_2) / 2
-            self.assertEqual(mean_count, self.problem_scores['mean_scores']['mean_top_k_counts'][k-1])
+    def test_n_correct_at_k(self):
+        self._test_metric_at_k(n_correct_at_k)

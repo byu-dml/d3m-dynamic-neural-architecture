@@ -9,17 +9,6 @@ from dna import metrics
 
 class MetricsTestCase(unittest.TestCase):
 
-    def format_and_get_top_k(self, predicted_top_k, target_ids, target_scores, k, top_k_function):
-        """
-        :param predicted_top_k: the top-k ids
-        :param target_ids: a list of the pipeline ids
-        :param target_scores: a list of the pipeline scores
-        :param k: the number of pipelines to get
-        :param top_k_function: the top k function to evaluate, top_k_regret or top_k_correct
-        """
-        targets = pd.DataFrame({'pipeline_id': target_ids, 'test_f1_macro': target_scores})
-        return top_k_function(predicted_top_k, targets, k)
-
     def format_and_get_spearman(self, actual_data, ranked_data):
         """
         :param actual_data: a list of the real rankings
@@ -123,60 +112,6 @@ class MetricsTestCase(unittest.TestCase):
             err_msg='failed to get spearman from tie example, was {}, shouldve been {}'.format(metric, true_metric)
         )
 
-    def test_dcg(self):
-        """
-        Examples from:
-        https://gist.github.com/mblondel/7337391
-        https://machinelearningmedium.com/2017/07/24/discounted-cumulative-gain/
-        https://en.wikipedia.org/wiki/Discounted_cumulative_gain
-        """
-        # Check that some rankings are better than others
-        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0]) > metrics.dcg_at_k([4, 3, 2], [2, 1, 0])
-        assert metrics.dcg_at_k([4, 3, 2], [2, 1, 0]) > metrics.dcg_at_k([1, 3, 2], [2, 1, 0])
-        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_at_k([4, 3, 2], [2, 1, 0], k=2)
-        assert metrics.dcg_at_k([4, 3, 2], [2, 1, 0], k=2) == metrics.dcg_at_k([1, 3, 2], [2, 1, 0], k=2)
-
-        # Check that sample order is irrelevant
-        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0]) == metrics.dcg_at_k([2, 3, 5], [0, 1, 2])
-        assert metrics.dcg_at_k([5, 3, 2], [2, 1, 0], k=2) == metrics.dcg_at_k([2, 3, 5], [0, 1, 2], k=2)
-
-        # wikipedia example
-        true_metric = 6.86112668859
-        ground_truth = [3, 2, 3, 0, 1, 2]
-        predictions = [1, 2, 3, 4, 5, 6]
-        metric = metrics.dcg_at_k(ground_truth, predictions, k=6, gains_f='linear')
-        np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
-
-    # TODO: test exponential (n)dcg
-
-    def test_ndcg(self):
-        """
-        Examples from:
-        https://gist.github.com/mblondel/7337391
-        https://machinelearningmedium.com/2017/07/24/discounted-cumulative-gain/
-        https://en.wikipedia.org/wiki/Discounted_cumulative_gain
-        """
-        # Perfect rankings
-        assert metrics.ndcg_at_k([5, 3, 2], [0, 1, 2]) == 1.0
-        assert metrics.ndcg_at_k([2, 3, 5], [2, 1, 0]) == 1.0
-        assert metrics.ndcg_at_k([5, 3, 2], [0, 1, 2], k=2) == 1.0
-        assert metrics.ndcg_at_k([2, 3, 5], [2, 1, 0], k=2) == 1.0
-
-        # wikipedia example
-        true_metric = 0.96080819
-        ground_truth = [3, 2, 3, 0, 1, 2]
-        predictions = [1, 2, 3, 4, 5, 6]
-        metric = metrics.ndcg_at_k(ground_truth, predictions, k=6, gains_f='linear')
-        np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get the correct ndcg, was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
-
     def test_pearson_correlation(self):
         """
         Examples #4 from https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.pearsonr.html
@@ -204,62 +139,125 @@ class MetricsTestCase(unittest.TestCase):
         metric = metrics.pearson_correlation( [1, 2, 3, 4, 5], [10, 9, 2.5, 6, 4])
         np.testing.assert_almost_equal(metric, true_value, err_msg='failed to get Pearson of NaN')
 
-    def test_top_k_correct(self):
-        k = 1
-        metric = metrics.top_k_correct([.5, 1], [0], k)
-        true_metric = 0
-        np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get top_1 ranking from 0 example: was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
 
-        k = 2
-        metric = metrics.top_k_correct([0, .5, 1], [1, 0], k)
-        true_metric = 1
-        np.testing.assert_almost_equal(
-            metric, true_metric,
-            err_msg='failed to get top_1 ranking from perfect example: was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
+class MetricsAtKTestCase(unittest.TestCase):
 
-        k = 3
-        metric = metrics.top_k_correct([.5, 1, 0], [1, 0, 2], k)
-        true_metric = 3
-        np.testing.assert_almost_equal(
-            metric, true_metric,
-            err_msg='failed to get top_3 ranking from perfect example: was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
+    def setUp(self):
+        self.test_cases = [
+            {
+                # [3, 2, 0, 1, 3]
+                # [3, 3, 2, 1, 0]
+                'relevance':             [2, 3, 0, 1, 3],
+                'rank':                  [1, 4, 2, 3, 0],
+                'n_correct_at_k':        [1, 1, 2, 3, 5],
+                'regret_at_k':           [0, 0, 0, 0, 0],
+                'linear_dcg_at_k':       [3.0, 4.26185951, 4.26185951, 4.69253607, 5.85309449],
+                'linear_ndcg_at_k':      [1.0, 0.87104906, 0.72323297, 0.74208293, 0.92561495],
+                'exponential_dcg_at_k':  [7.0, 8.89278926, 8.89278926, 9.32346582, 12.03143547],
+                'exponential_ndcg_at_k': [1.0, 0.77894125, 0.68848245, 0.69853426, 0.90142121],
+            },
+            {
+                'relevance': [.5, 1],
+                'rank': [0],
+                'n_correct_at_k': [0],
+                'regret_at_k': [.5],
+                'linear_dcg_at_k': None,
+                'linear_ndcg_at_k': None,
+                'exponential_dcg_at_k': None,
+                'exponential_ndcg_at_k': None,
+            },
+            {
+                'relevance': [0, .5, 1],
+                'rank': [1, 0],
+                'n_correct_at_k': [0, 1],
+                'regret_at_k': [.5, .5],
+                'linear_dcg_at_k': None,
+                'linear_ndcg_at_k': None,
+                'exponential_dcg_at_k': None,
+                'exponential_ndcg_at_k': None,
+            },
+            {
+                'relevance': [0, .5, 1],
+                'rank': [2, 1, 0],
+                'n_correct_at_k': [1, 2, 3],
+                'regret_at_k': [0, 0, 0],
+                'linear_dcg_at_k': None,
+                'linear_ndcg_at_k': None,
+                'exponential_dcg_at_k': None,
+                'exponential_ndcg_at_k': None,
+            },
+            {
+                # [1, 0, 2, 1, 2, 3]
+                # [3, 2, 2, 1, 1, 0]
+                'relevance': [1, 2, 3, 0, 1, 2],
+                'rank':      [0, 4, 5, 1, 3, 2],
+                'n_correct_at_k': [0, 0, 1, 3, 4, 6],
+                'regret_at_k': [2, 2, 1, 1, 1, 0],
+                'linear_dcg_at_k': None,
+                'linear_ndcg_at_k': None,
+                'exponential_dcg_at_k': None,
+                'exponential_ndcg_at_k': None,
+            },
+            # next test case taken from https://en.wikipedia.org/wiki/Discounted_cumulative_gain
+            {
+                'relevance': [3, 2, 3, 0, 1, 2],
+                'rank':      [1, 2, 3, 4, 5, 6],
+                'n_correct_at_k': None,
+                'regret_at_k': None,
+                'linear_dcg_at_k': [3, 4.262, 5.762, 5.762, 6.149, 6.861],
+                'linear_ndcg_at_k': [1, 0.871, 0.978, 0.853, 0.861, 0.961],
+                'exponential_dcg_at_k': None,
+                'exponential_ndcg_at_k': None,
+            },
+            {
+                'relevance': [3, 2, 3, 0, 1, 2],
+                'rank':      [0, 2, 1, 5, 4, 3],
+                'n_correct_at_k': [1, 2, 3, 4, 5, 6],
+                'regret_at_k': [0, 0, 0, 0, 0, 0],
+                'linear_dcg_at_k': [3.0, 4.89278926, 5.89278926, 6.75414238, 7.14099518, 7.14099518],
+                'linear_ndcg_at_k': [1, 1, 1, 1, 1, 1],
+                'exponential_dcg_at_k': None,
+                'exponential_ndcg_at_k': None,
+            }
+        ]
 
-    def test_top_k_regret(self):
-        k = 1
-        metric = metrics.top_k_regret([.5, 1], [0], k)
-        true_metric = .5
-        np.testing.assert_almost_equal(
-            metric, true_metric, err_msg='failed to get top_1 ranking from 0 example: was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
+    def _test(self, metric_at_k, key, **kwargs):
+        for i, test_case in enumerate(self.test_cases):
+            if test_case.get(key, None) is not None:
+                try:
+                    for j in range(len(test_case['rank'])):
+                        k = j + 1
+                        value_at_k = metric_at_k(test_case['relevance'], test_case['rank'], k, **kwargs)
+                        np.testing.assert_almost_equal(
+                            test_case[key][j], value_at_k, decimal=3,
+                            err_msg='{} failed on test {} with k={}. true value: {}; computed value: {}.'.format(
+                                key, i, k, test_case[key][j], value_at_k
+                            )
+                        )
+                    values_at_k = metric_at_k(test_case['relevance'], test_case['rank'], **kwargs)
+                    np.testing.assert_almost_equal(
+                        test_case[key], values_at_k, decimal=3,
+                        err_msg='{} failed on test {} over all k. true value: {}; computed value: {}.'.format(
+                            key, i, test_case[key], values_at_k
+                        )
+                    )
+                except IndexError as e:
+                    self.fail('{} erred on test case {} with\n{}'.format(key, i, e))
 
-        k=2
-        metric = metrics.top_k_regret([.5, 1, 0], [1, 0], k)
-        true_metric = 0
-        np.testing.assert_almost_equal(
-            metric, true_metric,
-            err_msg='failed to get top_1 ranking from perfect example: was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
+    def test_n_correct_at_k(self):
+        self._test(metrics.n_correct_at_k, 'n_correct_at_k')
 
-        k = 3
-        metric = metrics.top_k_regret([.5, 1, 0], [1, 0, 2], k)
-        true_metric = 0
-        np.testing.assert_almost_equal(
-            metric, true_metric,
-            err_msg='failed to get top_3 ranking from perfect example: was {}, shouldve been {}'.format(
-                metric, true_metric
-            )
-        )
+    def test_regreat_at_k(self):
+        self._test(metrics.regret_at_k, 'regret_at_k')
+
+    def test_linear_dcg_at_k(self):
+        self._test(metrics.dcg_at_k, 'linear_dcg_at_k', gains_f='linear')
+
+    def test_exponential_dcg_at_k(self):
+        self._test(metrics.dcg_at_k, 'exponential_dcg_at_k', gains_f='exponential')
+
+    def test_linear_ndcg_at_k(self):
+        self._test(metrics.ndcg_at_k, 'linear_ndcg_at_k', gains_f='linear')
+
+    def test_exponential_ndcg_at_k(self):
+        self._test(metrics.ndcg_at_k, 'exponential_ndcg_at_k', gains_f='exponential')

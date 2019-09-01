@@ -1,4 +1,5 @@
 import argparse
+import typing
 
 import numpy as np
 import pandas as pd
@@ -8,13 +9,17 @@ import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import group_json_objects
-from dna.metrics import rmse, top_k_regret, top_k_correct, spearman_correlation, pearson_correlation, ndcg_at_k
+from dna.metrics import n_correct_at_k, ndcg_at_k, pearson_correlation, regret_at_k, rmse, spearman_correlation
 from dna import utils
 
 
 class ProblemBase:
 
-    def __init__(self):
+    def __init__(self, group_key):
+        self.group_key = group_key
+        self.group_scores_key = 'scores_by_{}'.format(self.group_key)
+        self.agg_scores_key = 'aggregate_scores'
+        self.total_scores_key = 'total_scores'
         self._fit_method_name = 'fit'
         self._predict_method_name = None
 
@@ -119,9 +124,8 @@ class ProblemBase:
 
 class RegressionProblem(ProblemBase):
 
-    def __init__(self):
-        super().__init__()
-        self.group_key = 'dataset_id'
+    def __init__(self, group_key):
+        super().__init__(group_key)
         self._predict_method_name = 'predict_regression'
 
     def score(self, predictions, data):
@@ -133,18 +137,20 @@ class RegressionProblem(ProblemBase):
         correlation, p_value = pearson_correlation(predictions, targets)
 
         total_scores = {
-            'total_rmse': rmse(predictions, targets),
-            'total_pearson_correlation': {
-                'correlation_coefficient': correlation,
-                'p_value': p_value
-            }
+            'rmse': rmse(predictions, targets),
+            'pearson_correlation': correlation,
+            'pearson_p_value': p_value,
         }
 
         # Score per dataset
         predictions_by_group, targets_by_group = self._group_data(predictions, data)
-        per_dataset_scores, mean_scores = self._score_by_group(predictions_by_group, targets_by_group)
+        scores_by_group, aggregate_scores = self._score_by_group(predictions_by_group, targets_by_group)
 
-        return {'total_scores': total_scores, 'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
+        return {
+            self.group_scores_key: scores_by_group,
+            self.agg_scores_key: aggregate_scores,
+            self.total_scores_key: total_scores
+        }
 
     def _group_data(self, predictions, data):
         predictions_by_group = {}
@@ -163,42 +169,36 @@ class RegressionProblem(ProblemBase):
         RMSEs = []
         pearson_coefs = []
         pearson_ps = []
-        per_dataset_scores = {}
+        scores_by_group = {}
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = targets_by_group[group]
             RMSE = rmse(group_predictions, group_targets)
             correlation, p_value = pearson_correlation(group_predictions, group_targets)
 
-            per_dataset_scores[group] = {
+            scores_by_group[group] = {
                 'rmse': RMSE,
-                'pearson_correlation': {
-                    'correlation_coefficient': correlation,
-                    'p_value': p_value
-                }
+                'pearson_correlation': correlation,
+                'pearson_p_value': p_value,
             }
 
             RMSEs.append(RMSE)
             pearson_coefs.append(correlation)
             pearson_ps.append(p_value)
 
-        mean_scores =  {
-            'rmse': {
-                'mean': np.mean(RMSEs),
-                'std_dev': np.std(RMSEs, ddof=1)
-            },
-            'pearson_correlation': {
-                'mean': np.mean(pearson_coefs),
-                'std_dev': np.std(pearson_coefs, ddof=1),
-                'mean_p_value': np.mean(pearson_ps),
-                'std_dev_p_value': np.std(pearson_ps, ddof=1),
-            }
+        aggregate_scores =  {
+            'rmse_mean': np.mean(RMSEs),
+            'rmse_std_dev': np.std(RMSEs, ddof=1),
+            'pearson_correlation_mean': np.mean(pearson_coefs),
+            'pearson_correlation_mean_std_dev': np.std(pearson_coefs, ddof=1),
+            'pearson_p_value_mean': np.mean(pearson_ps),
+            'pearson_p_value_std_dev': np.std(pearson_ps, ddof=1),
         }
 
-        return per_dataset_scores, mean_scores
+        return scores_by_group, aggregate_scores
 
     def plot(self, predictions, data, scores, plot_dir: str):
-        total_scores, per_dataset_scores = scores['total_scores'], scores['per_dataset_scores']
+        total_scores, scores_by_group = scores[self.total_scores_key], scores[self.group_scores_key]
 
         # Plot all the datasets combined
         actuals = [item['test_f1_macro'] for item in data]
@@ -208,7 +208,7 @@ class RegressionProblem(ProblemBase):
         predictions_by_group, targets_by_group = self._group_data(predictions, data)
         for (group, group_predictions) in predictions_by_group.items():
             group_targets = targets_by_group[group]
-            group_scores = per_dataset_scores[group]
+            group_scores = scores_by_group[group]
             plot_name = group
             super()._plot_base(group_predictions, group_targets, plot_name, plot_dir, group_scores, type(self).__name__)
 
@@ -216,8 +216,7 @@ class RegressionProblem(ProblemBase):
 class PredictByGroupProblemBase(ProblemBase):
 
     def __init__(self, group_key):
-        super().__init__()
-        self.group_key = group_key
+        super().__init__(group_key)
 
     def _group_data(self, data):
         grouped_data = {}
@@ -253,94 +252,65 @@ class RankProblem(PredictByGroupProblemBase):
         super().__init__(group_key)
         self._predict_method_name = 'predict_rank'
 
-    def score(self, predictions_by_group, targets):
-        targets_by_group = self._group_data(targets)
-        spearman_coefs = []
-        spearman_ps = []
-        ndcgs_by_k = {}
-        top_k_regrets_by_k = {}
-        top_k_counts_by_k = {}
-        per_dataset_scores = {}
+    @staticmethod
+    def _align_predictions_with_targets(group_targets, group_predictions):
+        group_targets = pd.DataFrame(group_targets)[['pipeline_id', 'test_f1_macro']]
+        group_predictions = pd.DataFrame(group_predictions)[['pipeline_id', 'rank']]
+        # left join ensures targets are not dropped if no predictions were made for particular targets
+        return group_targets.merge(group_predictions, how='left', on='pipeline_id')
+
+    def _get_scores_by_group(self, targets_by_group, predictions_by_group):
+        scores_by_group = {}
 
         for group, group_predictions in predictions_by_group.items():
-            group_predictions = pd.DataFrame(group_predictions)
-            # have to sort by id in cases of ties
-            group_targets = pd.DataFrame(targets_by_group[group])[['pipeline_id', 'test_f1_macro']]
-            group_targets.sort_values(['test_f1_macro', 'pipeline_id'], ascending=False, inplace=True)
-            group_predictions.sort_values(['rank'], ascending=True, inplace=True)
-            merged_data = group_targets.merge(group_predictions, on='pipeline_id')
+            aligned_data = self._align_predictions_with_targets(targets_by_group[group], group_predictions)
 
-            correlation, p_value = spearman_correlation(merged_data['rank'], utils.rank(merged_data['test_f1_macro']))
+            scores_by_group[group] = {}
 
-            ndcg_over_k = self._ndcg_over_k(merged_data['test_f1_macro'], merged_data['rank'])
-            for i, ndcg in enumerate(ndcg_over_k):
-                k = i + 1
-                if k not in ndcgs_by_k:
-                    ndcgs_by_k[k] = []
-                ndcgs_by_k[k].append(ndcg)
+            correlation, p_value = spearman_correlation(aligned_data['rank'], utils.rank(aligned_data['test_f1_macro']))
+            scores_by_group[group]['spearman_correlation'] = correlation
+            scores_by_group[group]['spearman_p_value'] = p_value
 
-            top_k_regrets = self._top_k_regret(merged_data['test_f1_macro'], merged_data['rank'])
-            for i, tkr in enumerate(top_k_regrets):
-                k = i + 1
-                if k not in top_k_regrets_by_k:
-                    top_k_regrets_by_k[k] = []
-                top_k_regrets_by_k[k].append(tkr)
+            # sorting is an optimization for the @k metrics
+            aligned_data.sort_values(['rank', 'pipeline_id'], inplace=True)
 
-            top_k_counts = self._top_k_counts(merged_data['test_f1_macro'], merged_data['rank'])
-            for i, tkc in enumerate(top_k_counts):
-                k = i + 1
-                if k not in top_k_counts_by_k:
-                    top_k_counts_by_k[k] = []
-                top_k_counts_by_k[k].append(tkc)
+            scores_by_group[group]['ndcg_at_k'] = ndcg_at_k(aligned_data['test_f1_macro'])
+            scores_by_group[group]['regret_at_k'] = regret_at_k(aligned_data['test_f1_macro'])
+            scores_by_group[group]['n_correct_at_k'] = n_correct_at_k(aligned_data['test_f1_macro'])
 
-            per_dataset_scores[group] = {
-                'spearman_correlation': {
-                        'correlation_coefficient': correlation,
-                        'p_value': p_value
-                    },
-                'ndcg_over_k': ndcg_over_k,
-                'top_k_regrets': top_k_regrets,
-                'top_k_counts': top_k_counts,
-            }
+        return scores_by_group
 
-            spearman_coefs.append(correlation)
-            spearman_ps.append(p_value)
+    def _get_aggregate_scores(self, scores_by_group):
+        aggregate_scores = {}
+        total_scores = {}
 
-        mean_scores = {
-            'spearman_correlation': {
-                'mean': np.mean(spearman_coefs),
-                'std_dev': np.std(spearman_coefs, ddof=1),
-                'mean_p_value': np.mean(spearman_ps),
-                'std_dev_p_value': np.std(spearman_ps, ddof=1),
-            },
-            'ndcg_over_k': self._mean_values_over_k(ndcgs_by_k),
-            'mean_ndcg': self._mean_ndcg(ndcgs_by_k),
-            'mean_top_k_regrets': self._mean_values_over_k(top_k_regrets_by_k),
-            'mean_top_k_counts': self._mean_values_over_k(top_k_counts_by_k),
-        }
+        for score_name in ['spearman_correlation', 'spearman_p_value']:
+            scores = list(group_score[score_name] for group, group_score in scores_by_group.items())
+            aggregate_scores['{}_mean'.format(score_name)] = np.mean(scores)
+            aggregate_scores['{}_std_dev'.format(score_name)] = np.std(scores, ddof=1)
 
-        return {'per_dataset_scores': per_dataset_scores, 'mean_scores': mean_scores}
+        for score_name in ['ndcg_at_k', 'regret_at_k', 'n_correct_at_k']:
+            scores = (group_score[score_name] for group, group_score in scores_by_group.items())
+            scores_by_k = utils.transpose_jagged_2darray(scores)
+            aggregate_scores['{}_mean'.format(score_name)] = [np.mean(scores_at_k) for i, scores_at_k in scores_by_k.items()]
+            aggregate_scores['{}_std_dev'.format(score_name)] = [np.std(scores_at_k, ddof=1) for i, scores_at_k in scores_by_k.items()]
 
-    def _ndcg_over_k(self, relevance, rank):
-        return [ndcg_at_k(relevance, rank, k) for k in range(1, len(rank) + 1)]
+            flattened_scores = [score_at_k for i, scores_at_k in scores_by_k.items() for score_at_k in scores_at_k]
+            total_scores['{}_mean'.format(score_name)] = np.mean(flattened_scores)
+            total_scores['{}_std_dev'.format(score_name)] = np.std(flattened_scores, ddof=1)
 
-    def _mean_values_over_k(self, values_by_k):
-        return [np.mean(values) for k, values in sorted(values_by_k.items())]
+        return aggregate_scores, total_scores
 
-    def _mean_ndcg(self, ndcgs_by_k):
-        ndcgs = []
-        for k, ndcg_at_k in ndcgs_by_k.items():
-            ndcgs += ndcg_at_k
-        return np.mean(ndcgs)
 
-    def _top_k_regret(self, relevance, rank):
-        return [top_k_regret(relevance, rank, k) for k in range(1, len(rank) + 1)]
-
-    def _top_k_counts(self, relevance, rank):
-        return [top_k_correct(relevance, rank, k) for k in range(1, len(rank) + 1)]
+    def score(self, predictions_by_group, targets):
+        """Computes Spearman correlation, ndcg_at_k, regret_at_k, n_correct_at_k"""
+        targets_by_group = self._group_data(targets)
+        scores_by_group = self._get_scores_by_group(targets_by_group, predictions_by_group)
+        aggregate_scores, total_scores = self._get_aggregate_scores(scores_by_group)
+        return {self.group_scores_key: scores_by_group, self.agg_scores_key: aggregate_scores, self.total_scores_key: total_scores}
 
     def plot(self, predictions, targets, scores, plot_dir: str):
-        per_dataset_scores = scores['per_dataset_scores']
+        scores_by_group = scores[self.group_scores_key]
         grouped_targets = self._group_data(targets)
 
         for (dataset_id, predicted_ranks) in predictions.items():
@@ -351,7 +321,7 @@ class RankProblem(PredictByGroupProblemBase):
             predicted_ranks = np.array(predicted_ranks)
             actuals = merged_data['test_f1_macro'].tolist()
             actual_ranks = utils.rank(actuals)
-            group_scores = per_dataset_scores[dataset_id]
+            group_scores = scores_by_group[dataset_id]
             plot_name = dataset_id + '_plot'
             super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, group_scores, type(self).__name__)
 
@@ -359,6 +329,6 @@ class RankProblem(PredictByGroupProblemBase):
 def get_problem(problem_name: str, **kwargs):
     group_key = 'dataset_id'
     if problem_name == 'regression':
-        return RegressionProblem()
+        return RegressionProblem(group_key)
     if problem_name == 'rank':
         return RankProblem(group_key)
