@@ -4,6 +4,7 @@ import json
 import os
 import random
 import sys
+import traceback
 import typing
 import uuid
 import warnings
@@ -379,7 +380,6 @@ def _get_tuning_objective(arguments: argparse.Namespace):
                     return (score,)
             raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
         except Exception as e:
-            import traceback
             traceback.print_exc()
             raise e from e
 
@@ -630,7 +630,7 @@ def get_result_paths(result_dirs: typing.Sequence[str]):
 def load_results(result_paths: typing.Sequence[str]):
     regression_results = []
     rank_results = []
-    for result_path in result_paths:
+    for result_path in tqdm(result_paths):
         result = load_result(result_path)
         if result == {}:
             print(f'no results for {result_path}')
@@ -647,11 +647,16 @@ def load_result(result_path: str):
         run = json.load(f)
 
     result = {}
-    for problem_scores in run.get('scores', []):
-        problem_name = problem_scores['problem_name']
-        parsed_scores = parse_scores(problem_scores)
-        parsed_scores['path'] = os.path.dirname(result_path)
-        result[problem_name] = parsed_scores
+    try:
+        for problem_scores in run.get('scores', []):
+            problem_name = problem_scores['problem_name']
+            if problem_name in ['regression', 'rank']:
+                parsed_scores = parse_scores(problem_scores)
+                parsed_scores['path'] = os.path.dirname(result_path)
+                result[problem_name] = parsed_scores
+    except Exception as e:
+        traceback.print_exc()
+        print('failed to load {}'.format(result_path))
     return result
 
 
