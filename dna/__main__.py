@@ -591,11 +591,10 @@ def report_handler(arguments: argparse.Namespace):
     else:
         raise ValueError('one of --results-dir or result-paths-csv must be provided')
 
-    regression_results, rank_results, subset_results = load_results(result_paths)
+    regression_results, rank_results = load_results(result_paths)
 
-    regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.total_rmse', min)
-    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.ndcg', max)
-    subset_leaderboard = make_leaderboard(subset_results, 'model_name', 'test.ndcg_at_k.mean', max)
+    regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.rmse', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.ndcg_at_k_mean', max)
 
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
@@ -604,10 +603,8 @@ def report_handler(arguments: argparse.Namespace):
     regression_leaderboard.to_csv(path, index=False)
     path = os.path.join(arguments.report_dir, 'rank_leaderboard.csv')
     rank_leaderboard.to_csv(path, index=False)
-    path = os.path.join(arguments.report_dir, 'subset_leaderboard.csv')
-    subset_leaderboard.to_csv(path, index=False)
 
-    save_result_paths_csv(regression_results, rank_results, subset_results, report_dir=arguments.report_dir)
+    save_result_paths_csv(regression_results, rank_results, report_dir=arguments.report_dir)
 
 
 def get_result_paths_from_dir(results_dir: str):
@@ -633,7 +630,6 @@ def get_result_paths(result_dirs: typing.Sequence[str]):
 def load_results(result_paths: typing.Sequence[str]):
     regression_results = []
     rank_results = []
-    subset_results = []
     for result_path in result_paths:
         result = load_result(result_path)
         if result == {}:
@@ -643,9 +639,7 @@ def load_results(result_paths: typing.Sequence[str]):
                 regression_results.append(result['regression'])
             if 'rank' in result:
                 rank_results.append(result['rank'])
-            if 'subset' in result:
-                subset_results.append(result['subset'])
-    return pd.DataFrame(regression_results), pd.DataFrame(rank_results), pd.DataFrame(subset_results)
+    return pd.DataFrame(regression_results), pd.DataFrame(rank_results)
 
 
 def load_result(result_path: str):
@@ -655,22 +649,17 @@ def load_result(result_path: str):
     result = {}
     for problem_scores in run.get('scores', []):
         problem_name = problem_scores['problem_name']
-        if problem_name == 'regression':
-            parsed_scores = parse_regression_scores(problem_scores)
-        elif problem_name == 'rank':
-            parsed_scores = parse_rank_scores(problem_scores)
-        elif problem_name == 'subset':
-            parsed_scores = parse_subset_scores(problem_scores)
+        parsed_scores = parse_scores(problem_scores)
         parsed_scores['path'] = os.path.dirname(result_path)
         result[problem_name] = parsed_scores
     return result
 
 
-def parse_regression_scores(scores: typing.Dict):
+def parse_scores(scores: typing.Dict):
 
     def _parse(scores, parent_key):
         return {
-            **utils.flatten(scores['mean_scores'], parent_key),
+            **utils.flatten(scores['aggregate_scores'], parent_key),
             **utils.flatten(scores['total_scores'], parent_key),
         }
 
@@ -678,22 +667,6 @@ def parse_regression_scores(scores: typing.Dict):
         'model_name': scores['model_name'],
         **_parse(scores['train_scores'], 'train'),
         **_parse(scores['test_scores'], 'test')
-    }
-
-
-def parse_rank_scores(scores: typing.Dict):
-    return {
-        'model_name': scores['model_name'],
-        **utils.flatten(scores['train_scores']['mean_scores'], 'train'),
-        **utils.flatten(scores['test_scores']['mean_scores'], 'test'),
-    }
-
-
-def parse_subset_scores(scores: typing.Dict):
-    return {
-        'model_name': scores['model_name'],
-        **utils.flatten(scores['train_scores'], 'train'),
-        **utils.flatten(scores['test_scores'], 'test'),
     }
 
 
