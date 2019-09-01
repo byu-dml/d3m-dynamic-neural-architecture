@@ -10,7 +10,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-
+from tqdm import tqdm
 from tuningdeap import TuningDeap
 
 from dna import utils
@@ -438,13 +438,17 @@ def rescore_handler(arguments: argparse.Namespace):
     elif arguments.result_paths_csv is not None:
         result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
 
-    for results_path in result_paths:
+    for results_path in tqdm(sorted(result_paths)):
         handle_rescore(results_path, arguments.output_dir, arguments.plot)
 
 
 def handle_rescore(results_path: str, output_dir: str, plot: bool):
     with open(results_path) as f:
         results = json.load(f)
+
+    if 'scores' not in results:
+        print('no scores for {}'.format(results_path))
+        return
 
     train_data, test_data = get_train_and_test_data(
         results['arguments']['train_path'], results['arguments']['test_path'], results['arguments']['test_size'],
