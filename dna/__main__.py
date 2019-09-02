@@ -593,8 +593,8 @@ def report_handler(arguments: argparse.Namespace):
 
     regression_results, rank_results = load_results(result_paths)
 
-    regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.rmse', min)
-    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.ndcg_at_k_mean', max)
+    regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.total_scores.rmse', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.total_scores.ndcg_at_k_mean', max)
 
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
@@ -627,7 +627,7 @@ def get_result_paths(result_dirs: typing.Sequence[str]):
     return result_paths
 
 
-def load_results(result_paths: typing.Sequence[str]):
+def load_results(result_paths: typing.Sequence[str]) -> pd.DataFrame:
     regression_results = []
     rank_results = []
     for result_path in tqdm(result_paths):
@@ -661,17 +661,10 @@ def load_result(result_path: str):
 
 
 def parse_scores(scores: typing.Dict):
-
-    def _parse(scores, parent_key):
-        return {
-            **utils.flatten(scores['aggregate_scores'], parent_key),
-            **utils.flatten(scores['total_scores'], parent_key),
-        }
-
     return {
         'model_name': scores['model_name'],
-        **_parse(scores['train_scores'], 'train'),
-        **_parse(scores['test_scores'], 'test')
+        **utils.flatten(scores['train_scores'], 'train'),
+        **utils.flatten(scores['test_scores'], 'test')
     }
 
 
