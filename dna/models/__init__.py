@@ -17,8 +17,8 @@ class ModelNotFitError(Exception):
     pass
 
 
-def get_model(model_name: str, model_config: typing.Dict, seed: int):
-    model_class = {
+def get_model_class(model_name: str):
+    return {
         'dna_regression': DNARegressionModel,
         'mean_regression': MeanBaseline,
         'median_regression': MedianBaseline,
@@ -36,5 +36,9 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'meta_autosklearn': MetaAutoSklearn,
         'probabilistic_matrix_factorization': ProbabilisticMatrixFactorization,
     }[model_name.lower()]
+
+
+def get_model(model_name: str, model_config: typing.Dict, seed: int):
+    model_class = get_model_class(model_name)
     init_model_config = model_config.get('__init__', {})
     return model_class(**init_model_config, seed=seed)

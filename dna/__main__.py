@@ -18,6 +18,7 @@ from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models import get_model
 from dna.models.base_models import ModelBase
+from dna import plot
 from dna.problems import get_problem, ProblemBase
 
 
@@ -571,6 +572,12 @@ def record_run(
         json.dump(run, f, indent=4, sort_keys=True)
 
 
+def _configure_report_dir(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        '--report-dir', type=str, default='./leaderboards', help='directory to output score reports'
+    )
+
+
 def configure_report_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--results-dir', type=str, help='directory containing results'
@@ -578,9 +585,15 @@ def configure_report_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--result-paths-csv', type=str, help='path to csv containing paths to results'
     )
-    parser.add_argument(
-        '--report-dir', type=str, default='./leaderboards', help='directory to output score reports'
-    )
+    _configure_report_dir(parser)
+
+
+def get_regression_report_path(report_dir: str):
+    return os.path.join(report_dir, 'regression_leaderboard.csv')
+
+
+def get_rank_report_path(report_dir: str):
+    return os.path.join(report_dir, 'rank_leaderboard.csv')
 
 
 def report_handler(arguments: argparse.Namespace):
@@ -599,9 +612,9 @@ def report_handler(arguments: argparse.Namespace):
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
 
-    path = os.path.join(arguments.report_dir, 'regression_leaderboard.csv')
+    path = get_regression_report_path(arguments.report_dir)
     regression_leaderboard.to_csv(path, index=False)
-    path = os.path.join(arguments.report_dir, 'rank_leaderboard.csv')
+    path = get_rank_report_path(arguments.report_dir)
     rank_leaderboard.to_csv(path, index=False)
 
     save_result_paths_csv(regression_results, rank_results, report_dir=arguments.report_dir)
@@ -688,6 +701,63 @@ def make_leaderboard(results: pd.DataFrame, id_col: str, score_col: str, opt: ty
     return leaderboard.round(8)
 
 
+def configure_report_plot_parser(parser: argparse.ArgumentParser):
+    _configure_report_dir(parser)
+
+
+def report_plot_handler(arguments: argparse.Namespace):
+    plot_regression_report(arguments.report_dir)
+    plot_rank_report(arguments.report_dir)
+
+
+def plot_regression_report(report_dir: str):
+    pass
+
+
+def plot_rank_report(report_dir: str):
+    rank_report_path = get_rank_report_path(report_dir)
+    if not os.path.isfile(rank_report_path):
+        print('rank report not found at {}'.format(rank_report_path))
+        return
+
+    import ast
+    rank_report = pd.read_csv(
+        rank_report_path, quotechar='"', sep=',',
+        converters={
+            # TODO: handle nans
+            'test.aggregate_scores.n_correct_at_k_mean': ast.literal_eval,
+            # 'test.aggregate_scores.n_correct_at_k_std_dev': ast.literal_eval,
+            'test.aggregate_scores.ndcg_at_k_mean': ast.literal_eval,
+            # 'test.aggregate_scores.ndcg_at_k_std_dev': ast.literal_eval,
+            'test.aggregate_scores.regret_at_k_mean': ast.literal_eval,
+            # 'test.aggregate_scores.regret_at_k_std_dev': ast.literal_eval,
+            'train.aggregate_scores.n_correct_at_k_mean': ast.literal_eval,
+            # 'train.aggregate_scores.n_correct_at_k_std_dev': ast.literal_eval,
+            'train.aggregate_scores.ndcg_at_k_mean': ast.literal_eval,
+            # 'train.aggregate_scores.ndcg_at_k_std_dev': ast.literal_eval,
+            'train.aggregate_scores.regret_at_k_mean': ast.literal_eval,
+            # 'train.aggregate_scores.regret_at_k_std_dev': ast.literal_eval,
+        }
+    )
+    plot_ndcg(rank_report, report_dir)
+    plot_regret(rank_report, report_dir)
+    plot_n_correct(rank_report, report_dir)
+
+def plot_ndcg(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'ndcg.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean'], plot_path, 'NDCG@k', None)
+
+
+def plot_regret(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'regret.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean'], plot_path, 'Regret@k', None)
+
+
+def plot_n_correct(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'n_correct.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean'], plot_path, 'N Correct@k', None)
+
+
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
     result_paths = []
     for results in args:
@@ -712,6 +782,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
 
     elif arguments.command == 'report':
         report_handler(arguments)
+
+    elif arguments.command == 'report-plot':
+        report_plot_handler(arguments)
 
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
@@ -748,6 +821,11 @@ def main(argv: typing.Sequence):
         'report', help='generate a report of the best models'
     )
     configure_report_parser(report_parser)
+
+    report_plot_parser = subparsers.add_parser(
+        'report-plot', help='plots the scores of the best models. must be run after calling `report`'
+    )
+    configure_report_plot_parser(report_plot_parser)
 
     arguments = parser.parse_args(argv[1:])
 
