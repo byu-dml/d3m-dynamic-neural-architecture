@@ -1,3 +1,4 @@
+import collections
 import typing
 import warnings
 
@@ -26,49 +27,90 @@ def pearson_correlation(y_hat, y):
         return scipy.stats.pearsonr(y_hat, y)
 
 
-def top_k_correct(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
-    """
-    Assumes that the top_k_predicted list is sorted.
-    """
-    top_k_predicted = top_k_predicted[:k]
-    assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
-    top_actual = actual_data.nlargest(k, columns='test_f1_macro', keep='all')['pipeline_id']
-    return len(set(top_actual).intersection(set(top_k_predicted)))
-
-
-def top_k_regret(top_k_predicted: typing.Sequence, actual_data: pd.DataFrame, k: int):
-    """
-    Assumes that the top_k_predicted list is sorted.
-    """
-    top_k_predicted = top_k_predicted[:k]
-    assert len(top_k_predicted) <= k, 'length of top_k_predicted ({}) is greater than k ({})'.format(len(top_k_predicted), k)
-    actual_best_score = actual_data['test_f1_macro'].max()
-    min_regret = float('inf')
-    for pipeline_id in top_k_predicted:
-        pipeline_score = actual_data[actual_data['pipeline_id'] == pipeline_id]['test_f1_macro'].iloc[0]
-        regret = actual_best_score - pipeline_score
-        min_regret = min(min_regret, regret)
-    return min_regret
-
-
 def spearman_correlation(x: typing.Sequence, y: typing.Sequence):
     spearman = scipy.stats.spearmanr(x, y)
     return spearman.correlation, spearman.pvalue
 
 
-def dcg_at_k(
-    relevance: typing.Sequence, rank: typing.Sequence = None, k: int = None, gains_f: str = 'exponential'
+def _get_rank_order_relevance(relevance: typing.Sequence, rank: typing.Sequence):
+    if rank is None:
+        return np.array(relevance)
+    else:
+        assert len(rank) <= len(relevance)
+        rank_order = np.argsort(rank)
+        return np.array(relevance)[rank_order]
+
+
+def _get_values_at_k(
+    values: np.array, k: typing.Optional[typing.Union[typing.Iterable, int]]
+) -> typing.Union[typing.Iterable, int]:
+    if k is None:
+        return values.tolist()
+    elif isinstance(k, collections.Iterable):
+        return values[np.array(k) - 1].tolist()
+    else:
+        return values[k - 1]
+
+
+def n_correct_at_k(relevance: typing.Sequence, rank: typing.Sequence = None, k: typing.Union[int, typing.Iterable] = None):
+    """Counts the number of top-k ranked items that have the top-k relevancy. Optimized to compute n_correct_at_k
+    for all k. In the case of relevancy ties, all tied relevancies are included in top-k.
+    """
+    sorted_rel = sorted(relevance)[::-1]
+    rank_order_rel = _get_rank_order_relevance(relevance, rank)
+
+    correct = np.arange(1, len(rank_order_rel) + 1)
+    for i, r in enumerate(rank_order_rel):
+        j = i
+        while r < sorted_rel[j]:
+            correct[j] -= 1
+            j += 1
+
+    return _get_values_at_k(correct, k)
+
+
+def regret_at_k(relevance: typing.Sequence, rank: typing.Sequence = None, k: int = None):
+    """Computes the difference between the highest relevance item with the ranked highest relevance item. Optimized
+    to compute for all k.
+    """
+    best = max(relevance)
+    rank_order_rel = _get_rank_order_relevance(relevance, rank)
+    regret = np.minimum.accumulate(best - rank_order_rel)
+    return _get_values_at_k(regret, k)
+
+
+def _dcg(
+    relevance: typing.Sequence, rank: typing.Sequence = None, gains_f: str = 'exponential'
 ):
-    """Discounted cumulative gain (DCG) at rank k
+    rank_order_rel = _get_rank_order_relevance(relevance, rank)
+
+    if gains_f == 'exponential':
+        gains = 2 ** rank_order_rel - 1
+    elif gains_f == 'linear':
+        gains = rank_order_rel
+    else:
+        raise ValueError('Invalid gains_f: {}'.format(gains_f))
+
+    # discount = log2(i + 1), with i starting at 1
+    discounts = np.log2(np.arange(2, len(gains) + 2))
+    discounted_gains = gains / discounts
+    return np.cumsum(discounted_gains)
+
+def dcg_at_k(
+    relevance: typing.Sequence, rank: typing.Sequence = None, k: typing.Union[int, typing.Iterable] = None,
+    gains_f: str = 'exponential'
+):
+    """Discounted cumulative gain (DCG) at rank k. Optimized to compute dcg@k for all k.
 
     Parameters
     ----------
-    actual_relevance: Sequence
+    relevance: Sequence
         True relevance labels
-    predicted_rank: Sequence
+    rank: Sequence
         Predicted rank for actual_relevance. If not provided, actual_relevance is assumed to be in rank order.
-    k: int
-        Rank position.
+    k: Union[int, Iterable[int]]
+        Rank position. If k is an int, dcg will be computed at k. If k is an iterable, dcg will be computed at all
+        values in k. If k is None, all possible values of k will be used.
     gains: str
         Whether gains should be "exponential" (default) or "linear".
     idcg: bool
@@ -78,30 +120,13 @@ def dcg_at_k(
     -------
     DCG@k: float
     """
-    if k is None:
-        k = len(relevance)
-
-    relevance = np.array(relevance)
-    if rank is None:
-        relevance_at_k = relevance[:k]
-    else:
-        rank_order = np.argsort(rank)
-        relevance_at_k = relevance[rank_order[:k]]
-
-    if gains_f == 'exponential':
-        gains = 2 ** relevance_at_k - 1
-    elif gains_f == 'linear':
-        gains = relevance_at_k
-    else:
-        raise ValueError('Invalid gains_f: {}'.format(gains_f))
-
-    # discount = log2(i + 1), with i starting at 1
-    discounts = np.log2(np.arange(2, k + 2))
-    return np.sum(gains / discounts)
+    dcg = _dcg(relevance, rank, gains_f)
+    return _get_values_at_k(dcg, k)
 
 
 def ndcg_at_k(
-    relevance: typing.Sequence, rank: typing.Sequence = None, k: int = None, gains_f: str = 'exponential'
+    relevance: typing.Sequence, rank: typing.Sequence = None, k: typing.Union[int, typing.Iterable] = None,
+    gains_f: str = 'exponential'
 ):
     """Normalized discounted cumulative gain (NDCG) at rank k
     Parameters
@@ -119,6 +144,7 @@ def ndcg_at_k(
     -------
     NDCG@k: float
     """
-    dcg = dcg_at_k(relevance, rank, k=k, gains_f=gains_f)
-    idcg = dcg_at_k(np.sort(relevance)[::-1], k=k, gains_f=gains_f)
-    return dcg / idcg
+    dcg = _dcg(relevance, rank, gains_f=gains_f)
+    idcg = _dcg(np.sort(relevance)[::-1], gains_f=gains_f)
+    _ndcg_at_k = np.array(dcg) / np.array(idcg)
+    return _get_values_at_k(_ndcg_at_k, k)

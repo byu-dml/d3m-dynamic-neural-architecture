@@ -50,7 +50,7 @@ class ModelDeterminismTestCase(unittest.TestCase):
             '--model', model,
             '--model-config-path', model_config_path,
             '--model-seed', '0',
-            '--problem', 'regression', 'rank', 'subset',
+            '--problem', 'regression', 'rank',
             '--k', '2',
             '--train-path', self.data_path_train,
             '--test-size', '2',

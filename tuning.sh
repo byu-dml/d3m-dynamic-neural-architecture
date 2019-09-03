@@ -1,7 +1,8 @@
 #!/bin/bash
 
 use_complete_data=false
-objective=ndcg
+# rmse, pearson, spearman, ndcg, ndcg_at_k, regret, regret_at_k
+objective=ndcg_at_k
 
 if $use_complete_data; then
     # complete has 194 datasets
@@ -37,7 +38,9 @@ python3 -m dna split-data \
     --split-seed $test_split_seed
 
 
-model=dna_regression
+model=lstm
+n_generations=2
+population_size=2
 
 
 python3 -m dna tune \
@@ -45,7 +48,7 @@ python3 -m dna tune \
     --model-config-path ./model_configs/${model}_config.json \
     --tuning-config-path ./tuning_configs/${model}_tuning_config.json \
     --tuning-output-dir $tuning_output_dir \
-    --problem regression rank subset \
+    --problem regression rank \
     --objective $objective \
     --train-path $train_path \
     --k $k \
@@ -54,4 +57,6 @@ python3 -m dna tune \
     --split-seed $validation_split_seed \
     --model-seed $validation_split_seed \
     --output-dir $results_dir \
+    --n-generations $n_generations \
+    --population-size $population_size \
     --verbose

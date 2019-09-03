@@ -1,8 +1,8 @@
-from .base_models import RNNRegressionRankSubsetModelBase
+from .base_models import RNNRegressionRankModelBase
 from .torch_modules.attention_mlp import AttentionMLP
 
 
-class AttentionRegressionModel(RNNRegressionRankSubsetModelBase):
+class AttentionRegressionModel(RNNRegressionRankModelBase):
 
     def __init__(
         self, n_layers: int, n_heads: int, features_per_head: int, attention_hidden_features: int,

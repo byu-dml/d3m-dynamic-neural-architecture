@@ -4,11 +4,14 @@ import json
 import os
 import random
 import sys
+import traceback
 import typing
 import uuid
+import warnings
 
 import numpy as np
-
+import pandas as pd
+from tqdm import tqdm
 from tuningdeap import TuningDeap
 
 from dna import utils
@@ -84,7 +87,7 @@ def configure_evaluate_parser(parser):
     )
     parser.add_argument(
         '--problem', nargs='+', required=True,
-        choices=['regression', 'rank', 'subset'],  # TODO: 'binary-classification'],
+        choices=['regression', 'rank'],
         help='the type of problem'
     )
     parser.add_argument(
@@ -162,14 +165,20 @@ class EvaluateResult:
         self.ootsp_test_predict_time = ootsp_test_predict_time
         self.ootsp_test_scores = ootsp_test_scores
 
+    def _to_json_for_eq(self):
+        return {
+            'train_predictions': self.train_predictions,
+            'train_scores': self.train_scores,
+            'test_predictions': self.test_predictions,
+            'test_scores': self.test_scores,
+            'ootsp_test_predictions': self.ootsp_test_predictions,
+            'ootsp_test_scores': self.ootsp_test_scores,
+        }
+
     def __eq__(self, other):
-        result = self.train_predictions == other.train_predictions
-        result &= self.train_scores == other.train_scores
-        result &= self.test_predictions == other.test_predictions
-        result &= self.test_scores == other.test_scores
-        result &= self.ootsp_test_predictions == other.ootsp_test_predictions
-        result &= self.ootsp_test_scores == other.ootsp_test_scores
-        return result
+        self_json = self._to_json_for_eq()
+        other_json = other._to_json_for_eq()
+        return json.dumps(self_json, sort_keys=True) == json.dumps(other_json, sort_keys=True)
 
 
 def evaluate(
@@ -264,10 +273,13 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         })
 
         if arguments.verbose:
+            # TODO: move to evaluate result __str__ method
             results = evaluate_result.__dict__
             del results['train_predictions']
             del results['test_predictions']
             del results['ootsp_test_predictions']
+            del results['train_scores'][problem.group_scores_key]
+            del results['test_scores'][problem.group_scores_key]
             print(json.dumps(results, indent=4))
             print()
 
@@ -301,11 +313,19 @@ def configure_tuning_parser(parser):
     )
     parser.add_argument(
         '--objective', type=str, action='store', required=True,
-        choices=['total_rmse', 'top_k_regret', 'spearman_mean', 'ndcg', 'ndcg@k']
+        choices=['rmse', 'pearson', 'spearman', 'ndcg', 'ndcg_at_k', 'regret', 'regret_at_k']
     )
     parser.add_argument(
         '--tuning-output-dir', type=str, default=None,
         help='directory path to write outputs from tuningDEAP'
+    )
+    parser.add_argument(
+        '--n-generations', type=int, default=1,
+        help='How many generations to tune for'
+    )
+    parser.add_argument(
+        '--population-size', type=int, default=1,
+        help='the number of individuals to generate each population'
     )
     configure_evaluate_parser(parser)
 
@@ -318,26 +338,34 @@ def _get_tuning_objective(arguments: argparse.Namespace):
     (objective, minimize): tuple(Callable, bool)
         a tuple containing the objective function and a Boolean indicating whether the objective should be minimized
     """
-    if arguments.objective == 'total_rmse':
+    if arguments.objective == 'rmse':
         score_problem = 'regression'
-        score_path = ('test_scores', 'total_scores', 'total_rmse')
+        score_path = ('test_scores', 'total_scores', 'rmse')
         minimize = True
-    elif arguments.objective == 'top_k_regret':
-        score_problem = 'subset'
-        score_path = ('test_scores', 'top_k_regret', 'mean')
-        minimize = True
-    elif arguments.objective == 'spearman_mean':
+    elif arguments.objective == 'pearson':
+        score_problem = 'regression'
+        score_path = ('test_scores', 'total_scores', 'pearson_correlation')
+        minimize = False
+    elif arguments.objective == 'spearman':
         score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'spearman_correlation', 'mean')
+        score_path = ('test_scores', 'aggregate_scores', 'spearman_correlation_mean')
         minimize = False
     elif arguments.objective == 'ndcg':
         score_problem = 'rank'
-        score_path = ('test_scores', 'mean_scores', 'ndcg')
+        score_path = ('test_scores', 'total_scores', 'ndcg_at_k_mean')
         minimize = False
-    elif arguments.objective == 'ndcg@k':
-        score_problem = 'subset'
-        score_path = ('test_scores', 'ndcg_at_k', 'mean')
+    elif arguments.objective == 'ndcg_at_k':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'aggregate_scores', 'ndcg_at_k_mean', arguments.k)
         minimize = False
+    elif arguments.objective == 'regret':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'total_scores', 'regret_at_k_mean')
+        minimize = True
+    elif arguments.objective == 'regret_at_k':
+        score_problem = 'rank'
+        score_path = ('test_scores', 'aggregate_scores', 'regret_at_k_mean', arguments.k)
+        minimize = True
     else:
         raise ValueError('unknown objective {}'.format(arguments.objective))
 
@@ -352,7 +380,6 @@ def _get_tuning_objective(arguments: argparse.Namespace):
                     return (score,)
             raise ValueError('{} problem required for "{}" objective'.format(score_problem, arguments.objective))
         except Exception as e:
-            import traceback
             traceback.print_exc()
             raise e from e
 
@@ -367,10 +394,14 @@ def tuning_handler(arguments: argparse.Namespace):
         tuning_config = json.load(file)
 
     objective, minimize = _get_tuning_objective(arguments)
+    tuning_run_id = str(uuid.uuid4())
+    tuning_output_dir = os.path.join(arguments.tuning_output_dir, arguments.model, tuning_run_id)
+    if not os.path.isdir(tuning_output_dir):
+        os.makedirs(tuning_output_dir)
 
     tune = TuningDeap(
-        objective, tuning_config, model_config, minimize=minimize, output_dir=arguments.tuning_output_dir,
-        verbose=arguments.verbose
+        objective, tuning_config, model_config, minimize=minimize, output_dir=tuning_output_dir,
+        verbose=arguments.verbose, population_size=arguments.population_size, n_generations=arguments.n_generations
     )
     best_config, best_score = tune.run_evolutionary()
     if arguments.verbose:
@@ -379,20 +410,45 @@ def tuning_handler(arguments: argparse.Namespace):
         ))
 
 
-def configure_rescore_parser(parser):
+def configure_rescore_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
-        '--results-path', type=str, action='store', required=True,
-        help='path to the file containing the results of a call to evaluate'
+        '--results-path', type=str, action='store', help='path of file to rescore'
     )
     parser.add_argument(
-        '--output-dir', type=str, action='store', required=True,
+        '--results-dir', type=str, help='directory of results to rescore'
+    )
+    parser.add_argument(
+        '--result-paths-csv', type=str, help='path to csv containing paths of files to rescore'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', default='./rescore',
         help='the base directory to write the recomputed scores and plots'
     )
+    parser.add_argument(
+        '--plot', default=False, action='store_true', help='whether to remake the plots'
+    )
+
 
 
 def rescore_handler(arguments: argparse.Namespace):
-    with open(arguments.results_path) as f:
+    if arguments.results_path is not None:
+        result_paths = [arguments.results_path]
+    elif arguments.results_dir is not None:
+        result_paths = get_result_paths_from_dir(arguments.results_dir)
+    elif arguments.result_paths_csv is not None:
+        result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
+
+    for results_path in tqdm(sorted(result_paths)):
+        handle_rescore(results_path, arguments.output_dir, arguments.plot)
+
+
+def handle_rescore(results_path: str, output_dir: str, plot: bool):
+    with open(results_path) as f:
         results = json.load(f)
+
+    if 'scores' not in results:
+        print('no scores for {}'.format(results_path))
+        return
 
     train_data, test_data = get_train_and_test_data(
         results['arguments']['train_path'], results['arguments']['test_path'], results['arguments']['test_size'],
@@ -401,48 +457,37 @@ def rescore_handler(arguments: argparse.Namespace):
     )
 
     # Create the output directory for the results of the re-score
-    output_dir = os.path.join(arguments.output_dir, results['id'])
+    output_dir = os.path.join(output_dir, results['id'])
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 
-    plot_dir = os.path.join(output_dir, 'plots')
-    if not os.path.isdir(plot_dir):
-        os.mkdir(plot_dir)
+    if plot:
+        plot_dir = os.path.join(output_dir, 'plots')
+        if not os.path.isdir(plot_dir):
+            os.mkdir(plot_dir)
 
     # For each problem, re-score using the predictions and data and ensure the scores are the same as before
-    for score in results['scores']:
-        problem = get_problem(score['problem_name'], **results['arguments'])
+    for problem_scores in results['scores']:
+        problem = get_problem(problem_scores['problem_name'], **results['arguments'])
+        if problem is None:
+            continue
 
-        train_predictions, train_scores = rescore(score, train_data, 'train', problem)
-        test_predictions, test_scores = rescore(score, test_data, 'test', problem)
+        train_predictions = problem_scores['train_predictions']
+        train_rescores = problem.score(train_predictions, train_data)
+        problem_scores['train_scores'] = train_rescores
+        if plot:
+            problem.plot(train_predictions, train_data, train_rescores, os.path.join(plot_dir, 'train'))
 
-        problem.plot(train_predictions, train_data, train_scores, os.path.join(plot_dir, 'train'))
-        problem.plot(test_predictions, test_data, test_scores, os.path.join(plot_dir, 'test'))
+        test_predictions = problem_scores['test_predictions']
+        test_rescores = problem.score(test_predictions, test_data)
+        problem_scores['test_scores'] = test_rescores
+        if plot:
+            problem.plot(test_predictions, test_data, test_rescores, os.path.join(plot_dir, 'test'))
 
     # Save the re-scored json file
-    rescore_path = os.path.join(output_dir, 'rescore.json')
+    rescore_path = os.path.join(output_dir, 'run.json')
     with open(rescore_path, 'w') as f:
-        json.dump(results, f, indent=4)
-
-
-def rescore(score: dict, data: list, score_type: str, problem):
-    predictions_key = score_type + '_predictions'
-    predictions = score[predictions_key]
-    scores = problem.score(predictions, data)
-    score_key = score_type + '_scores'
-    check_scores(scores, score[score_key], score_type)
-    score[score_key] = scores
-
-    return predictions, scores
-
-
-def check_scores(scores: dict, rescores: dict, score_type: str):
-    for k, v1 in scores.items():
-        v2 = rescores[k]
-        if type(v1) == dict:
-            check_scores(v1, v2, score_type)
-        elif not (np.isnan(v1) and np.isnan(v2)) and not np.isclose(v1, v2):
-            raise ValueError('{} {} score value {} does not equal rescore value {}'.format(score_type, k, v1, v2))
+        json.dump(results, f, indent=4, sort_keys=True)
 
 
 def get_train_and_test_data(
@@ -526,6 +571,132 @@ def record_run(
         json.dump(run, f, indent=4, sort_keys=True)
 
 
+def configure_report_parser(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        '--results-dir', type=str, help='directory containing results'
+    )
+    parser.add_argument(
+        '--result-paths-csv', type=str, help='path to csv containing paths to results'
+    )
+    parser.add_argument(
+        '--report-dir', type=str, default='./leaderboards', help='directory to output score reports'
+    )
+
+
+def report_handler(arguments: argparse.Namespace):
+    if arguments.results_dir is not None:
+        result_paths = get_result_paths_from_dir(arguments.results_dir)
+    elif arguments.result_paths_csv is not None:
+        result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
+    else:
+        raise ValueError('one of --results-dir or result-paths-csv must be provided')
+
+    regression_results, rank_results = load_results(result_paths)
+
+    regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.total_scores.rmse', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.total_scores.ndcg_at_k_mean', max)
+
+    if not os.path.isdir(arguments.report_dir):
+        os.makedirs(arguments.report_dir)
+
+    path = os.path.join(arguments.report_dir, 'regression_leaderboard.csv')
+    regression_leaderboard.to_csv(path, index=False)
+    path = os.path.join(arguments.report_dir, 'rank_leaderboard.csv')
+    rank_leaderboard.to_csv(path, index=False)
+
+    save_result_paths_csv(regression_results, rank_results, report_dir=arguments.report_dir)
+
+
+def get_result_paths_from_dir(results_dir: str):
+    return get_result_paths([os.path.join(results_dir, dir_) for dir_ in os.listdir(results_dir)])
+
+
+def get_result_paths_from_csv(csv_path: str):
+    df = pd.read_csv(csv_path, header=None)
+    return get_result_paths(df[0])
+
+
+def get_result_paths(result_dirs: typing.Sequence[str]):
+    result_paths = []
+    for dir_ in result_dirs:
+        path = os.path.join(dir_, 'run.json')
+        if os.path.isfile(path):
+            result_paths.append(path)
+        else:
+            print(f'file does not exist: {path}')
+    return result_paths
+
+
+def load_results(result_paths: typing.Sequence[str]) -> pd.DataFrame:
+    regression_results = []
+    rank_results = []
+    for result_path in tqdm(result_paths):
+        result = load_result(result_path)
+        if result == {}:
+            print(f'no results for {result_path}')
+        else:
+            if 'regression' in result:
+                regression_results.append(result['regression'])
+            if 'rank' in result:
+                rank_results.append(result['rank'])
+    return pd.DataFrame(regression_results), pd.DataFrame(rank_results)
+
+
+def load_result(result_path: str):
+    with open(result_path) as f:
+        run = json.load(f)
+
+    result = {}
+    try:
+        for problem_scores in run.get('scores', []):
+            problem_name = problem_scores['problem_name']
+            if problem_name in ['regression', 'rank']:
+                parsed_scores = parse_scores(problem_scores)
+                parsed_scores['path'] = os.path.dirname(result_path)
+                result[problem_name] = parsed_scores
+    except Exception as e:
+        traceback.print_exc()
+        print('failed to load {}'.format(result_path))
+    return result
+
+
+def parse_scores(scores: typing.Dict):
+    return {
+        'model_name': scores['model_name'],
+        **utils.flatten(scores['train_scores'], 'train'),
+        **utils.flatten(scores['test_scores'], 'test')
+    }
+
+
+def make_leaderboard(results: pd.DataFrame, id_col: str, score_col: str, opt: typing.Callable):
+    grouped_results = results.groupby(id_col)
+    counts = grouped_results.size().astype(int)
+    counts.name = 'count'
+    leader_indices = grouped_results[score_col].transform(opt) == results[score_col]
+    leaderboard = results[leader_indices].drop_duplicates([id_col, score_col])
+    leaderboard.sort_values([score_col, id_col], ascending=opt==min, inplace=True)
+    leaderboard.reset_index(drop=True, inplace=True)
+    leaderboard = leaderboard.join(counts, on=id_col)
+
+    columns = list(leaderboard.columns)
+    columns.remove(id_col)
+    columns.remove(score_col)
+    columns.remove(counts.name)
+
+    leaderboard = leaderboard[[id_col, counts.name, score_col] + sorted(columns)]
+
+    return leaderboard.round(8)
+
+
+def save_result_paths_csv(*args: pd.DataFrame, report_dir):
+    result_paths = []
+    for results in args:
+        result_paths += results['path'].tolist()
+    df = pd.DataFrame(set(result_paths))
+    path = os.path.join(report_dir, 'result_paths.csv')
+    df.to_csv(path, header=False, index=False)
+
+
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
     if arguments.command == 'split-data':
         split_handler(arguments)
@@ -538,6 +709,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
 
     elif arguments.command == 'tune':
         tuning_handler(arguments)
+
+    elif arguments.command == 'report':
+        report_handler(arguments)
 
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
@@ -569,6 +743,11 @@ def main(argv: typing.Sequence):
         'tune', help='recompute scores from the file output by evaluate and remake the plots'
     )
     configure_tuning_parser(tuning_parser)
+
+    report_parser = subparsers.add_parser(
+        'report', help='generate a report of the best models'
+    )
+    configure_report_parser(report_parser)
 
     arguments = parser.parse_args(argv[1:])
 

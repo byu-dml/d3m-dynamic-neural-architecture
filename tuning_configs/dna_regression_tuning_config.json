@@ -1,6 +1,4 @@
 {
-    "population_size": 2,
-    "n_generations": 2,
     "attributes": {
         "hidden_layer_size": {
             "type": "int",
