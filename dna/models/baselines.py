@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn import linear_model
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
 import torch
 from .torch_modules.mlp import MLP
 
@@ -134,6 +135,13 @@ class RandomForestBaseline(SklearnBase):
         self.fitted = False
 
 
+class MLPBaseline(SklearnBase):
+    def __init__(self, seed=0):
+        super().__init__(seed=seed)
+        self.regressor = MLPRegressor(random_state=seed)
+        self.fitted = False
+
+
 class MetaAutoSklearn(SklearnBase):
 
     def __init__(self, seed=0, **kwargs):
@@ -224,7 +232,7 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase):
         metafeatures.drop_duplicates(inplace=True)
         return metafeatures
 
-class MLPRegressionModel(PyTorchRegressionRankModelBase):
+class MLPAblationModel(PyTorchRegressionRankModelBase):
 
     def __init__(
             self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
