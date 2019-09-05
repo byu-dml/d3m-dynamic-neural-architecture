@@ -136,9 +136,20 @@ class RandomForestBaseline(SklearnBase):
 
 
 class MLPBaseline(SklearnBase):
-    def __init__(self, seed=0):
+    """
+    Takes in a vector of metafeatures concatenated to binary nominal features that represent which primitives are in
+    a pipeline. This is passed into sklearn's MLPRegressor.
+    See https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html for a list of all
+    the constructor inputs, most of which can be used as tunable hyper-parameters
+    """
+
+    def __init__(self, seed=0, *, hidden_layer_size, n_hidden_layers, **kwargs):
         super().__init__(seed=seed)
-        self.regressor = MLPRegressor(random_state=seed)
+        hidden_layer_sizes = [hidden_layer_size] * n_hidden_layers
+        self.regressor = MLPRegressor(
+            random_state=seed, early_stopping=True, hidden_layer_sizes=hidden_layer_sizes,
+            **kwargs
+        )
         self.fitted = False
 
 
