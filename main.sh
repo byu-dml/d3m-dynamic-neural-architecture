@@ -100,9 +100,21 @@ python3 -m dna evaluate \
 
 # mlp outputs a constant value for a dataset, so it cannot rank
 python3 -m dna evaluate \
-    --model mlp_regression \
+    --model mlp_ablation \
     --model-config-path ./model_configs/mlp_ablation_config.json \
     --problem regression \
+    --metafeature-subset $metafeature_subset \
+    --train-path $train_path \
+    --test-path $test_path \
+    --output-dir $results_dir \
+    --verbose \
+    $use_ootsp
+
+
+python3 -m dna evaluate \
+    --model mlp_baseline \
+    --model-config-path ./model_configs/mlp_baseline_config.json \
+    --problem regression rank\
     --metafeature-subset $metafeature_subset \
     --train-path $train_path \
     --test-path $test_path \

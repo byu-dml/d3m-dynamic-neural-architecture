@@ -31,7 +31,7 @@ def get_model(model_name: str, model_config: typing.Dict, seed: int):
         'dag_attention_regression': DAGAttentionRegressionModel,
         'linear_regression': LinearRegressionBaseline,
         'random_forest': RandomForestBaseline,
-        'mlp_regression': MLPBaseline,
+        'mlp_baseline': MLPBaseline,
         'mlp_ablation': MLPAblationModel,
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,
