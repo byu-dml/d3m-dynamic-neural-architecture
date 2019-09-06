@@ -165,28 +165,37 @@ class EvaluateResult:
         self.ootsp_test_scores = ootsp_test_scores
 
     def __str__(self):
-        results = copy.deepcopy(self.__dict__)
-        del results['problem_name']
-        del results['group_scores_key']
-        del results['train_predictions']
-        del results['test_predictions']
-        del results['ootsp_test_predictions']
-        del results['train_scores'][self.group_scores_key]
-        del results['test_scores'][self.group_scores_key]
+        results_shallow_copy = self.__dict__
+        results = {
+            'fit_time': results_shallow_copy['fit_time'],
+            'train_predict_time': results_shallow_copy['train_predict_time']
+        }
 
-        # Remove the scores at k for the rank problem so the terminal output isn't so huge
-        if self.problem_name == 'rank':
-            def delete_rank_problem_scores_at_k(results_copy, phase):
-                aggregate_scores = results_copy[phase]['aggregate_scores']
-                del aggregate_scores['ndcg_at_k_mean']
-                del aggregate_scores['ndcg_at_k_std_dev']
-                del aggregate_scores['regret_at_k_mean']
-                del aggregate_scores['regret_at_k_std_dev']
-                del aggregate_scores['n_correct_at_k_mean']
-                del aggregate_scores['n_correct_at_k_std_dev']
+        def get_aggregate_scores(results_copy: dict, problem_name: str, phase: str):
+            aggregate_scores_copy = results_copy[phase]['aggregate_scores']
+            if problem_name == 'regression':
+                return aggregate_scores_copy
+            elif problem_name == 'rank':
+                aggregate_scores = {
+                    'spearman_correlation_mean': aggregate_scores_copy['spearman_correlation_mean'],
+                    'spearman_correlation_std_dev': aggregate_scores_copy['spearman_correlation_std_dev'],
+                    'spearman_p_value_mean': aggregate_scores_copy['spearman_p_value_mean'],
+                    'spearman_p_value_std_dev': aggregate_scores_copy['spearman_p_value_std_dev']
+                }
+                return aggregate_scores
 
-            delete_rank_problem_scores_at_k(results, phase='train_scores')
-            delete_rank_problem_scores_at_k(results, phase='test_scores')
+        train_scores = {
+            'total_scores': results_shallow_copy['train_scores']['total_scores'],
+            'aggregate_scores': get_aggregate_scores(results_shallow_copy, self.problem_name, 'train_scores')
+        }
+        results['train_scores'] = train_scores
+
+        results['test_predict_time'] = results_shallow_copy['test_predict_time']
+        test_scores = {
+            'total_scores': results_shallow_copy['test_scores']['total_scores'],
+            'aggregate_scores': get_aggregate_scores(results_shallow_copy, self.problem_name, 'test_scores')
+        }
+        results['test_scores'] = test_scores
 
         return json.dumps(results, indent=4)
 
