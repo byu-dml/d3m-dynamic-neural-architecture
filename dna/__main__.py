@@ -8,6 +8,7 @@ import traceback
 import typing
 import uuid
 import warnings
+import copy
 
 import numpy as np
 import pandas as pd
@@ -274,12 +275,27 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
 
         if arguments.verbose:
             # TODO: move to evaluate result __str__ method
-            results = evaluate_result.__dict__
+            results = copy.deepcopy(evaluate_result.__dict__)
             del results['train_predictions']
             del results['test_predictions']
             del results['ootsp_test_predictions']
             del results['train_scores'][problem.group_scores_key]
             del results['test_scores'][problem.group_scores_key]
+
+            # Remove the scores at k for the rank problem so the terminal output isn't so huge
+            if problem_name == 'rank':
+                def delete_rank_problem_scores_at_k(results_copy, phase):
+                    aggregate_scores = results_copy[phase]['aggregate_scores']
+                    del aggregate_scores['ndcg_at_k_mean']
+                    del aggregate_scores['ndcg_at_k_std_dev']
+                    del aggregate_scores['regret_at_k_mean']
+                    del aggregate_scores['regret_at_k_std_dev']
+                    del aggregate_scores['n_correct_at_k_mean']
+                    del aggregate_scores['n_correct_at_k_std_dev']
+
+                delete_rank_problem_scores_at_k(results, phase='train_scores')
+                delete_rank_problem_scores_at_k(results, phase='test_scores')
+
             print(json.dumps(results, indent=4))
             print()
 

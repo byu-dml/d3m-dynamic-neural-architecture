@@ -321,9 +321,23 @@ class RankProblem(PredictByGroupProblemBase):
             predicted_ranks = np.array(predicted_ranks)
             actuals = merged_data['test_f1_macro'].tolist()
             actual_ranks = utils.rank(actuals)
+
+            # Average all the scores at k to make the plot title a reasonable length
             group_scores = scores_by_group[dataset_id]
+            group_scores = self.shorten_k_rank_scores(group_scores)
+
             plot_name = dataset_id + '_plot'
             super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, group_scores, type(self).__name__)
+
+    @staticmethod
+    def shorten_k_rank_scores(rank_scores: dict):
+        """Takes the average of the top k, k regret, and ndcg rank scores so the score at every k isn't reported"""
+
+        rank_scores = rank_scores.copy()
+        rank_scores['ndcg_at_k'] = np.mean(rank_scores['ndcg_at_k'])
+        rank_scores['regret_at_k'] = np.mean(rank_scores['regret_at_k'])
+        rank_scores['n_correct_at_k'] = np.mean(rank_scores['n_correct_at_k'])
+        return rank_scores
 
 
 def get_problem(problem_name: str, **kwargs):
