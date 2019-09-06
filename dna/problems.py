@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import group_json_objects
-from dna.metrics import n_correct_at_k, ndcg_at_k, pearson_correlation, regret_at_k, rmse, spearman_correlation
+from dna import metrics
 from dna import utils
 
 
@@ -134,10 +134,10 @@ class RegressionProblem(ProblemBase):
         targets = []
         for instance in data:
             targets.append(instance['test_f1_macro'])
-        correlation, p_value = pearson_correlation(predictions, targets)
+        correlation, p_value = metrics.pearson_correlation(predictions, targets)
 
         total_scores = {
-            'rmse': rmse(predictions, targets),
+            'rmse': metrics.rmse(predictions, targets),
             'pearson_correlation': correlation,
             'pearson_p_value': p_value,
         }
@@ -173,8 +173,8 @@ class RegressionProblem(ProblemBase):
 
         for group, group_predictions in predictions_by_group.items():
             group_targets = targets_by_group[group]
-            RMSE = rmse(group_predictions, group_targets)
-            correlation, p_value = pearson_correlation(group_predictions, group_targets)
+            RMSE = metrics.rmse(group_predictions, group_targets)
+            correlation, p_value = metrics.pearson_correlation(group_predictions, group_targets)
 
             scores_by_group[group] = {
                 'rmse': RMSE,
@@ -188,11 +188,11 @@ class RegressionProblem(ProblemBase):
 
         aggregate_scores =  {
             'rmse_mean': np.mean(RMSEs),
-            'rmse_std_dev': np.std(RMSEs, ddof=1),
+            'rmse_std_dev': metrics.std_dev(RMSEs, ddof=1),
             'pearson_correlation_mean': np.mean(pearson_coefs),
-            'pearson_correlation_mean_std_dev': np.std(pearson_coefs, ddof=1),
+            'pearson_correlation_mean_std_dev': metrics.std_dev(pearson_coefs, ddof=1),
             'pearson_p_value_mean': np.mean(pearson_ps),
-            'pearson_p_value_std_dev': np.std(pearson_ps, ddof=1),
+            'pearson_p_value_std_dev': metrics.std_dev(pearson_ps, ddof=1),
         }
 
         return scores_by_group, aggregate_scores
@@ -267,16 +267,16 @@ class RankProblem(PredictByGroupProblemBase):
 
             scores_by_group[group] = {}
 
-            correlation, p_value = spearman_correlation(aligned_data['rank'], utils.rank(aligned_data['test_f1_macro']))
+            correlation, p_value = metrics.spearman_correlation(aligned_data['rank'], utils.rank(aligned_data['test_f1_macro']))
             scores_by_group[group]['spearman_correlation'] = correlation
             scores_by_group[group]['spearman_p_value'] = p_value
 
             # sorting is an optimization for the @k metrics
             aligned_data.sort_values(['rank', 'pipeline_id'], inplace=True)
 
-            scores_by_group[group]['ndcg_at_k'] = ndcg_at_k(aligned_data['test_f1_macro'])
-            scores_by_group[group]['regret_at_k'] = regret_at_k(aligned_data['test_f1_macro'])
-            scores_by_group[group]['n_correct_at_k'] = n_correct_at_k(aligned_data['test_f1_macro'])
+            scores_by_group[group]['ndcg_at_k'] = metrics.ndcg_at_k(aligned_data['test_f1_macro'])
+            scores_by_group[group]['regret_at_k'] = metrics.regret_at_k(aligned_data['test_f1_macro'])
+            scores_by_group[group]['n_correct_at_k'] = metrics.n_correct_at_k(aligned_data['test_f1_macro'])
 
         return scores_by_group
 
@@ -287,17 +287,17 @@ class RankProblem(PredictByGroupProblemBase):
         for score_name in ['spearman_correlation', 'spearman_p_value']:
             scores = list(group_score[score_name] for group, group_score in scores_by_group.items())
             aggregate_scores['{}_mean'.format(score_name)] = np.mean(scores)
-            aggregate_scores['{}_std_dev'.format(score_name)] = np.std(scores, ddof=1)
+            aggregate_scores['{}_std_dev'.format(score_name)] = metrics.std_dev(scores, ddof=1)
 
         for score_name in ['ndcg_at_k', 'regret_at_k', 'n_correct_at_k']:
             scores = (group_score[score_name] for group, group_score in scores_by_group.items())
             scores_by_k = utils.transpose_jagged_2darray(scores)
             aggregate_scores['{}_mean'.format(score_name)] = [np.mean(scores_at_k) for i, scores_at_k in scores_by_k.items()]
-            aggregate_scores['{}_std_dev'.format(score_name)] = [np.std(scores_at_k, ddof=1) for i, scores_at_k in scores_by_k.items()]
+            aggregate_scores['{}_std_dev'.format(score_name)] = [metrics.std_dev(scores_at_k, ddof=1) for i, scores_at_k in scores_by_k.items()]
 
             flattened_scores = [score_at_k for i, scores_at_k in scores_by_k.items() for score_at_k in scores_at_k]
             total_scores['{}_mean'.format(score_name)] = np.mean(flattened_scores)
-            total_scores['{}_std_dev'.format(score_name)] = np.std(flattened_scores, ddof=1)
+            total_scores['{}_std_dev'.format(score_name)] = metrics.std_dev(flattened_scores, ddof=1)
 
         return aggregate_scores, total_scores
 

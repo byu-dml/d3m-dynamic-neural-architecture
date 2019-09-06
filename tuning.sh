@@ -38,9 +38,15 @@ python3 -m dna split-data \
     --split-seed $test_split_seed
 
 
-model=lstm
 n_generations=2
 population_size=2
+
+
+model=lstm
+# model=lstm
+# model=daglstm_regression
+# model=attention_regression
+# model=dag_attention_regression
 
 
 python3 -m dna tune \
