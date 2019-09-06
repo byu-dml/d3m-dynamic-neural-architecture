@@ -7,6 +7,11 @@ from dna.data import RNNDataLoader
 
 
 class LSTMModel(RNNRegressionRankModelBase):
+
+    # used for plotting and reporting
+    name = 'LSTM (AlphaD3M)'
+    color = 'indigo'
+
     def __init__(
         self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, loss_function_name: str,

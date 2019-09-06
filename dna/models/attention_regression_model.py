@@ -4,6 +4,10 @@ from .torch_modules.attention_mlp import AttentionMLP
 
 class AttentionRegressionModel(RNNRegressionRankModelBase):
 
+    # used for plotting and reporting
+    name = 'Attention'
+    color = 'red'
+
     def __init__(
         self, n_layers: int, n_heads: int, features_per_head: int, attention_hidden_features: int,
         attention_activation_name: str, reduction_name: str, use_mask: bool, activation_name: str, dropout: float,
