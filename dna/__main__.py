@@ -224,6 +224,7 @@ def evaluate(
 
 def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
     run_id = str(uuid.uuid4())
+    git_commit = utils.get_git_commit_hash()
 
     output_dir = arguments.output_dir
     model_output_dir = None
@@ -235,7 +236,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         plot_dir = os.path.join(output_dir, 'plots')
         os.makedirs(plot_dir)
 
-        record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
+        record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(
         arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
@@ -281,7 +282,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             print()
 
     if output_dir is not None:
-        record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
+        record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
     if output_dir is not None:
         if not os.listdir(model_output_dir):
@@ -551,7 +552,7 @@ def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
 
 
 def record_run(
-    run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
+    run_id: str, git_commit: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
     scores: typing.Dict = None
 ):
     if not os.path.isdir(output_dir):
@@ -560,7 +561,7 @@ def record_run(
 
     run = {
         'id': run_id,
-        'git_commit': utils.get_git_commit_hash(),
+        'git_commit': git_commit,
         'arguments': arguments.__dict__,
         'model_config': model_config,
     }
