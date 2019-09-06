@@ -150,8 +150,10 @@ class EvaluateResult:
 
     def __init__(
         self, train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores, problem_name, group_scores_key
     ):
+        self.problem_name = problem_name
+        self.group_scores_key = group_scores_key
         self.train_predictions = train_predictions
         self.fit_time = fit_time
         self.train_predict_time = train_predict_time
@@ -162,6 +164,32 @@ class EvaluateResult:
         self.ootsp_test_predictions = ootsp_test_predictions
         self.ootsp_test_predict_time = ootsp_test_predict_time
         self.ootsp_test_scores = ootsp_test_scores
+
+    def __str__(self):
+        results = copy.deepcopy(self.__dict__)
+        del results['problem_name']
+        del results['group_scores_key']
+        del results['train_predictions']
+        del results['test_predictions']
+        del results['ootsp_test_predictions']
+        del results['train_scores'][self.group_scores_key]
+        del results['test_scores'][self.group_scores_key]
+
+        # Remove the scores at k for the rank problem so the terminal output isn't so huge
+        if self.problem_name == 'rank':
+            def delete_rank_problem_scores_at_k(results_copy, phase):
+                aggregate_scores = results_copy[phase]['aggregate_scores']
+                del aggregate_scores['ndcg_at_k_mean']
+                del aggregate_scores['ndcg_at_k_std_dev']
+                del aggregate_scores['regret_at_k_mean']
+                del aggregate_scores['regret_at_k_std_dev']
+                del aggregate_scores['n_correct_at_k_mean']
+                del aggregate_scores['n_correct_at_k_std_dev']
+
+            delete_rank_problem_scores_at_k(results, phase='train_scores')
+            delete_rank_problem_scores_at_k(results, phase='test_scores')
+
+        return json.dumps(results, indent=4)
 
     def _to_json_for_eq(self):
         return {
@@ -219,7 +247,8 @@ def evaluate(
 
     return EvaluateResult(
         train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores, problem.problem_name,
+        problem.group_scores_key
     )
 
 
@@ -272,29 +301,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         })
 
         if arguments.verbose:
-            # TODO: move to evaluate result __str__ method
-            results = copy.deepcopy(evaluate_result.__dict__)
-            del results['train_predictions']
-            del results['test_predictions']
-            del results['ootsp_test_predictions']
-            del results['train_scores'][problem.group_scores_key]
-            del results['test_scores'][problem.group_scores_key]
-
-            # Remove the scores at k for the rank problem so the terminal output isn't so huge
-            if problem_name == 'rank':
-                def delete_rank_problem_scores_at_k(results_copy, phase):
-                    aggregate_scores = results_copy[phase]['aggregate_scores']
-                    del aggregate_scores['ndcg_at_k_mean']
-                    del aggregate_scores['ndcg_at_k_std_dev']
-                    del aggregate_scores['regret_at_k_mean']
-                    del aggregate_scores['regret_at_k_std_dev']
-                    del aggregate_scores['n_correct_at_k_mean']
-                    del aggregate_scores['n_correct_at_k_std_dev']
-
-                delete_rank_problem_scores_at_k(results, phase='train_scores')
-                delete_rank_problem_scores_at_k(results, phase='test_scores')
-
-            print(json.dumps(results, indent=4))
+            print(str(evaluate_result))
             print()
 
     if output_dir is not None:
