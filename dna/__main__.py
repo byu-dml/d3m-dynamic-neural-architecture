@@ -291,7 +291,10 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             ootsp_test_data = None
 
     model_id = getattr(arguments, 'model')
-    model = get_model(model_id, model_config, seed=getattr(arguments, 'model_seed', random.randint(0, 2**32-1)))
+    model_seed = getattr(arguments, 'model_seed', None)
+    if model_seed is None:
+        model_seed = random.randint(0, 2**32-1)
+    model = get_model(model_id, model_config, seed=model_seed)
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
