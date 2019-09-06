@@ -10,6 +10,13 @@ from sklearn.metrics import accuracy_score, mean_squared_error
 from dna import utils
 
 
+def std_dev(x: typing.Sequence, ddof: int = 0):
+    if (len(x) - ddof) > 0:
+        return np.std(x, ddof=ddof)
+    else:
+        return np.nan
+
+
 def accuracy(y_hat, y):
     return accuracy_score(y, y_hat)
 
