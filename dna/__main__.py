@@ -571,12 +571,6 @@ def record_run(
         json.dump(run, f, indent=4, sort_keys=True)
 
 
-def _configure_report_dir(parser: argparse.ArgumentParser):
-    parser.add_argument(
-        '--report-dir', type=str, default='./report', help='directory to output score reports'
-    )
-
-
 def configure_report_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--results-dir', type=str, help='directory containing results'
@@ -584,7 +578,9 @@ def configure_report_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--result-paths-csv', type=str, help='path to csv containing paths to results'
     )
-    _configure_report_dir(parser)
+    parser.add_argument(
+        '--report-dir', type=str, default='./report', help='directory to output score reports'
+    )
 
 
 def get_regression_report_path(report_dir: str):
