@@ -1,4 +1,5 @@
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -753,6 +754,72 @@ def save_result_paths_csv(*args: pd.DataFrame, report_dir):
     df.to_csv(path, header=False, index=False)
 
 
+def configure_agg_results_parser(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        '--results-dir', type=str, help='directory of results to aggregate'
+    )
+    parser.add_argument(
+        '--result-paths-csv', type=str, help='path to csv containing paths of files to aggregate'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', default='./agg_results',
+        help='the base directory to write the aggregated scores and plots'
+    )
+
+
+def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
+    scores_to_agg = []
+    for result in results_to_agg:
+        for problem_scores in result['scores']:
+            scores_to_agg.append(utils.flatten(problem_scores))
+    scores_to_agg_df = pd.DataFrame(scores_to_agg)
+
+    agg_scores = []
+    for problem_name, problem_scores_to_agg_df in scores_to_agg_df.groupby('problem_name'):
+        flat_agg_problem_scores = {
+            'problem_name': problem_name,
+            'model_id': problem_scores_to_agg_df['model_id'][0]
+        }
+
+        flat_problem_scores_to_agg = utils.flatten(dict(problem_scores_to_agg_df))
+        flat_problem_scores_to_agg_df = pd.DataFrame(flat_problem_scores_to_agg)
+        for col_name in flat_problem_scores_to_agg_df:
+            if 'train_scores' in col_name or 'test_scores' in col_name:
+                column = flat_problem_scores_to_agg_df[col_name].values
+                if isinstance(column[0], collections.Iterable):
+                    agg_score = np.mean(np.stack(column, axis=0), axis=0).tolist()
+                    flat_agg_problem_scores[col_name] = agg_score
+                elif column[0] is not None:
+                    agg_score = np.mean(column).tolist()
+                    flat_agg_problem_scores[col_name] = agg_score
+
+        agg_problem_scores = utils.inflate(flat_agg_problem_scores)
+        agg_scores.append(agg_problem_scores)
+
+    return agg_scores
+
+
+def agg_results_handler(arguments: argparse.Namespace):
+    if arguments.results_dir is not None:
+        result_paths = get_result_paths_from_dir(arguments.results_dir)
+    elif arguments.result_paths_csv is not None:
+        result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
+    else:
+        raise ValueError('no results to aggregate')
+
+    run_id = str(uuid.uuid4())
+    print(run_id)
+    git_commit = utils.get_git_commit_hash()
+
+    output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
+
+    results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
+
+    agg_scores = aggregate_result_scores(results_to_agg)
+
+    record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
+
+
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
     if arguments.command == 'split-data':
         split_handler(arguments)
@@ -768,6 +835,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
 
     elif arguments.command == 'report':
         report_handler(arguments)
+
+    elif arguments.command == 'agg-results':
+        agg_results_handler(arguments)
 
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
@@ -804,6 +874,11 @@ def main(argv: typing.Sequence):
         'report', help='generate a report of the best models'
     )
     configure_report_parser(report_parser)
+
+    agg_results_parser = subparsers.add_parser(
+        'agg-results', help='aggregate the results of multiple runs, e.g. average of random model'
+    )
+    configure_agg_results_parser(agg_results_parser)
 
     arguments = parser.parse_args(argv[1:])
 
