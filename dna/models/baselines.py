@@ -17,6 +17,10 @@ from dna.kND import KNearestDatasets
 
 class MeanBaseline(RegressionModelBase):
 
+    # used for plotting and reporting
+    name = 'Mean'
+    color = 'black'
+
     def __init__(self, seed=0):
         super().__init__(seed=seed)
         self.mean = None
@@ -103,6 +107,10 @@ class PerPrimitiveBaseline(RegressionModelBase, RankModelBase):
 
 class RandomBaseline(RankModelBase):
 
+    # used for plotting and reporting
+    name = 'Random'
+    color = 'silver'
+
     def __init__(self, seed=0):
         super().__init__(seed=seed)
         self._random_state = np.random.RandomState(seed)
@@ -122,6 +130,10 @@ class RandomBaseline(RankModelBase):
 
 class LinearRegressionBaseline(SklearnBase):
 
+    # used for plotting and reporting
+    name = 'Linear Regression'
+    color = 'saddlebrown'
+
     def __init__(self, seed=0):
         super().__init__(seed=seed)
         self.regressor = linear_model.LinearRegression()
@@ -129,6 +141,11 @@ class LinearRegressionBaseline(SklearnBase):
 
 
 class RandomForestBaseline(SklearnBase):
+
+    # used for plotting and reporting
+    name = 'Random Forest'
+    color = 'forestgreen'
+
     def __init__(self, seed=0):
         super().__init__(seed=seed)
         self.regressor = RandomForestRegressor(random_state=seed)
@@ -155,6 +172,10 @@ class MLPBaseline(SklearnBase):
 
 class MetaAutoSklearn(SklearnBase):
 
+    # used for plotting and reporting
+    name = 'Meta Auto-sklearn'
+    color = 'blue'
+
     def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
 
@@ -167,6 +188,10 @@ class MetaAutoSklearn(SklearnBase):
 
 
 class AutoSklearnMetalearner(RegressionModelBase, RankModelBase):
+
+    # used for plotting and reporting
+    name = 'k-ND (Auto-sklearn)'
+    color = 'gold'
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)

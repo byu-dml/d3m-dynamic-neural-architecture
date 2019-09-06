@@ -4,6 +4,10 @@ from .torch_modules.dag_lstm_mlp import DAGLSTMMLP
 
 class DAGLSTMRegressionModel(LSTMModel):
 
+    # used for plotting and reporting
+    name = 'DAG LSTM'
+    color = 'violet'
+
     def __init__(
         self, activation_name: str, hidden_state_size: int, lstm_n_layers: int, dropout: float,
         output_n_hidden_layers: int, output_hidden_layer_size: int, use_batch_norm: bool, loss_function_name: str,

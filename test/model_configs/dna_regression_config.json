@@ -1,8 +1,8 @@
 {
     "__init__": {
         "activation_name": "relu",
-        "hidden_layer_size": 4,
-        "n_hidden_layers": 1,
+        "hidden_layer_size": 2,
+        "n_hidden_layers": 2,
         "use_batch_norm": true,
         "use_skip": true,
         "dropout": 0.5,
