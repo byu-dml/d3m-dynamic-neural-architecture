@@ -101,8 +101,7 @@ def configure_evaluate_parser(parser):
         help='path to a json file containing the model configuration values'
     )
     parser.add_argument(
-        '--model-seed', type=int, default=1,
-        help='seed used to control the random state of the model'
+        '--model-seed', type=int, help='seed used to control the random state of the model'
     )
     parser.add_argument(
         '--verbose', default=False, action='store_true'
@@ -283,7 +282,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             ootsp_test_data = None
 
     model_id = getattr(arguments, 'model')
-    model = get_model(model_id, model_config, seed=getattr(arguments, 'model_seed'))
+    model = get_model(model_id, model_config, seed=getattr(arguments, 'model_seed', random.randint(0, 2**32-1)))
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
