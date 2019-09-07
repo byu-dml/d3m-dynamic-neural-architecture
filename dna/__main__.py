@@ -771,6 +771,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
     scores_to_agg = []
     for result in results_to_agg:
         for problem_scores in result['scores']:
+            problem_scores['run_id'] = result['id']
             scores_to_agg.append(utils.flatten(problem_scores))
     scores_to_agg_df = pd.DataFrame(scores_to_agg)
 
@@ -794,6 +795,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
                     flat_agg_problem_scores[col_name] = agg_score
 
         agg_problem_scores = utils.inflate(flat_agg_problem_scores)
+        agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
         agg_scores.append(agg_problem_scores)
 
     return agg_scores
