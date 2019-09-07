@@ -703,13 +703,24 @@ def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable
 
     _add_model_name_and_color_to_leaderboard(leaderboard)
 
+    # sort rows
+    leaderboard.model_id = leaderboard.model_id.astype('category')
+    leaderboard.model_id.cat.set_categories(
+        [
+            'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn',
+            'lstm', 'attention_regression', 'daglstm_regression', 'dag_attention_regression'
+        ],
+        inplace=True
+    )
+    leaderboard.sort_values(['model_id'], inplace=True)
+
+    # sort columns
     columns = list(leaderboard.columns)
     columns.remove(id_col)
     columns.remove(score_col)
     columns.remove(counts.name)
     columns.remove('model_name')
     columns.remove('model_color')
-
     leaderboard = leaderboard[['model_name', 'model_color', counts.name, score_col] + sorted(columns)]
 
     return leaderboard.round(8)
