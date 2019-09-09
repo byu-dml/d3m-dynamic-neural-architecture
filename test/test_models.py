@@ -35,6 +35,11 @@ class ModelDeterminismTestCase(unittest.TestCase):
             model='dna_regression', model_config_path='./test/model_configs/dna_regression_config.json'
         )
 
+    def test_mlp_regression_determinism(self):
+        self._test_determinism(
+            model='mlp_baseline', model_config_path='./test/model_configs/mlp_baseline_config.json'
+        )
+
     def test_daglstm_regression_determinism(self):
         # TODO: fix this test on the CPU
         if torch.cuda.is_available():
