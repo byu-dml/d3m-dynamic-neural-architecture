@@ -1,4 +1,5 @@
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -16,8 +17,9 @@ from tuningdeap import TuningDeap
 
 from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
-from dna.models import get_model
+from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
+from dna import plot
 from dna.problems import get_problem, ProblemBase
 
 
@@ -91,10 +93,6 @@ def configure_evaluate_parser(parser):
         help='the type of problem'
     )
     parser.add_argument(
-        '--k', type=int, action='store', default=10,
-        help='the number of pipelines to rank'
-    )
-    parser.add_argument(
         '--model', type=str, action='store', required=True,
         help='the python path to the model class'
     )
@@ -103,8 +101,7 @@ def configure_evaluate_parser(parser):
         help='path to a json file containing the model configuration values'
     )
     parser.add_argument(
-        '--model-seed', type=int, default=1,
-        help='seed used to control the random state of the model'
+        '--model-seed', type=int, help='seed used to control the random state of the model'
     )
     parser.add_argument(
         '--verbose', default=False, action='store_true'
@@ -227,6 +224,7 @@ def evaluate(
 
 def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
     run_id = str(uuid.uuid4())
+    git_commit = utils.get_git_commit_hash()
 
     output_dir = arguments.output_dir
     model_output_dir = None
@@ -238,7 +236,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         plot_dir = os.path.join(output_dir, 'plots')
         os.makedirs(plot_dir)
 
-        record_run(run_id, output_dir, arguments=arguments, model_config=model_config)
+        record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config)
 
     train_data, test_data = get_train_and_test_data(
         arguments.train_path, arguments.test_path, arguments.test_size, arguments.split_seed,
@@ -254,13 +252,16 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         if arguments.skip_test_ootsp:
             ootsp_test_data = None
 
-    model_name = getattr(arguments, 'model')
-    model = get_model(model_name, model_config, seed=getattr(arguments, 'model_seed'))
+    model_id = getattr(arguments, 'model')
+    model_seed = getattr(arguments, 'model_seed', None)
+    if model_seed is None:
+        model_seed = random.randint(0, 2**32-1)
+    model = get_model(model_id, model_config, seed=model_seed)
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
         if arguments.verbose:
-            print('{} {} {}'.format(model_name, problem_name, run_id))
+            print('{} {} {}'.format(model_id, problem_name, run_id))
         problem = get_problem(problem_name, **vars(arguments))
         evaluate_result = evaluate(
             problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
@@ -268,7 +269,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         )
         result_scores.append({
             'problem_name': problem_name,
-            'model_name': model_name,
+            'model_id': model_id,
             **evaluate_result.__dict__,
         })
 
@@ -284,7 +285,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             print()
 
     if output_dir is not None:
-        record_run(run_id, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
+        record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
 
     if output_dir is not None:
         if not os.listdir(model_output_dir):
@@ -314,6 +315,9 @@ def configure_tuning_parser(parser):
     parser.add_argument(
         '--objective', type=str, action='store', required=True,
         choices=['rmse', 'pearson', 'spearman', 'ndcg', 'ndcg_at_k', 'regret', 'regret_at_k']
+    )
+    parser.add_argument(
+        '--k', type=int, action='store', help='the number of pipelines to rank'
     )
     parser.add_argument(
         '--tuning-output-dir', type=str, default=None,
@@ -551,7 +555,7 @@ def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
 
 
 def record_run(
-    run_id: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
+    run_id: str, git_commit: str, output_dir: str, *, arguments: argparse.Namespace, model_config: typing.Dict,
     scores: typing.Dict = None
 ):
     if not os.path.isdir(output_dir):
@@ -560,7 +564,7 @@ def record_run(
 
     run = {
         'id': run_id,
-        'git_commit': utils.get_git_commit_hash(),
+        'git_commit': git_commit,
         'arguments': arguments.__dict__,
         'model_config': model_config,
     }
@@ -579,8 +583,16 @@ def configure_report_parser(parser: argparse.ArgumentParser):
         '--result-paths-csv', type=str, help='path to csv containing paths to results'
     )
     parser.add_argument(
-        '--report-dir', type=str, default='./leaderboards', help='directory to output score reports'
+        '--report-dir', type=str, default='./report', help='directory to output score reports'
     )
+
+
+def get_regression_report_path(report_dir: str):
+    return os.path.join(report_dir, 'regression_leaderboard.csv')
+
+
+def get_rank_report_path(report_dir: str):
+    return os.path.join(report_dir, 'rank_leaderboard.csv')
 
 
 def report_handler(arguments: argparse.Namespace):
@@ -593,15 +605,25 @@ def report_handler(arguments: argparse.Namespace):
 
     regression_results, rank_results = load_results(result_paths)
 
-    regression_leaderboard = make_leaderboard(regression_results, 'model_name', 'test.total_scores.rmse', min)
-    rank_leaderboard = make_leaderboard(rank_results, 'model_name', 'test.total_scores.ndcg_at_k_mean', max)
+    regression_leaderboard = make_leaderboard(regression_results, 'test.total_scores.rmse', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'test.total_scores.ndcg_at_k_mean', max)
 
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
 
-    path = os.path.join(arguments.report_dir, 'regression_leaderboard.csv')
+    plot_ndcg(rank_leaderboard, arguments.report_dir)
+    plot_regret(rank_leaderboard, arguments.report_dir)
+    plot_n_correct(rank_leaderboard, arguments.report_dir)
+
+    rank_columns = list(rank_leaderboard.columns)
+    for col_name in rank_leaderboard.columns:
+        if 'aggregate_scores' in col_name and 'at_k' in col_name:
+            rank_columns.remove(col_name)
+    rank_leaderboard = rank_leaderboard[rank_columns]
+
+    path = get_regression_report_path(arguments.report_dir)
     regression_leaderboard.to_csv(path, index=False)
-    path = os.path.join(arguments.report_dir, 'rank_leaderboard.csv')
+    path = get_rank_report_path(arguments.report_dir)
     rank_leaderboard.to_csv(path, index=False)
 
     save_result_paths_csv(regression_results, rank_results, report_dir=arguments.report_dir)
@@ -663,13 +685,14 @@ def load_result(result_path: str):
 
 def parse_scores(scores: typing.Dict):
     return {
-        'model_name': scores['model_name'],
+        'model_id': scores['model_id'],
         **utils.flatten(scores['train_scores'], 'train'),
         **utils.flatten(scores['test_scores'], 'test')
     }
 
 
-def make_leaderboard(results: pd.DataFrame, id_col: str, score_col: str, opt: typing.Callable):
+def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable):
+    id_col = 'model_id'
     grouped_results = results.groupby(id_col)
     counts = grouped_results.size().astype(int)
     counts.name = 'count'
@@ -679,14 +702,59 @@ def make_leaderboard(results: pd.DataFrame, id_col: str, score_col: str, opt: ty
     leaderboard.reset_index(drop=True, inplace=True)
     leaderboard = leaderboard.join(counts, on=id_col)
 
+    _add_model_name_and_color_to_leaderboard(leaderboard)
+
+    # sort rows
+    leaderboard.model_id = leaderboard.model_id.astype('category')
+    leaderboard.model_id.cat.set_categories(
+        [
+            'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn',
+            'lstm', 'attention_regression', 'daglstm_regression', 'dag_attention_regression'
+        ],
+        inplace=True
+    )
+    leaderboard.sort_values(['model_id'], inplace=True)
+
+    # sort columns
     columns = list(leaderboard.columns)
     columns.remove(id_col)
     columns.remove(score_col)
     columns.remove(counts.name)
-
-    leaderboard = leaderboard[[id_col, counts.name, score_col] + sorted(columns)]
+    columns.remove('model_name')
+    columns.remove('model_color')
+    leaderboard = leaderboard[['model_name', 'model_color', counts.name, score_col] + sorted(columns)]
 
     return leaderboard.round(8)
+
+
+def _add_model_name_and_color_to_leaderboard(leaderboard):
+    model_ids = list(leaderboard['model_id'])
+    model_names = []
+    model_colors = []
+    for i, model_id in enumerate(model_ids):
+        model_class = get_model_class(model_id)
+        if hasattr(model_class, 'name') and hasattr(model_class, 'color'):
+            model_names.append(model_class.name)
+            model_colors.append(model_class.color)
+        else:
+            leaderboard.drop(leaderboard.index[i], inplace=True)
+    leaderboard['model_name'] = model_names
+    leaderboard['model_color'] = model_colors
+
+
+def plot_ndcg(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'ndcg.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean'], rank_report['model_color'], plot_path, 'NDCG@k', None)
+
+
+def plot_regret(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'regret.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean'], rank_report['model_color'], plot_path, 'Regret@k', None)
+
+
+def plot_n_correct(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'n_correct.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean'], rank_report['model_color'], plot_path, 'N Correct@k', None)
 
 
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
@@ -696,6 +764,74 @@ def save_result_paths_csv(*args: pd.DataFrame, report_dir):
     df = pd.DataFrame(set(result_paths))
     path = os.path.join(report_dir, 'result_paths.csv')
     df.to_csv(path, header=False, index=False)
+
+
+def configure_agg_results_parser(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        '--results-dir', type=str, help='directory of results to aggregate'
+    )
+    parser.add_argument(
+        '--result-paths-csv', type=str, help='path to csv containing paths of files to aggregate'
+    )
+    parser.add_argument(
+        '--output-dir', type=str, action='store', default='./agg_results',
+        help='the base directory to write the aggregated scores and plots'
+    )
+
+
+def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
+    scores_to_agg = []
+    for result in results_to_agg:
+        for problem_scores in result['scores']:
+            problem_scores['run_id'] = result['id']
+            scores_to_agg.append(utils.flatten(problem_scores))
+    scores_to_agg_df = pd.DataFrame(scores_to_agg)
+
+    agg_scores = []
+    for problem_name, problem_scores_to_agg_df in scores_to_agg_df.groupby('problem_name'):
+        flat_agg_problem_scores = {
+            'problem_name': problem_name,
+            'model_id': problem_scores_to_agg_df['model_id'][0]
+        }
+
+        flat_problem_scores_to_agg = utils.flatten(dict(problem_scores_to_agg_df))
+        flat_problem_scores_to_agg_df = pd.DataFrame(flat_problem_scores_to_agg)
+        for col_name in flat_problem_scores_to_agg_df:
+            if 'train_scores' in col_name or 'test_scores' in col_name:
+                column = flat_problem_scores_to_agg_df[col_name].values
+                if isinstance(column[0], collections.Iterable):
+                    agg_score = np.mean(np.stack(column, axis=0), axis=0).tolist()
+                    flat_agg_problem_scores[col_name] = agg_score
+                elif column[0] is not None:
+                    agg_score = np.mean(column).tolist()
+                    flat_agg_problem_scores[col_name] = agg_score
+
+        agg_problem_scores = utils.inflate(flat_agg_problem_scores)
+        agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
+        agg_scores.append(agg_problem_scores)
+
+    return agg_scores
+
+
+def agg_results_handler(arguments: argparse.Namespace):
+    if arguments.results_dir is not None:
+        result_paths = get_result_paths_from_dir(arguments.results_dir)
+    elif arguments.result_paths_csv is not None:
+        result_paths = get_result_paths_from_csv(arguments.result_paths_csv)
+    else:
+        raise ValueError('no results to aggregate')
+
+    run_id = str(uuid.uuid4())
+    print(run_id)
+    git_commit = utils.get_git_commit_hash()
+
+    output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
+
+    results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
+
+    agg_scores = aggregate_result_scores(results_to_agg)
+
+    record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
@@ -713,6 +849,9 @@ def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
 
     elif arguments.command == 'report':
         report_handler(arguments)
+
+    elif arguments.command == 'agg-results':
+        agg_results_handler(arguments)
 
     else:
         raise ValueError('Unknown command: {}'.format(arguments.command))
@@ -749,6 +888,11 @@ def main(argv: typing.Sequence):
         'report', help='generate a report of the best models'
     )
     configure_report_parser(report_parser)
+
+    agg_results_parser = subparsers.add_parser(
+        'agg-results', help='aggregate the results of multiple runs, e.g. average of random model'
+    )
+    configure_agg_results_parser(agg_results_parser)
 
     arguments = parser.parse_args(argv[1:])
 

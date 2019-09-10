@@ -28,6 +28,20 @@ def flatten(d, parent_key='', sep='.'):
     return dict(items)
 
 
+def inflate(d, sep='.'):
+    """Inverse of flatten"""
+    result = {}
+    for key, value in d.items():
+        sub_result = result
+        key_parts = key.split(sep)
+        for sub_key in key_parts[:-1]:
+            if sub_key not in sub_result:
+                sub_result[sub_key] = {}
+            sub_result = sub_result[sub_key]
+        sub_result[key_parts[-1]] = value
+    return result
+
+
 def transpose_jagged_2darray(jagged_2darray: typing.Iterable[typing.Iterable]) -> typing.Dict[int, typing.List]:
     """Transposes a 2D jagged array into a dict mapping column index to a list of row values.
 
