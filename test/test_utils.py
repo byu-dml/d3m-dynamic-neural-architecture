@@ -45,6 +45,7 @@ class UtilsTestCase(unittest.TestCase):
         }
         flattened = utils.flatten(to_flatten)
         self.assertEqual(expected_flattened, flattened)
+        self.assertEqual(utils.inflate(expected_flattened), to_flatten)
 
     def transpose_jagged_2darray(self):
         jagged_2darray = [
