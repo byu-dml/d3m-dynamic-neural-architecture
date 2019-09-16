@@ -163,6 +163,7 @@ class MLPBaseline(SklearnBase):
     def __init__(self, seed=0, *, hidden_layer_size, n_hidden_layers, **kwargs):
         super().__init__(seed=seed)
         hidden_layer_sizes = [hidden_layer_size] * n_hidden_layers
+        print('KWARGS:', kwargs)
         self.regressor = MLPRegressor(
             random_state=seed, early_stopping=True, hidden_layer_sizes=hidden_layer_sizes,
             **kwargs
