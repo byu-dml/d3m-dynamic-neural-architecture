@@ -37,3 +37,5 @@ The first few lines of `main.sh` show how to use either dataset.
 # Results
 
 `model_configs_tuned` contains the model config files chosen by hyperparameter tuning
+
+`./random_results_test/*/run.json.tar.gz` contain the results of the random model on the test set
