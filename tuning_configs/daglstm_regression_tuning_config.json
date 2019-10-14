@@ -1,0 +1,36 @@
+{
+    "population_size": 6,
+    "n_generations": 4,
+    "attributes": {
+        "hidden_state_size": {
+            "type": "int",
+            "min": 16,
+            "max": 512,
+            "step": 16
+        },
+        "lstm_n_layers": {
+            "type": "int",
+            "min": 1,
+            "max": 8,
+            "step": 1
+        },
+        "dropout": {
+            "type": "float",
+            "min": 0,
+            "max": 0.8,
+            "step": 0.1
+        },
+        "output_n_hidden_layers": {
+            "type": "int",
+            "min": 1,
+            "max": 8,
+            "step": 1
+        },
+        "output_hidden_layer_size": {
+            "type": "int",
+            "min": 16,
+            "max": 512,
+            "step": 16
+        }
+    }
+}
