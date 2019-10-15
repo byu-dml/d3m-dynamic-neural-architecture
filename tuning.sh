@@ -4,6 +4,7 @@ use_complete_data=false
 # rmse, pearson, spearman, ndcg, ndcg_at_k, regret, regret_at_k
 objective=ndcg_at_k
 
+
 if $use_complete_data; then
     # complete has 194 datasets
     raw_data_path=./data/complete_classification.tar.xz
@@ -57,7 +58,6 @@ python3 -m dna tune \
     --problem regression rank \
     --objective $objective \
     --train-path $train_path \
-    --k $k \
     --metafeature-subset $metafeature_subset \
     --test-size $validation_size \
     --split-seed $validation_split_seed \
