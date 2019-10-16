@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn import linear_model
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
 import torch
 from .torch_modules.mlp import MLP
 
@@ -151,6 +152,24 @@ class RandomForestBaseline(SklearnBase):
         self.fitted = False
 
 
+class MLPBaseline(SklearnBase):
+    """
+    Takes in a vector of metafeatures concatenated to binary nominal features that represent which primitives are in
+    a pipeline. This is passed into sklearn's MLPRegressor.
+    See https://scikit-learn.org/stable/modules/generated/sklearn.neural_network.MLPClassifier.html for a list of all
+    the constructor inputs, most of which can be used as tunable hyper-parameters
+    """
+
+    def __init__(self, seed=0, *, hidden_layer_size, n_hidden_layers, **kwargs):
+        super().__init__(seed=seed)
+        hidden_layer_sizes = [hidden_layer_size] * n_hidden_layers
+        self.regressor = MLPRegressor(
+            random_state=seed, early_stopping=True, hidden_layer_sizes=hidden_layer_sizes,
+            **kwargs
+        )
+        self.fitted = False
+
+
 class MetaAutoSklearn(SklearnBase):
 
     # used for plotting and reporting
@@ -249,7 +268,7 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase):
         metafeatures.drop_duplicates(inplace=True)
         return metafeatures
 
-class MLPRegressionModel(PyTorchRegressionRankModelBase):
+class MLPAblationModel(PyTorchRegressionRankModelBase):
 
     def __init__(
             self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,

@@ -1,0 +1,12 @@
+{
+    "__init__": {
+        "activation": "relu",
+        "hidden_layer_size": 2,
+        "n_hidden_layers": 1,
+
+        "batch_size": 25,
+        "momentum": 0.9,
+        "learning_rate": "constant",
+        "learning_rate_init": 0.001
+    }
+}
