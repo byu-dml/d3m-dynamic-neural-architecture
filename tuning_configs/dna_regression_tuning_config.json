@@ -12,12 +12,6 @@
             "max": 8,
             "step": 1
         },
-        "use_batch_norm": {
-            "type": "bool"
-        },
-        "use_skip": {
-            "type": "bool" 
-        },
         "dropout": {
             "type": "float",
             "min": 0,

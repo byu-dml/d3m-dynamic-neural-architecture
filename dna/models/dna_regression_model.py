@@ -6,6 +6,9 @@ from .torch_modules.dna_module import DNAModule
 
 class DNARegressionModel(PyTorchRegressionRankModelBase):
 
+    name = 'DNA'
+    color = 'lime'
+
     def __init__(
         self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
         reduction_name: str = 'max', loss_function_name: str = 'rmse', use_skip: bool = False, dropout = 0.0,  *,

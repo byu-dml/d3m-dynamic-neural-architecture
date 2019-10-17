@@ -32,3 +32,14 @@ The first few lines of `main.sh` show how to use either dataset.
 1. Please add tests to the file `tests/test_metrics.py`.
 2. The metrics are computed in `dna/problems.py`, in the appropriate problem class's `score` method, e.g. the Spearman Correlation Coefficient is computed with the `RankProblem`.
 3. You can see your metric in action by running a model from the command line, or by running `main.sh`.
+
+
+# Results
+
+`model_configs_tuned` contains the model config files chosen by hyperparameter tuning
+
+`./random_results_test/*/run.json.tar.gz` contain the results of the random model on the test set
+
+`./results_validation_set_rescore/*/run.json.tar.gz` contain the results of all non-random models on the validation set. These were used to choose the model configurations to use for the test set. Note that these results were rescored after added more scoringi metrics.
+
+`./results_test_set/*/run.json.tar.gz` contain the results of all non-random models on the test set

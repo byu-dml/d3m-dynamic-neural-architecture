@@ -292,10 +292,9 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             ootsp_test_data = None
 
     model_id = getattr(arguments, 'model')
-    model_seed = getattr(arguments, 'model_seed', None)
-    if model_seed is None:
-        model_seed = random.randint(0, 2**32-1)
-    model = get_model(model_id, model_config, seed=model_seed)
+    if arguments.model_seed is None:
+        arguments.model_seed = random.randint(0, 2**32-1)
+    model = get_model(model_id, model_config, seed=arguments.model_seed)
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
@@ -647,9 +646,21 @@ def report_handler(arguments: argparse.Namespace):
     plot_regret(rank_leaderboard, arguments.report_dir)
     plot_n_correct(rank_leaderboard, arguments.report_dir)
 
+    for col_name in rank_leaderboard.columns:
+        if 'aggregate_scores' in col_name and 'at_k' in col_name:
+            for k in [25, 100, -1]:
+                new_col_name = col_name.replace('at_k', 'at_{}'.format(k))
+                rank_leaderboard[new_col_name] = np.nan
+                for model_name in rank_leaderboard['model_name']:
+                    scores_by_k = rank_leaderboard[col_name][rank_leaderboard['model_name'] == model_name].iloc[0]
+                    score_at_k = scores_by_k[k]
+                    rank_leaderboard[new_col_name][rank_leaderboard['model_name'] == model_name] = score_at_k
+
     rank_columns = list(rank_leaderboard.columns)
     for col_name in rank_leaderboard.columns:
         if 'aggregate_scores' in col_name and 'at_k' in col_name:
+            rank_columns.remove(col_name)
+        elif 'train' in col_name:
             rank_columns.remove(col_name)
     rank_leaderboard = rank_leaderboard[rank_columns]
 
@@ -740,7 +751,7 @@ def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable
     leaderboard.model_id.cat.set_categories(
         [
             'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn',
-            'lstm', 'attention_regression', 'daglstm_regression', 'dag_attention_regression'
+            'lstm', 'attention_regression', 'daglstm_regression', 'dag_attention_regression', 'dna_regression'
         ],
         inplace=True
     )
@@ -784,8 +795,8 @@ def plot_regret(rank_report: pd.DataFrame, output_dir: str):
 
 
 def plot_n_correct(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'n_correct.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean'], rank_report['model_color'], plot_path, 'N Correct@k', None)
+    plot_path = os.path.join(output_dir, 'topk.pdf')
+    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean'], rank_report['model_color'], plot_path, 'Top-K@k', None)
 
 
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
