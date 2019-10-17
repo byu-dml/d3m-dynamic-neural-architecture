@@ -846,7 +846,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
         flat_problem_scores_to_agg = utils.flatten(dict(problem_scores_to_agg_df))
         flat_problem_scores_to_agg_df = pd.DataFrame(flat_problem_scores_to_agg)
         for col_name in flat_problem_scores_to_agg_df:
-            if 'train_scores' in col_name or 'test_scores' in col_name:
+            if 'train_scores' in col_name or 'test_scores' in col_name and not 'scores_by_dataset_id' in col_name:
                 column = flat_problem_scores_to_agg_df[col_name].values
                 if isinstance(column[0], collections.Iterable):
                     # stack the results horizontally for easy calculation since each run has N elements, i.e. top K for all K
@@ -863,11 +863,32 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
                     flat_agg_problem_scores[col_name] = agg_score_mean
                     flat_agg_problem_scores[col_name.replace("mean", "std")] = agg_score_sd
 
+            if 'scores_by_dataset_id' in col_name:
+                column = flat_problem_scores_to_agg_df[col_name].values
+                if isinstance(column[0], collections.Iterable):
+                    # combine the each index from all lists into a tuple aka [1, 0], [2, 1], [3, 2] becomes [(1, 2, 3), (0, 1, 2)]
+                    total_distribution = list(zip(*column))
+                    flat_agg_problem_scores[col_name] = total_distribution
+                elif column[0] is not None:
+                    flat_agg_problem_scores[col_name] = total_distribution
+
         agg_problem_scores = utils.inflate(flat_agg_problem_scores)
         agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
         agg_scores.append(agg_problem_scores)
-
     return agg_scores
+
+
+def create_distribution_plots(agg_results: dict):
+    scores_by_dataset = agg_results[0]["test_scores"]["scores_by_dataset_id"]
+    # aggregate over all datasets
+    import pdb; pdb.set_trace()
+    for dataset_name in scores_by_dataset.keys():
+        # TODO: aggregate
+
+    # plot aggregate scores in violin plot
+
+    # save plots to dir
+    print("Hello!")
 
 
 def agg_results_handler(arguments: argparse.Namespace):
@@ -887,6 +908,7 @@ def agg_results_handler(arguments: argparse.Namespace):
     results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
 
     agg_scores = aggregate_result_scores(results_to_agg)
+    create_distribution_plots(agg_scores)
 
     record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
 
