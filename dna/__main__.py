@@ -9,6 +9,7 @@ import traceback
 import typing
 import uuid
 import warnings
+import copy
 
 import numpy as np
 import pandas as pd
@@ -149,8 +150,10 @@ class EvaluateResult:
 
     def __init__(
         self, train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores, problem_name, group_scores_key
     ):
+        self.problem_name = problem_name
+        self.group_scores_key = group_scores_key
         self.train_predictions = train_predictions
         self.fit_time = fit_time
         self.train_predict_time = train_predict_time
@@ -161,6 +164,41 @@ class EvaluateResult:
         self.ootsp_test_predictions = ootsp_test_predictions
         self.ootsp_test_predict_time = ootsp_test_predict_time
         self.ootsp_test_scores = ootsp_test_scores
+
+    def __str__(self):
+        results_shallow_copy = self.__dict__
+        results = {
+            'fit_time': results_shallow_copy['fit_time'],
+            'train_predict_time': results_shallow_copy['train_predict_time']
+        }
+
+        def get_aggregate_scores(results_copy: dict, problem_name: str, phase: str):
+            aggregate_scores_copy = results_copy[phase]['aggregate_scores']
+            if problem_name == 'regression':
+                return aggregate_scores_copy
+            elif problem_name == 'rank':
+                aggregate_scores = {
+                    'spearman_correlation_mean': aggregate_scores_copy['spearman_correlation_mean'],
+                    'spearman_correlation_std_dev': aggregate_scores_copy['spearman_correlation_std_dev'],
+                    'spearman_p_value_mean': aggregate_scores_copy['spearman_p_value_mean'],
+                    'spearman_p_value_std_dev': aggregate_scores_copy['spearman_p_value_std_dev']
+                }
+                return aggregate_scores
+
+        train_scores = {
+            'total_scores': results_shallow_copy['train_scores']['total_scores'],
+            'aggregate_scores': get_aggregate_scores(results_shallow_copy, self.problem_name, 'train_scores')
+        }
+        results['train_scores'] = train_scores
+
+        results['test_predict_time'] = results_shallow_copy['test_predict_time']
+        test_scores = {
+            'total_scores': results_shallow_copy['test_scores']['total_scores'],
+            'aggregate_scores': get_aggregate_scores(results_shallow_copy, self.problem_name, 'test_scores')
+        }
+        results['test_scores'] = test_scores
+
+        return json.dumps(results, indent=4)
 
     def _to_json_for_eq(self):
         return {
@@ -218,7 +256,8 @@ def evaluate(
 
     return EvaluateResult(
         train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores, problem.problem_name,
+        problem.group_scores_key
     )
 
 
@@ -273,14 +312,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         })
 
         if arguments.verbose:
-            # TODO: move to evaluate result __str__ method
-            results = evaluate_result.__dict__
-            del results['train_predictions']
-            del results['test_predictions']
-            del results['ootsp_test_predictions']
-            del results['train_scores'][problem.group_scores_key]
-            del results['test_scores'][problem.group_scores_key]
-            print(json.dumps(results, indent=4))
+            print(str(evaluate_result))
             print()
 
     if output_dir is not None:
