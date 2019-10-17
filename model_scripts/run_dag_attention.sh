@@ -1,2 +1,2 @@
 export MODEL=dag_attention_regression
-bash model_seed_runs/_run_model.sh
+bash main.sh
