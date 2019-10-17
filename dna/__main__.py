@@ -9,6 +9,7 @@ import traceback
 import typing
 import uuid
 import warnings
+import tarfile
 
 import numpy as np
 import pandas as pd
@@ -653,6 +654,11 @@ def get_result_paths(result_dirs: typing.Sequence[str]):
     result_paths = []
     for dir_ in result_dirs:
         path = os.path.join(dir_, 'run.json')
+        if os.path.isfile(path + ".tar.gz"):
+            # unzip if needed
+            tar = tarfile.open(path + ".tar.gz", "r:gz")
+            tar.extractall()
+            tar.close()
         if os.path.isfile(path):
             result_paths.append(path)
         else:
@@ -791,6 +797,7 @@ def configure_agg_results_parser(parser: argparse.ArgumentParser):
 
 def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
     scores_to_agg = []
+    # flatten the results and put in DF format
     for result in results_to_agg:
         for problem_scores in result['scores']:
             problem_scores['run_id'] = result['id']
@@ -810,11 +817,19 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
             if 'train_scores' in col_name or 'test_scores' in col_name:
                 column = flat_problem_scores_to_agg_df[col_name].values
                 if isinstance(column[0], collections.Iterable):
-                    agg_score = np.mean(np.stack(column, axis=0), axis=0).tolist()
-                    flat_agg_problem_scores[col_name] = agg_score
+                    # stack the results horizontally for easy calculation since each run has N elements, i.e. top K for all K
+                    stacked_column = np.stack(column, axis=0)
+                    agg_score_mean = np.mean(stacked_column, axis=0).tolist()
+                    agg_score_sd = np.std(stacked_column, axis=0, ddof=1).tolist()
+                    flat_agg_problem_scores[col_name] = agg_score_mean
+                    # add another entity with `standard dev` instead of `mean`
+                    flat_agg_problem_scores[col_name.replace("mean", "std")] = agg_score_sd
                 elif column[0] is not None:
-                    agg_score = np.mean(column).tolist()
-                    flat_agg_problem_scores[col_name] = agg_score
+                    # only one results per entity, aka spearman, etc.
+                    agg_score_mean = np.mean(column).tolist()
+                    agg_score_sd = np.std(column, ddof=1).tolist()
+                    flat_agg_problem_scores[col_name] = agg_score_mean
+                    flat_agg_problem_scores[col_name.replace("mean", "std")] = agg_score_sd
 
         agg_problem_scores = utils.inflate(flat_agg_problem_scores)
         agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
