@@ -26,6 +26,7 @@ from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
 from dna import plot
 from dna.problems import get_problem, ProblemBase
+from dna.utils import NumpyEncoder
 
 
 def configure_split_parser(parser):
@@ -607,7 +608,7 @@ def record_run(
         run['scores'] = scores
 
     with open(path, 'w') as f:
-        json.dump(run, f, indent=4, sort_keys=True)
+        json.dump(run, f, indent=4, sort_keys=True, cls=NumpyEncoder)
 
 
 def configure_report_parser(parser: argparse.ArgumentParser):
@@ -911,7 +912,9 @@ def create_distribution_plots(agg_results: dict, output_dir: str):
             pass # TODO: what do we want here?
         else:
             ax = sns.violinplot(x=results_dict[metric_key])
-            # TODO: add title, axis info
+            plt.title("Distribution of Metric: {}".format(metric_key))
+            plt.xlabel("{}".format(metric_key))
+            plt.ylabel("Frequency")
             plt.savefig(os.path.join(output_dir, "{}-violin-plot.png".format(metric_key)))
 
 
