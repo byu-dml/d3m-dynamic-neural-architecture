@@ -69,8 +69,8 @@ def transpose_jagged_2darray(jagged_2darray: typing.Iterable[typing.Iterable]) -
             transpose[i].append(value)
     return transpose
 
-class NumpyEncoder(json.JSONEncoder):
-    """ Helpful for serialization numpy arrays """
+class NumpyJSONEncoder(json.JSONEncoder):
+    """JSON Encoder that handles NumPy Arrays"""
     def default(self, obj):
         if isinstance(obj, np.ndarray):
             return obj.tolist()

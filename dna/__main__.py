@@ -17,13 +17,11 @@ import pandas as pd
 from tqdm import tqdm
 from tuningdeap import TuningDeap
 
-from dna import utils
+from dna import plot, utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
-from dna import plot
 from dna.problems import get_problem, ProblemBase
-from dna.utils import NumpyEncoder
 
 
 def configure_split_parser(parser):
@@ -314,7 +312,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         })
 
         if arguments.verbose:
-            print(str(evaluate_result))
+            print(evaluate_result)
             print()
 
     if output_dir is not None:
@@ -605,7 +603,7 @@ def record_run(
         run['scores'] = scores
 
     with open(path, 'w') as f:
-        json.dump(run, f, indent=4, sort_keys=True, cls=NumpyEncoder)
+        json.dump(run, f, indent=4, sort_keys=True, cls=utils.NumpyJSONEncoder)
 
 
 def configure_report_parser(parser: argparse.ArgumentParser):
@@ -687,9 +685,9 @@ def get_result_paths(result_dirs: typing.Sequence[str]):
     result_paths = []
     for dir_ in result_dirs:
         path = os.path.join(dir_, 'run.json')
-        if os.path.isfile(path + ".tar.gz"):
+        if os.path.isfile(path + '.tar.gz') and not os.path.isfile(path):
             # unzip if needed
-            tar = tarfile.open(path + ".tar.gz", "r:gz")
+            tar = tarfile.open(path + '.tar.gz', 'r:gz')
             tar.extractall()
             tar.close()
         if os.path.isfile(path):
@@ -856,13 +854,13 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
                     agg_score_sd = np.std(stacked_column, axis=0, ddof=1).tolist()
                     flat_agg_problem_scores[col_name] = agg_score_mean
                     # add another entity with `standard dev` instead of `mean`
-                    flat_agg_problem_scores[col_name.replace("mean", "std")] = agg_score_sd
+                    flat_agg_problem_scores[col_name.replace('mean', 'std')] = agg_score_sd
                 elif column[0] is not None:
                     # only one results per entity, aka spearman, etc.
                     agg_score_mean = np.mean(column).tolist()
                     agg_score_sd = np.std(column, ddof=1).tolist()
                     flat_agg_problem_scores[col_name] = agg_score_mean
-                    flat_agg_problem_scores[col_name.replace("mean", "std")] = agg_score_sd
+                    flat_agg_problem_scores[col_name.replace('mean', 'std')] = agg_score_sd
 
             if 'scores_by_dataset_id' in col_name:
                 column = flat_problem_scores_to_agg_df[col_name].values
@@ -877,7 +875,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
         agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
         agg_scores.append(agg_problem_scores)
     return agg_scores
-
+    
 
 def agg_results_handler(arguments: argparse.Namespace):
     if arguments.results_dir is not None:
