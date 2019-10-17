@@ -909,14 +909,22 @@ def create_distribution_plots(agg_results: dict, output_dir: str):
     # plot aggregate scores in violin plot and save to `output_dir`
     for metric_key in metric_keys:
         if isinstance(results_dict[metric_key][0], collections.Iterable):
-            pass # TODO: what do we want here?
+            for index in [1, 25, 100, -1]:
+                name_of_index = "all" if index == 1 else str(index)
+                name_of_metric = metric_key.replace("_", " ")
+                ax = sns.violinplot(x=results_dict[metric_key][index])
+                plt.title("Distribution of {} at K={}".format(name_of_metric, name_of_index))
+                plt.xlabel("{} at K={}".format(name_of_metric, index))
+                plt.ylabel("Frequency")
+                plt.savefig(os.path.join(output_dir, "{}-at-{}-violin-plot.png".format(metric_key, name_of_index)))
+                plt.close()
         else:
             ax = sns.violinplot(x=results_dict[metric_key])
             plt.title("Distribution of Metric: {}".format(metric_key))
             plt.xlabel("{}".format(metric_key))
             plt.ylabel("Frequency")
             plt.savefig(os.path.join(output_dir, "{}-violin-plot.png".format(metric_key)))
-
+            plt.close()
 
 def agg_results_handler(arguments: argparse.Namespace):
     if arguments.results_dir is not None:
