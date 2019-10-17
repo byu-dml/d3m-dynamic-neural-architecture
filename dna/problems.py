@@ -6,6 +6,7 @@ import pandas as pd
 import time
 import os
 import matplotlib.pyplot as plt
+import copy
 
 from dna import utils
 from dna.data import group_json_objects
@@ -15,7 +16,8 @@ from dna import utils
 
 class ProblemBase:
 
-    def __init__(self, group_key):
+    def __init__(self, group_key, problem_name):
+        self.problem_name = problem_name
         self.group_key = group_key
         self.group_scores_key = 'scores_by_{}'.format(self.group_key)
         self.agg_scores_key = 'aggregate_scores'
@@ -125,7 +127,7 @@ class ProblemBase:
 class RegressionProblem(ProblemBase):
 
     def __init__(self, group_key):
-        super().__init__(group_key)
+        super().__init__(group_key, 'regression')
         self._predict_method_name = 'predict_regression'
 
     def score(self, predictions, data):
@@ -215,8 +217,8 @@ class RegressionProblem(ProblemBase):
 
 class PredictByGroupProblemBase(ProblemBase):
 
-    def __init__(self, group_key):
-        super().__init__(group_key)
+    def __init__(self, group_key, problem_name):
+        super().__init__(group_key, problem_name)
 
     def _group_data(self, data):
         grouped_data = {}
@@ -249,7 +251,7 @@ class PredictByGroupProblemBase(ProblemBase):
 class RankProblem(PredictByGroupProblemBase):
 
     def __init__(self, group_key):
-        super().__init__(group_key)
+        super().__init__(group_key, 'rank')
         self._predict_method_name = 'predict_rank'
 
     @staticmethod
@@ -321,9 +323,23 @@ class RankProblem(PredictByGroupProblemBase):
             predicted_ranks = np.array(predicted_ranks)
             actuals = merged_data['test_f1_macro'].tolist()
             actual_ranks = utils.rank(actuals)
+
+            # Average all the scores at k to make the plot title a reasonable length
             group_scores = scores_by_group[dataset_id]
+            group_scores = self.shorten_k_rank_scores(group_scores)
+
             plot_name = dataset_id + '_plot'
             super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, group_scores, type(self).__name__)
+
+    @staticmethod
+    def shorten_k_rank_scores(rank_scores: dict):
+        """Takes the average of the top k, k regret, and ndcg rank scores so the score at every k isn't reported"""
+
+        rank_scores = copy.deepcopy(rank_scores)
+        rank_scores['ndcg_at_k'] = np.mean(rank_scores['ndcg_at_k'])
+        rank_scores['regret_at_k'] = np.mean(rank_scores['regret_at_k'])
+        rank_scores['n_correct_at_k'] = np.mean(rank_scores['n_correct_at_k'])
+        return rank_scores
 
 
 def get_problem(problem_name: str, **kwargs):
