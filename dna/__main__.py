@@ -11,11 +11,14 @@ import uuid
 import warnings
 import tarfile
 import copy
+import itertools
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from tqdm import tqdm
 from tuningdeap import TuningDeap
+import matplotlib.pyplot as plt
 
 from dna import utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
@@ -870,7 +873,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
                     total_distribution = list(zip(*column))
                     flat_agg_problem_scores[col_name] = total_distribution
                 elif column[0] is not None:
-                    flat_agg_problem_scores[col_name] = total_distribution
+                    flat_agg_problem_scores[col_name] = column
 
         agg_problem_scores = utils.inflate(flat_agg_problem_scores)
         agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
@@ -878,17 +881,38 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
     return agg_scores
 
 
-def create_distribution_plots(agg_results: dict):
+def create_distribution_plots(agg_results: dict, output_dir: str):
     scores_by_dataset = agg_results[0]["test_scores"]["scores_by_dataset_id"]
-    # aggregate over all datasets
-    import pdb; pdb.set_trace()
-    for dataset_name in scores_by_dataset.keys():
-        # TODO: aggregate
+    if len(list(scores_by_dataset.keys())) == 0:
+        print("No results, skipping")
+        return
 
-    # plot aggregate scores in violin plot
+    metric_keys = scores_by_dataset[list(scores_by_dataset.keys())[0]].keys()
+    results_dict = {}
+    # aggregates metrics over all datasets
+    for metric_key in metric_keys:
+        new_metric_list = []
+        for index, dataset_name in enumerate(scores_by_dataset.keys()):
+            new_metric_list.append(scores_by_dataset[dataset_name][metric_key])
+        # non-iterable metrics are only non-iterable two layers deep now
+        if isinstance(new_metric_list[0][0], collections.Iterable):
+            new_metric_list = list(zip(*new_metric_list)) # now we have tuples of tuples for each metric
+            flattened_results = [list(sum(tupleOfTuples, ())) for tupleOfTuples in new_metric_list]
+        else:
+            flattened_results = list(itertools.chain(*new_metric_list)) # flatten all the arrays into one array
+        results_dict[metric_key] = flattened_results
 
-    # save plots to dir
-    print("Hello!")
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    # plot aggregate scores in violin plot and save to `output_dir`
+    for metric_key in metric_keys:
+        if isinstance(results_dict[metric_key][0], collections.Iterable):
+            pass # TODO: what do we want here?
+        else:
+            ax = sns.violinplot(x=results_dict[metric_key])
+            # TODO: add title, axis info
+            plt.savefig(os.path.join(output_dir, "{}-violin-plot.png".format(metric_key)))
 
 
 def agg_results_handler(arguments: argparse.Namespace):
@@ -908,7 +932,7 @@ def agg_results_handler(arguments: argparse.Namespace):
     results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
 
     agg_scores = aggregate_result_scores(results_to_agg)
-    create_distribution_plots(agg_scores)
+    create_distribution_plots(agg_scores, output_dir)
 
     record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
 
