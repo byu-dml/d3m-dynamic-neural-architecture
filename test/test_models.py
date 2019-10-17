@@ -25,10 +25,9 @@ class ModelDeterminismTestCase(unittest.TestCase):
             "--test-path", 'data/small_classification_test.json',
             "--test-size", "2",
             '--split-seed', "0"
-        ]        
+        ]
         cls.arguments = parser.parse_args(argv)
         split_handler(cls.arguments)
-        
 
     def test_dna_regression_determinism(self):
         self._test_determinism(

@@ -11,7 +11,7 @@ class DNAModule(nn.Module):
 
     def __init__(
         self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
-        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0, 
+        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
         reduction_name: str = 'max', *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__()

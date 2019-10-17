@@ -262,26 +262,27 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         if arguments.verbose:
             print('{} {} {}'.format(model_id, problem_name, run_id))
         problem = get_problem(problem_name, **vars(arguments))
-        evaluate_result = evaluate(
-            problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
-            model_output_dir=model_output_dir, plot_dir=plot_dir
-        )
-        result_scores.append({
-            'problem_name': problem_name,
-            'model_id': model_id,
-            **evaluate_result.__dict__,
-        })
+        if problem.model_is_supported(model):
+            evaluate_result = evaluate(
+                problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
+                model_output_dir=model_output_dir, plot_dir=plot_dir
+            )
+            result_scores.append({
+                'problem_name': problem_name,
+                'model_id': model_id,
+                **evaluate_result.__dict__,
+            })
 
-        if arguments.verbose:
-            # TODO: move to evaluate result __str__ method
-            results = evaluate_result.__dict__
-            del results['train_predictions']
-            del results['test_predictions']
-            del results['ootsp_test_predictions']
-            del results['train_scores'][problem.group_scores_key]
-            del results['test_scores'][problem.group_scores_key]
-            print(json.dumps(results, indent=4))
-            print()
+            if arguments.verbose:
+                # TODO: move to evaluate result __str__ method
+                results = evaluate_result.__dict__
+                del results['train_predictions']
+                del results['test_predictions']
+                del results['ootsp_test_predictions']
+                del results['train_scores'][problem.group_scores_key]
+                del results['test_scores'][problem.group_scores_key]
+                print(json.dumps(results, indent=4))
+                print()
 
     if output_dir is not None:
         record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -295,14 +296,17 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
     return result_scores
 
 
-def evaluate_handler(arguments: argparse.Namespace):
-    model_config_path = getattr(arguments, 'model_config_path', None)
-    if model_config_path is None:
+def get_model_config(model_config_path):
+    if model_config_path is None or not os.path.isfile(model_config_path):
         model_config = {}
     else:
         with open(model_config_path) as f:
             model_config = json.load(f)
+    return model_config
 
+
+def evaluate_handler(arguments: argparse.Namespace):
+    model_config = get_model_config(getattr(arguments, 'model_config_path', None))
     handle_evaluate(model_config, arguments)
 
 
@@ -391,8 +395,7 @@ def _get_tuning_objective(arguments: argparse.Namespace):
 
 def tuning_handler(arguments: argparse.Namespace):
     # gather config files
-    with open(arguments.model_config_path, 'r') as file:
-        model_config = json.load(file)
+    model_config = get_model_config(getattr(arguments, 'model_config_path', None))
     with open(arguments.tuning_config_path, 'r') as file:
         tuning_config = json.load(file)
 

@@ -23,6 +23,9 @@ class ProblemBase:
         self._fit_method_name = 'fit'
         self._predict_method_name = None
 
+    def model_is_supported(self, model):
+        return hasattr(model, self._fit_method_name) and hasattr(model, self._predict_method_name)
+
     def _validate_model_has_method(self, model, method_name):
         if not hasattr(model, method_name):
             raise ValueError(
