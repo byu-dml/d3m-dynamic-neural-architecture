@@ -301,19 +301,21 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
         if arguments.verbose:
             print('{} {} {}'.format(model_id, problem_name, run_id))
         problem = get_problem(problem_name, **vars(arguments))
-        evaluate_result = evaluate(
-            problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
-            model_output_dir=model_output_dir, plot_dir=plot_dir
-        )
-        result_scores.append({
-            'problem_name': problem_name,
-            'model_id': model_id,
-            **evaluate_result.__dict__,
-        })
 
-        if arguments.verbose:
-            print(evaluate_result)
-            print()
+        if problem.model_is_supported(model):
+            evaluate_result = evaluate(
+                problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
+                model_output_dir=model_output_dir, plot_dir=plot_dir
+            )
+            result_scores.append({
+                'problem_name': problem_name,
+                'model_id': model_id,
+                **evaluate_result.__dict__,
+            })
+
+            if arguments.verbose:
+                print(evaluate_result)
+                print()
 
     if output_dir is not None:
         record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -327,14 +329,17 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
     return result_scores
 
 
-def evaluate_handler(arguments: argparse.Namespace):
-    model_config_path = getattr(arguments, 'model_config_path', None)
-    if model_config_path is None:
+def get_model_config(model_config_path):
+    if model_config_path is None or not os.path.isfile(model_config_path):
         model_config = {}
     else:
         with open(model_config_path) as f:
             model_config = json.load(f)
+    return model_config
 
+
+def evaluate_handler(arguments: argparse.Namespace):
+    model_config = get_model_config(getattr(arguments, 'model_config_path', None))
     handle_evaluate(model_config, arguments)
 
 
@@ -423,8 +428,7 @@ def _get_tuning_objective(arguments: argparse.Namespace):
 
 def tuning_handler(arguments: argparse.Namespace):
     # gather config files
-    with open(arguments.model_config_path, 'r') as file:
-        model_config = json.load(file)
+    model_config = get_model_config(getattr(arguments, 'model_config_path', None))
     with open(arguments.tuning_config_path, 'r') as file:
         tuning_config = json.load(file)
 
@@ -875,7 +879,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
         agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
         agg_scores.append(agg_problem_scores)
     return agg_scores
-    
+
 
 def agg_results_handler(arguments: argparse.Namespace):
     if arguments.results_dir is not None:
