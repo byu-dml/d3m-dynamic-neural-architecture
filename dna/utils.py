@@ -6,6 +6,7 @@ import git
 import pandas as pd
 import numpy as np
 
+
 def rank(values: typing.Sequence) -> typing.Sequence:
     return type(values)((pd.Series(values).rank(ascending=False) - 1))
 
@@ -69,8 +70,10 @@ def transpose_jagged_2darray(jagged_2darray: typing.Iterable[typing.Iterable]) -
             transpose[i].append(value)
     return transpose
 
+
 class NumpyJSONEncoder(json.JSONEncoder):
     """JSON Encoder that handles NumPy Arrays"""
+
     def default(self, obj):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
