@@ -49,16 +49,16 @@ def create_distribution_plots(agg_results: list, output_dir: str):
     for metric_key in metric_keys:
         if isinstance(results_dict[metric_key][0], collections.Iterable):
             for index in [1, 25, 100, -1]:
-                name_of_index = 'all' if index == 1 else str(index)
+                name_of_index = 'all' if index == -1 else str(index)
                 name_of_metric = metric_key.replace('_', ' ')
-                ax = sns.violinplot(x=results_dict[metric_key][index])
+                ax = sns.violinplot(x=results_dict[metric_key][index], cut=0)
                 plt.title('Distribution of {} at K={}'.format(name_of_metric, name_of_index))
-                plt.xlabel('{} at K={}'.format(name_of_metric, index))
+                plt.xlabel('{} at K={}'.format(name_of_metric, name_of_index))
                 plt.ylabel('Frequency')
                 plt.savefig(os.path.join(output_dir, '{}-at-{}-violin-plot.png'.format(metric_key, name_of_index)))
                 plt.close()
         else:
-            ax = sns.violinplot(x=results_dict[metric_key])
+            ax = sns.violinplot(x=results_dict[metric_key], cut=0)
             plt.title('Distribution of Metric: {}'.format(metric_key))
             plt.xlabel('{}'.format(metric_key))
             plt.ylabel('Frequency')

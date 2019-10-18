@@ -843,7 +843,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
     for problem_name, problem_scores_to_agg_df in scores_to_agg_df.groupby('problem_name'):
         flat_agg_problem_scores = {
             'problem_name': problem_name,
-            'model_id': problem_scores_to_agg_df['model_id'][0]
+            'model_id': problem_scores_to_agg_df['model_id'].iloc[0]
         }
 
         flat_problem_scores_to_agg = utils.flatten(dict(problem_scores_to_agg_df))
@@ -861,8 +861,8 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
                     flat_agg_problem_scores[col_name.replace('mean', 'std')] = agg_score_sd
                 elif column[0] is not None:
                     # only one results per entity, aka spearman, etc.
-                    agg_score_mean = np.mean(column).tolist()
-                    agg_score_sd = np.std(column, ddof=1).tolist()
+                    agg_score_mean = np.mean(column)
+                    agg_score_sd = np.std(column, ddof=1)
                     flat_agg_problem_scores[col_name] = agg_score_mean
                     flat_agg_problem_scores[col_name.replace('mean', 'std')] = agg_score_sd
 
