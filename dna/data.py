@@ -456,7 +456,6 @@ class PMFDataLoader(object):
         except KeyError as e:
             raise KeyError("Pipeline/Dataset ID was not in the mapper. Perhaps the pipeline/dataset id was not in the training set? Error: {}".format(e))
 
-    
     def get_predictions_from_matrix(self, x_data, matrix):
         predictions = []
         for index, item in enumerate(x_data):
