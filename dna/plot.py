@@ -20,18 +20,19 @@ def plot_at_k_scores(model_names: pd.Series, model_scores, model_colors, plot_pa
     plt.clf()
 
 
-def create_distribution_plots(agg_results: dict, output_dir: str):
+def create_distribution_plots(agg_results: list, output_dir: str):
     scores_by_dataset = agg_results[0]['test_scores']['scores_by_dataset_id']
-    if len(list(scores_by_dataset.keys())) == 0:
+    if len(scores_by_dataset) == 0:
         print('No results, skipping')
         return
 
-    metric_keys = scores_by_dataset[list(scores_by_dataset.keys())[0]].keys()
+    scores_by_dataset_keys = scores_by_dataset.keys()
+    metric_keys = scores_by_dataset[list(scores_by_dataset_keys)[0]].keys()
     results_dict = {}
     # aggregates metrics over all datasets
     for metric_key in metric_keys:
         new_metric_list = []
-        for index, dataset_name in enumerate(scores_by_dataset.keys()):
+        for index, dataset_name in enumerate(scores_by_dataset_keys):
             new_metric_list.append(scores_by_dataset[dataset_name][metric_key])
         # non-iterable metrics are only non-iterable two layers deep now
         if isinstance(new_metric_list[0][0], collections.Iterable):
