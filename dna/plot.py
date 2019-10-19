@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 
+
 def plot_at_k_scores(model_names: pd.Series, model_scores, model_colors, plot_path, ylabel=None, title=None, max_k=100):
     for model_name, at_k_scores, model_color in zip(model_names, model_scores, model_colors):
         plt.plot(range(1, max_k + 1), at_k_scores[:max_k], label=model_name, color=model_color)

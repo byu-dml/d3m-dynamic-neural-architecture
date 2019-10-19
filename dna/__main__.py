@@ -831,53 +831,40 @@ def configure_agg_results_parser(parser: argparse.ArgumentParser):
 
 
 def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
-    scores_to_agg = []
-    # flatten the results and put in DF format
+    # group results by problem and flatten
+    problem_name_to_scores_to_agg_map = {}  # problem_name: scores_to_agg
     for result in results_to_agg:
         for problem_scores in result['scores']:
             problem_scores['run_id'] = result['id']
-            scores_to_agg.append(utils.flatten(problem_scores))
-    scores_to_agg_df = pd.DataFrame(scores_to_agg)
+            problem_name = problem_scores['problem_name']
+            if problem_name not in problem_name_to_scores_to_agg_map:
+                problem_name_to_scores_to_agg_map[problem_name] = []
+            problem_name_to_scores_to_agg_map[problem_name].append(utils.flatten(problem_scores))
 
     agg_scores = []
-    for problem_name, problem_scores_to_agg_df in scores_to_agg_df.groupby('problem_name'):
+    for problem_name, problem_scores_to_agg in problem_name_to_scores_to_agg_map.items():
+        problem_scores_to_agg_df = pd.DataFrame(problem_scores_to_agg).dropna(axis=1, how='all')
+        # record metadata
         flat_agg_problem_scores = {
             'problem_name': problem_name,
-            'model_id': problem_scores_to_agg_df['model_id'].iloc[0]
+            'model_id': problem_scores_to_agg_df['model_id'].iloc[0],
+            'aggregated_run_ids': problem_scores_to_agg_df['run_id'].tolist(),
         }
+        for col_name, column in problem_scores_to_agg_df.iteritems():
+            column_values = column.values.tolist()  # each row is a different run
 
-        flat_problem_scores_to_agg = utils.flatten(dict(problem_scores_to_agg_df))
-        flat_problem_scores_to_agg_df = pd.DataFrame(flat_problem_scores_to_agg)
-        for col_name in flat_problem_scores_to_agg_df:
-            if 'train_scores' in col_name or 'test_scores' in col_name and not 'scores_by_dataset_id' in col_name:
-                column = flat_problem_scores_to_agg_df[col_name].values
-                if isinstance(column[0], collections.Iterable):
-                    # stack the results horizontally for easy calculation since each run has N elements, i.e. top K for all K
-                    stacked_column = np.stack(column, axis=0)
-                    agg_score_mean = np.mean(stacked_column, axis=0).tolist()
-                    agg_score_sd = np.std(stacked_column, axis=0, ddof=1).tolist()
-                    flat_agg_problem_scores[col_name] = agg_score_mean
-                    # add another entity with `standard dev` instead of `mean`
-                    flat_agg_problem_scores[col_name.replace('mean', 'std')] = agg_score_sd
-                elif column[0] is not None:
-                    # only one results per entity, aka spearman, etc.
-                    agg_score_mean = np.mean(column)
-                    agg_score_sd = np.std(column, ddof=1)
-                    flat_agg_problem_scores[col_name] = agg_score_mean
-                    flat_agg_problem_scores[col_name.replace('mean', 'std')] = agg_score_sd
-
+            # keep scores over all datasets and runs
             if 'scores_by_dataset_id' in col_name:
-                column = flat_problem_scores_to_agg_df[col_name].values
-                if isinstance(column[0], collections.Iterable):
-                    # combine the each index from all lists into a tuple aka [1, 0], [2, 1], [3, 2] becomes [(1, 2, 3), (0, 1, 2)]
-                    total_distribution = list(zip(*column))
-                    flat_agg_problem_scores[col_name] = total_distribution
-                elif column[0] is not None:
-                    flat_agg_problem_scores[col_name] = column
+                flat_agg_problem_scores[col_name+'_by_run'] = column_values
 
-        agg_problem_scores = utils.inflate(flat_agg_problem_scores)
-        agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
-        agg_scores.append(agg_problem_scores)
+            # compute mean and std dev over all runs for all other scores
+            elif 'train_scores' in col_name or 'test_scores' in col_name:
+                if isinstance(column_values[0], collections.Iterable):
+                    flat_agg_problem_scores[col_name+'_mean_over_runs'] = np.mean(column_values, axis=0).tolist()
+                    flat_agg_problem_scores[col_name+'_std_dev_over_runs'] = np.std(column_values, axis=0).tolist()
+
+        agg_scores.append(utils.inflate(flat_agg_problem_scores))
+
     return agg_scores
 
 
@@ -889,6 +876,7 @@ def agg_results_handler(arguments: argparse.Namespace):
     else:
         raise ValueError('no results to aggregate')
 
+    # todo: id deterministic based on input runs
     run_id = str(uuid.uuid4())
     print(run_id)
     git_commit = utils.get_git_commit_hash()

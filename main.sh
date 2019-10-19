@@ -10,7 +10,7 @@ fi
 MODE=DEV # DEV PROD
 COMMAND=evaluate  # evaluate tune split-data
 # evaluate args
-N_RUNS=10  # with different seeds
+N_RUNS=5  # with different seeds
 # tune args
 OBJECTIVE=ndcg_at_k
 N_GENERATIONS=2
