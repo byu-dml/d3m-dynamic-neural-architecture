@@ -8,6 +8,7 @@ fi
 
 
 MODE=DEV # DEV PROD
+# todo add report command
 COMMAND=evaluate  # evaluate tune split-data
 # evaluate args
 N_RUNS=5  # with different seeds

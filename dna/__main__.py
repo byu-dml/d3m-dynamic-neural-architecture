@@ -793,7 +793,7 @@ def _add_model_name_and_color_to_leaderboard(leaderboard):
 
 
 def plot_ndcg_over_k(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'ndcg.pdf')
+    plot_path = os.path.join(output_dir, 'ndcg_over_k.pdf')
     plot.plot_at_k_scores_over_k(
         rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean_mean_over_runs'],
         rank_report['test.aggregate_scores.ndcg_at_k_mean_std_dev_over_runs'],
@@ -802,7 +802,7 @@ def plot_ndcg_over_k(rank_report: pd.DataFrame, output_dir: str):
 
 
 def plot_regret_over_k(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'regret.pdf')
+    plot_path = os.path.join(output_dir, 'regret_over_k.pdf')
     plot.plot_at_k_scores_over_k(
         rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean_mean_over_runs'],
         rank_report['test.aggregate_scores.regret_at_k_mean_std_dev_over_runs'],
@@ -811,7 +811,7 @@ def plot_regret_over_k(rank_report: pd.DataFrame, output_dir: str):
 
 
 def plot_n_correct_over_k(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'topk.pdf')
+    plot_path = os.path.join(output_dir, 'topk_over_k.pdf')
     plot.plot_at_k_scores_over_k(
         rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean_mean_over_runs'],
         rank_report['test.aggregate_scores.n_correct_at_k_mean_std_dev_over_runs'],
