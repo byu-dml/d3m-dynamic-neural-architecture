@@ -859,9 +859,8 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
 
             # compute mean and std dev over all runs for all other scores
             elif 'train_scores' in col_name or 'test_scores' in col_name:
-                if isinstance(column_values[0], collections.Iterable):
-                    flat_agg_problem_scores[col_name+'_mean_over_runs'] = np.mean(column_values, axis=0).tolist()
-                    flat_agg_problem_scores[col_name+'_std_dev_over_runs'] = np.std(column_values, axis=0).tolist()
+                flat_agg_problem_scores[col_name+'_mean_over_runs'] = np.mean(column_values, axis=0).tolist()
+                flat_agg_problem_scores[col_name+'_std_dev_over_runs'] = np.std(column_values, axis=0).tolist()
 
         agg_scores.append(utils.inflate(flat_agg_problem_scores))
 
