@@ -3,7 +3,6 @@ import colorsys
 import itertools
 import os
 
-import matplotlib.colors as plt_colors
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
