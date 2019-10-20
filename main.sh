@@ -86,4 +86,5 @@ elif [ "$COMMAND" == "evaluate" ]; then
             --output-dir $results_dir \
             --verbose
     done
+    # todo: aggregate results here
 fi

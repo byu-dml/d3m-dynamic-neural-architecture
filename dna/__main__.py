@@ -639,16 +639,15 @@ def report_handler(arguments: argparse.Namespace):
         raise ValueError('one of --results-dir or result-paths-csv must be provided')
 
     regression_results, rank_results = load_results(result_paths)
-
-    regression_leaderboard = make_leaderboard(regression_results, 'test.total_scores.rmse', min)
-    rank_leaderboard = make_leaderboard(rank_results, 'test.total_scores.ndcg_at_k_mean', max)
+    regression_leaderboard = make_leaderboard(regression_results, 'test.total_scores.rmse_mean_over_runs', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'test.total_scores.ndcg_at_k_mean_mean_over_runs', max)
 
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
 
-    plot_ndcg(rank_leaderboard, arguments.report_dir)
-    plot_regret(rank_leaderboard, arguments.report_dir)
-    plot_n_correct(rank_leaderboard, arguments.report_dir)
+    plot_ndcg_over_k(rank_leaderboard, arguments.report_dir)
+    plot_regret_over_k(rank_leaderboard, arguments.report_dir)
+    plot_n_correct_over_k(rank_leaderboard, arguments.report_dir)
 
     for col_name in rank_leaderboard.columns:
         if 'aggregate_scores' in col_name and 'at_k' in col_name:
@@ -793,19 +792,31 @@ def _add_model_name_and_color_to_leaderboard(leaderboard):
     leaderboard['model_color'] = model_colors
 
 
-def plot_ndcg(rank_report: pd.DataFrame, output_dir: str):
+def plot_ndcg_over_k(rank_report: pd.DataFrame, output_dir: str):
     plot_path = os.path.join(output_dir, 'ndcg.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean'], rank_report['model_color'], plot_path, 'NDCG@k', None)
+    plot.plot_at_k_scores_over_k(
+        rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean_mean_over_runs'],
+        rank_report['test.aggregate_scores.ndcg_at_k_mean_std_dev_over_runs'],
+        rank_report['model_color'], plot_path, 'NDCG@k', None
+    )
 
 
-def plot_regret(rank_report: pd.DataFrame, output_dir: str):
+def plot_regret_over_k(rank_report: pd.DataFrame, output_dir: str):
     plot_path = os.path.join(output_dir, 'regret.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean'], rank_report['model_color'], plot_path, 'Regret@k', None)
+    plot.plot_at_k_scores_over_k(
+        rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean_mean_over_runs'],
+        rank_report['test.aggregate_scores.regret_at_k_mean_std_dev_over_runs'],
+        rank_report['model_color'], plot_path, 'Regret@k', None
+    )
 
 
-def plot_n_correct(rank_report: pd.DataFrame, output_dir: str):
+def plot_n_correct_over_k(rank_report: pd.DataFrame, output_dir: str):
     plot_path = os.path.join(output_dir, 'topk.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean'], rank_report['model_color'], plot_path, 'Top-K@k', None)
+    plot.plot_at_k_scores_over_k(
+        rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean_mean_over_runs'],
+        rank_report['test.aggregate_scores.n_correct_at_k_mean_std_dev_over_runs'],
+        rank_report['model_color'], plot_path, 'Top-K@k', None
+    )
 
 
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
@@ -875,14 +886,15 @@ def agg_results_handler(arguments: argparse.Namespace):
     else:
         raise ValueError('no results to aggregate')
 
-    # todo: id deterministic based on input runs
-    run_id = str(uuid.uuid4())
-    print(run_id)
+    results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
+
+    results_ids = sorted([result['id'] for result in results_to_agg])
+    uuid_namespace = uuid.UUID('a8ec5977-701e-443b-89e7-8974e0e4ea6c')
+    run_id = str(uuid.uuid5(uuid_namespace, json.dumps(results_ids)))
+
     git_commit = utils.get_git_commit_hash()
 
     output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
-
-    results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
 
     agg_scores = aggregate_result_scores(results_to_agg)
     plot.create_distribution_plots(agg_scores, output_dir)

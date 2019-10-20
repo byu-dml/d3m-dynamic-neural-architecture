@@ -1,16 +1,25 @@
 import collections
+import colorsys
 import itertools
 import os
 
+import matplotlib.colors as plt_colors
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import numpy as np
 
 
-def plot_at_k_scores(model_names: pd.Series, model_scores, model_colors, plot_path, ylabel=None, title=None, max_k=100):
-    for model_name, at_k_scores, model_color in zip(model_names, model_scores, model_colors):
-        plt.plot(range(1, max_k + 1), at_k_scores[:max_k], label=model_name, color=model_color)
+def plot_at_k_scores_over_k(
+    model_names: pd.Series, model_scores, model_errors, model_colors, plot_path, ylabel=None, title=None, max_k=100
+):
+    for model_name, at_k_scores, at_k_errors, model_color in zip(model_names, model_scores, model_errors, model_colors):
+        x = np.arange(1, max_k + 1)
+        y = np.array(at_k_scores[:max_k])
+        yerr = np.array(at_k_errors[:max_k])
+        plt.plot(x, y, label=model_name, color=model_color)
+        plt.fill_between(x, y-yerr, y+yerr, facecolor=model_color, edgecolor=None, alpha=.25)
+
     plt.xlabel('k')
     if ylabel is not None:
         plt.ylabel(ylabel)
