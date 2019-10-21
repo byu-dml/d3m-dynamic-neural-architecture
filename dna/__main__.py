@@ -22,7 +22,6 @@ from dna.data import get_data, preprocess_data, split_data_by_group, group_json_
 from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
-from dna.plot import create_distribution_plots
 
 
 def configure_split_parser(parser):
@@ -299,11 +298,11 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
-        if arguments.verbose:
-            print('{} {} {}'.format(model_id, problem_name, run_id))
         problem = get_problem(problem_name, **vars(arguments))
-
         if problem.model_is_supported(model):
+            if arguments.verbose:
+                print('{} {} {}'.format(model_id, problem_name, run_id))
+
             evaluate_result = evaluate(
                 problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
                 model_output_dir=model_output_dir, plot_dir=plot_dir
@@ -651,7 +650,7 @@ def report_handler(arguments: argparse.Namespace):
     plot_n_correct_over_k(rank_leaderboard, arguments.report_dir)
 
     # create violin plots
-    create_distribution_plots(regression_results, rank_results, arguments.report_dir)
+    plot.create_distribution_plots(regression_results, rank_results, arguments.report_dir)
 
     for col_name in rank_leaderboard.columns:
         if 'aggregate_scores' in col_name and 'at_k' in col_name:
@@ -901,7 +900,6 @@ def agg_results_handler(arguments: argparse.Namespace):
     output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
 
     agg_scores = aggregate_result_scores(results_to_agg)
-    plot.create_distribution_plots(agg_scores, output_dir)
 
     record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
 

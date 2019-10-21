@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# MODEL must be set as an env var
-if [ -z $MODEL ]; then
-    echo "MODEL not set"
-    exit 1
-fi
-
 
 MODE=DEV # DEV PROD
 # todo add report command
@@ -29,10 +23,12 @@ if [ $MODE == "DEV" ]; then
     validation_split_seed=5460650386
 
     if [ "$COMMAND" == "tune" ]; then
-        results_dir=./dev_results_validation_set/$MODEL
+        base_results_dir=./dev_results_validation_set
+        results_dir=$base_results_dir/$MODEL
         tuning_output_dir=./dev_tuning_output
     elif [ "$COMMAND" == "evaluate" ]; then
-        results_dir=./dev_results_test_set/$MODEL
+        base_results_dir=./dev_results_test_set
+        results_dir=$base_results_dir/$MODEL
     fi
 
 elif [ "$MODE" == "PROD" ]; then
@@ -46,10 +42,12 @@ elif [ "$MODE" == "PROD" ]; then
     validation_split_seed=3101978347
 
     if [ "$COMMAND" == "tune" ]; then
-        results_dir=./results_validation_set/$MODEL
+        base_results_dir=./results_validation_set
+        results_dir=$base_results_dir/$MODEL
         tuning_output_dir=./tuning_output
     elif [ "$COMMAND" == "evaluate" ]; then
-        results_dir=./results_test_set/$MODEL
+        base_results_dir=./results_test_set
+        results_dir=$base_results_dir/$MODEL
     fi
 fi
 
@@ -61,6 +59,12 @@ if [ "$COMMAND" == "split-data" ]; then
         --split-seed $test_split_seed
 
 elif [ "$COMMAND" == "tune" ]; then
+    # MODEL must be set as an env var
+    if [ -z $MODEL ]; then
+        echo "MODEL not set"
+        exit 1
+    fi
+
     python3 -m dna $COMMAND \
         --model $MODEL \
         --model-config-path ./model_configs/${MODEL}_config.json \
@@ -77,6 +81,12 @@ elif [ "$COMMAND" == "tune" ]; then
         --verbose
 
 elif [ "$COMMAND" == "evaluate" ]; then
+    # MODEL must be set as an env var
+    if [ -z $MODEL ]; then
+        echo "MODEL not set"
+        exit 1
+    fi
+
     for ((i=0; i<$N_RUNS; i++)); do
         python3 -m dna $COMMAND \
             --model $MODEL \
@@ -87,5 +97,11 @@ elif [ "$COMMAND" == "evaluate" ]; then
             --output-dir $results_dir \
             --verbose
     done
-    # todo: aggregate results here
+
+    aggregate_results_dir=$base_results_dir/aggregate
+
+    python3 -m dna agg-results \
+        --results-dir $results_dir \
+        --output-dir $aggregate_results_dir
+
 fi
