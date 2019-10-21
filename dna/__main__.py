@@ -22,6 +22,7 @@ from dna.data import get_data, preprocess_data, split_data_by_group, group_json_
 from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
+from dna.plot import create_distribution_plots
 
 
 def configure_split_parser(parser):
@@ -648,6 +649,9 @@ def report_handler(arguments: argparse.Namespace):
     plot_ndcg_over_k(rank_leaderboard, arguments.report_dir)
     plot_regret_over_k(rank_leaderboard, arguments.report_dir)
     plot_n_correct_over_k(rank_leaderboard, arguments.report_dir)
+
+    # create violin plots
+    create_distribution_plots(regression_results, rank_results, arguments.report_dir)
 
     for col_name in rank_leaderboard.columns:
         if 'aggregate_scores' in col_name and 'at_k' in col_name:
