@@ -135,7 +135,7 @@ class LinearRegressionBaseline(SklearnBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
-        self.regressor = linear_model.LinearRegression()
+        self.regressor = linear_model.LinearRegression(random_state=seed)
         self.fitted = False
 
 
