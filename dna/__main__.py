@@ -651,7 +651,7 @@ def report_handler(arguments: argparse.Namespace):
 
     # create violin plots
     list_of_k = [1, 25, 100, -1]
-    # plot.create_distribution_plots(regression_results, arguments.report_dir, list_of_k)
+    plot.create_distribution_plots(regression_results, arguments.report_dir, list_of_k)
     plot.create_distribution_plots(rank_results, arguments.report_dir, list_of_k)
 
     for col_name in rank_leaderboard.columns:

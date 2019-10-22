@@ -30,6 +30,7 @@ def plot_at_k_scores_over_k(
 
 
 def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k: list):
+    model_mapping = results["model_id"].tolist() # index maps id to model name
     # gather relevant column names
     use_cols = [col_name for col_name in results.columns if 'scores_by_dataset' in col_name]
     results = results[use_cols]
@@ -43,7 +44,6 @@ def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k:
         for col_name in results:
             for model_num in range(len(results[col_name])):
                 model_data = results[col_name][model_num]
-                print(model_num, col_name)
                 if metric in col_name:
 
                     # initialize the metric dict
@@ -90,7 +90,7 @@ def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k:
         values = []
         for model_num in distribution_dict[metric_key].keys():
             values.extend(distribution_dict[metric_key][model_num])
-            model_counter.extend([model_num for i in range(len(distribution_dict[metric_key][model_num]))])
+            model_counter.extend([model_mapping[model_num] for i in range(len(distribution_dict[metric_key][model_num]))])
         plot_df = pd.DataFrame({"model_number": model_counter, "values": values})
         # make it prettier
         metric_key_name = metric_key.replace("_k_by_run", "")
