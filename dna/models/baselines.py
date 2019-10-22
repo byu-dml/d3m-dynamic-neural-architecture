@@ -135,7 +135,7 @@ class LinearRegressionBaseline(SklearnBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
-        self.regressor = linear_model.LinearRegression(random_state=seed)
+        self.regressor = linear_model.LinearRegression()
         self.fitted = False
 
 
@@ -147,7 +147,7 @@ class RandomForestBaseline(SklearnBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
-        self.regressor = RandomForestRegressor()
+        self.regressor = RandomForestRegressor(random_state=seed)
         self.fitted = False
 
 
