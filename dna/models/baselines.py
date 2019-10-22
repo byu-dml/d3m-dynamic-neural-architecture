@@ -147,7 +147,7 @@ class RandomForestBaseline(SklearnBase):
 
     def __init__(self, seed=0):
         super().__init__(seed=seed)
-        self.regressor = RandomForestRegressor(random_state=seed)
+        self.regressor = RandomForestRegressor()
         self.fitted = False
 
 
