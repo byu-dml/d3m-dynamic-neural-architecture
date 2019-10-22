@@ -650,11 +650,13 @@ def report_handler(arguments: argparse.Namespace):
     plot_n_correct_over_k(rank_leaderboard, arguments.report_dir)
 
     # create violin plots
-    plot.create_distribution_plots(regression_results, rank_results, arguments.report_dir)
+    list_of_k = [1, 25, 100, -1]
+    # plot.create_distribution_plots(regression_results, arguments.report_dir, list_of_k)
+    plot.create_distribution_plots(rank_results, arguments.report_dir, list_of_k)
 
     for col_name in rank_leaderboard.columns:
         if 'aggregate_scores' in col_name and 'at_k' in col_name:
-            for k in [25, 100, -1]:
+            for k in list_of_k:
                 new_col_name = col_name.replace('at_k', 'at_{}'.format(k))
                 rank_leaderboard[new_col_name] = np.nan
                 for model_name in rank_leaderboard['model_name']:

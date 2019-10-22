@@ -29,58 +29,72 @@ def plot_at_k_scores_over_k(
     plt.clf()
 
 
-def create_distribution_plots(regression_results: pd.DataFrame, rank_results: pd.DataFrame, output_dir: str):
+def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k: list):
     # gather relevant column names
-    reg_cols = [col_name for col_name in regression_results.columns if 'scores_by_dataset' in col_name]
-    rank_cols = [col_name for col_name in rank_results.columns if 'scores_by_dataset' in col_name]
-    regression_results = regression_results[reg_cols]
-    rank_results = rank_results[rank_cols]
-
+    use_cols = [col_name for col_name in results.columns if 'scores_by_dataset' in col_name]
+    results = results[use_cols]
     # gather relevant metrics
-    reg_metrics = set([col_name.split(".")[-1] for col_name in reg_cols])
-    rank_metrics = set([col_name.split(".")[-1] for col_name in rank_cols])
-
+    metrics = set([col_name.split(".")[-1] for col_name in use_cols])
 
     distribution_dict = {}
-    # go through both problems
-    for problem_name, problem_metrics, problem_dataset in [("regression", reg_metrics, regression_results), ("rank", rank_metrics, rank_results)]:
-        # go through metric by metric
-        for metric in problem_metrics:
-            # find the relevant column in the problem results
-            for col_name in problem_dataset:
-                assert len(problem_dataset[col_name]) == 1, "had more than one list in series, error"
+    # go through metric by metric
+    for metric in metrics:
+        # find the relevant column
+        for col_name in results:
+            for model_num in range(len(results[col_name])):
+                model_data = results[col_name][model_num]
+                print(model_num, col_name)
                 if metric in col_name:
+
+                    # initialize the metric dict
+                    if metric not in distribution_dict:
+                        if "at_k" in col_name:
+                            for k in list_of_k:
+                                new_metric_name = metric + "_k={}".format(k if k != -1 else "all")
+                                # only make a new dict if it's not present
+                                if new_metric_name not in distribution_dict:
+                                    distribution_dict[new_metric_name] = {}
+                        else:   
+                            distribution_dict[metric] = {}
+
+                    # aggregate
                     if "at_k" not in col_name:
-                        if metric in distribution_dict:
-                            distribution_dict[metric].extend(problem_dataset[col_name][0])
+                        if metric in distribution_dict and model_num in distribution_dict[metric]:
+                            distribution_dict[metric][model_num].extend(model_data)
                         else:
                             # initialize the dict
-                            distribution = problem_dataset[col_name][0] # each one is a series of a list
-                            distribution_dict[metric] = distribution
+                            distribution = model_data # each one is a series of a list
+                            distribution_dict[metric][model_num] = distribution
                     else:
                         # we have a run by K series-list structure -> turn into n by K array, zipping by the longest and filling with nans
-                        pad = len(max(problem_dataset[col_name][0], key=len))
-                        distribution_array = np.array([i + [0]*(pad-len(i)) for i in problem_dataset[col_name][0]])
-                        for k in [1, 25, 100, -1]:
+                        pad = len(max(model_data, key=len))
+                        distribution_array = np.array([i + [0]*(pad-len(i)) for i in model_data])
+                        for k in list_of_k:
                             if distribution_array.shape[1] < k:
                                 # if there are less than k pipelines, skip it
                                 continue
                             new_metric_name = metric + "_k={}".format(k if k != -1 else "all")
                             distribution = distribution_array[:, k] # get the k-th columns, which is the distribution at that k
-                            if metric in distribution_dict:
-                                distribution_dict[new_metric_name].extend(distribution.tolist())
+                            if metric in distribution_dict and model_num in distribution_dict[metric]:
+                                distribution_dict[new_metric_name][model_num].extend(distribution.tolist())
                             else:
                                 # initialize the dict mapping to a list so that we can extend it
-                                distribution_dict[new_metric_name] = distribution.tolist() 
+                                distribution_dict[new_metric_name][model_num] = distribution.tolist() 
     
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 
     # plot aggregate scores in violin plot and save to `output_dir`
     for metric_key in distribution_dict.keys():
+        model_counter = []
+        values = []
+        for model_num in distribution_dict[metric_key].keys():
+            values.extend(distribution_dict[metric_key][model_num])
+            model_counter.extend([model_num for i in range(len(distribution_dict[metric_key][model_num]))])
+        plot_df = pd.DataFrame({"model_number": model_counter, "values": values})
         # make it prettier
         metric_key_name = metric_key.replace("_k_by_run", "")
-        ax = sns.violinplot(x=distribution_dict[metric_key], cut=0)
+        ax = sns.violinplot(x="model_number", y="values", data=plot_df, cut=0)
         plt.title('Distribution of Metric: {}'.format(metric_key_name))
         plt.xlabel('{}'.format(metric_key_name))
         plt.ylabel('Frequency')
