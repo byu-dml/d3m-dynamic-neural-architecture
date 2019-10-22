@@ -29,6 +29,22 @@ def plot_at_k_scores_over_k(
     plt.clf()
 
 
+def plot_violin_of_score_distributions(distributions_by_model_num, model_mapping, score_name, plot_path):
+    model_counter = []
+    values = []
+    for model_num in distributions_by_model_num.keys():
+        values.extend(distributions_by_model_num[model_num])
+        model_counter.extend([model_mapping[model_num] for i in range(len(distributions_by_model_num[model_num]))])
+    plot_df = pd.DataFrame({"model_number": model_counter, "values": values})
+    # make it prettier
+    ax = sns.violinplot(x="model_number", y="values", data=plot_df, cut=0)
+    plt.title('Distribution of Metric: {}'.format(score_name))
+    plt.ylabel('{}'.format(metric_key_name))
+    plt.xlabel('Model')
+    plt.savefig(plot_path)
+    plt.close()
+
+
 def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k: list):
     model_mapping = results["model_id"].tolist() # index maps id to model name
     # gather relevant column names
@@ -86,17 +102,8 @@ def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k:
 
     # plot aggregate scores in violin plot and save to `output_dir`
     for metric_key in distribution_dict.keys():
-        model_counter = []
-        values = []
-        for model_num in distribution_dict[metric_key].keys():
-            values.extend(distribution_dict[metric_key][model_num])
-            model_counter.extend([model_mapping[model_num] for i in range(len(distribution_dict[metric_key][model_num]))])
-        plot_df = pd.DataFrame({"model_number": model_counter, "values": values})
-        # make it prettier
-        metric_key_name = metric_key.replace("_k_by_run", "")
-        ax = sns.violinplot(x="model_number", y="values", data=plot_df, cut=0)
-        plt.title('Distribution of Metric: {}'.format(metric_key_name))
-        plt.ylabel('{}'.format(metric_key_name))
-        plt.xlabel('Model')
-        plt.savefig(os.path.join(output_dir, '{}-violin-plot.png'.format(metric_key_name)))
-        plt.close()
+        score_name = metric_key.replace("_k_by_run", "")
+        plot_violin_of_score_distributions(
+            distribution_dict[metric_key], model_mapping, score_name=score_name,
+            plot_path=os.path.join(output_dir, '{}-violin-plot.png'.format(score_name))
+        )
