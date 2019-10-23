@@ -20,7 +20,6 @@ def plot_at_k_scores_over_k(
     if title is not None:
         plt.title(title)
     plt.legend(loc=0)
-    plt.tight_layout()
     plt.savefig(plot_path, bbox_inches='tight')
     plt.clf()
 
