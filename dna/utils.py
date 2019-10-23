@@ -1,8 +1,10 @@
 import collections
 import typing
+import json
 
 import git
 import pandas as pd
+import numpy as np
 
 
 def rank(values: typing.Sequence) -> typing.Sequence:
@@ -67,3 +69,12 @@ def transpose_jagged_2darray(jagged_2darray: typing.Iterable[typing.Iterable]) -
                 transpose[i] = []
             transpose[i].append(value)
     return transpose
+
+
+class NumpyJSONEncoder(json.JSONEncoder):
+    """JSON Encoder that handles NumPy Arrays"""
+
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)

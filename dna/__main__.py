@@ -5,6 +5,7 @@ import json
 import os
 import random
 import sys
+import tarfile
 import traceback
 import typing
 import uuid
@@ -15,11 +16,10 @@ import pandas as pd
 from tqdm import tqdm
 from tuningdeap import TuningDeap
 
-from dna import utils
+from dna import plot, utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
 from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
-from dna import plot
 from dna.problems import get_problem, ProblemBase
 
 
@@ -149,8 +149,10 @@ class EvaluateResult:
 
     def __init__(
         self, train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores, problem_name, group_scores_key
     ):
+        self.problem_name = problem_name
+        self.group_scores_key = group_scores_key
         self.train_predictions = train_predictions
         self.fit_time = fit_time
         self.train_predict_time = train_predict_time
@@ -161,6 +163,41 @@ class EvaluateResult:
         self.ootsp_test_predictions = ootsp_test_predictions
         self.ootsp_test_predict_time = ootsp_test_predict_time
         self.ootsp_test_scores = ootsp_test_scores
+
+    def __str__(self):
+        results_shallow_copy = self.__dict__
+        results = {
+            'fit_time': results_shallow_copy['fit_time'],
+            'train_predict_time': results_shallow_copy['train_predict_time']
+        }
+
+        def get_aggregate_scores(results_copy: dict, problem_name: str, phase: str):
+            aggregate_scores_copy = results_copy[phase]['aggregate_scores']
+            if problem_name == 'regression':
+                return aggregate_scores_copy
+            elif problem_name == 'rank':
+                aggregate_scores = {
+                    'spearman_correlation_mean': aggregate_scores_copy['spearman_correlation_mean'],
+                    'spearman_correlation_std_dev': aggregate_scores_copy['spearman_correlation_std_dev'],
+                    'spearman_p_value_mean': aggregate_scores_copy['spearman_p_value_mean'],
+                    'spearman_p_value_std_dev': aggregate_scores_copy['spearman_p_value_std_dev']
+                }
+                return aggregate_scores
+
+        train_scores = {
+            'total_scores': results_shallow_copy['train_scores']['total_scores'],
+            'aggregate_scores': get_aggregate_scores(results_shallow_copy, self.problem_name, 'train_scores')
+        }
+        results['train_scores'] = train_scores
+
+        results['test_predict_time'] = results_shallow_copy['test_predict_time']
+        test_scores = {
+            'total_scores': results_shallow_copy['test_scores']['total_scores'],
+            'aggregate_scores': get_aggregate_scores(results_shallow_copy, self.problem_name, 'test_scores')
+        }
+        results['test_scores'] = test_scores
+
+        return json.dumps(results, indent=4)
 
     def _to_json_for_eq(self):
         return {
@@ -218,7 +255,8 @@ def evaluate(
 
     return EvaluateResult(
         train_predictions, fit_time, train_predict_time, train_scores, test_predictions, test_predict_time,
-        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores
+        test_scores, ootsp_test_predictions, ootsp_test_predict_time, ootsp_test_scores, problem.problem_name,
+        problem.group_scores_key
     )
 
 
@@ -259,10 +297,11 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
 
     result_scores = []
     for problem_name in getattr(arguments, 'problem'):
-        if arguments.verbose:
-            print('{} {} {}'.format(model_id, problem_name, run_id))
         problem = get_problem(problem_name, **vars(arguments))
         if problem.model_is_supported(model):
+            if arguments.verbose:
+                print('{} {} {}'.format(model_id, problem_name, run_id))
+
             evaluate_result = evaluate(
                 problem, model, model_config, train_data, test_data, ootsp_test_data, verbose=arguments.verbose,
                 model_output_dir=model_output_dir, plot_dir=plot_dir
@@ -274,15 +313,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             })
 
             if arguments.verbose:
-                # TODO: move to evaluate result __str__ method
-                results = evaluate_result.__dict__
-                del results['train_predictions']
-                del results['test_predictions']
-                del results['ootsp_test_predictions']
-                del results['train_scores'][problem.group_scores_key]
-                del results['test_scores'][problem.group_scores_key]
-                print(json.dumps(results, indent=4))
-                print()
+                print(evaluate_result, '\n')
 
     if output_dir is not None:
         record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -574,7 +605,7 @@ def record_run(
         run['scores'] = scores
 
     with open(path, 'w') as f:
-        json.dump(run, f, indent=4, sort_keys=True)
+        json.dump(run, f, indent=4, sort_keys=True, cls=utils.NumpyJSONEncoder)
 
 
 def configure_report_parser(parser: argparse.ArgumentParser):
@@ -606,20 +637,31 @@ def report_handler(arguments: argparse.Namespace):
         raise ValueError('one of --results-dir or result-paths-csv must be provided')
 
     regression_results, rank_results = load_results(result_paths)
-
-    regression_leaderboard = make_leaderboard(regression_results, 'test.total_scores.rmse', min)
-    rank_leaderboard = make_leaderboard(rank_results, 'test.total_scores.ndcg_at_k_mean', max)
+    regression_leaderboard = make_leaderboard(regression_results, 'test.total_scores.rmse_mean_over_runs', min)
+    rank_leaderboard = make_leaderboard(rank_results, 'test.total_scores.ndcg_at_k_mean_mean_over_runs', max)
 
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
 
-    plot_ndcg(rank_leaderboard, arguments.report_dir)
-    plot_regret(rank_leaderboard, arguments.report_dir)
-    plot_n_correct(rank_leaderboard, arguments.report_dir)
+    rank_scores_by_metric_by_model, rank_model_colors = _get_score_distributions_by_metric_by_model(rank_results)
+    regression_scores_by_metric_by_model, regression_model_colors = _get_score_distributions_by_metric_by_model(regression_results)
 
-    for col_name in rank_leaderboard.columns:
-        if 'aggregate_scores' in col_name and 'at_k' in col_name:
-            for k in [25, 100, -1]:
+    plot_ndcg_over_k(rank_leaderboard, arguments.report_dir)
+    plot_regret_over_k(rank_leaderboard, arguments.report_dir)
+    plot_n_correct_over_k(rank_leaderboard, arguments.report_dir)
+
+    plot_spearman_distribution(rank_scores_by_metric_by_model['spearman_correlation'], rank_model_colors, arguments.report_dir)
+    plot_spearman_p_values_distribution(rank_scores_by_metric_by_model['spearman_p_value'], rank_model_colors, arguments.report_dir)
+    plot_pearson_distribution(regression_scores_by_metric_by_model['pearson_correlation'], regression_model_colors, arguments.report_dir)
+    plot_pearson_p_values_distribution(regression_scores_by_metric_by_model['pearson_p_value'], regression_model_colors, arguments.report_dir)
+    plot_rmse_distribution(regression_scores_by_metric_by_model['rmse'], regression_model_colors, arguments.report_dir)
+
+    for k in [1, 25, 100, -1]:
+        plot_ndcg_distribution(rank_scores_by_metric_by_model['ndcg_at_k'], k, rank_model_colors, arguments.report_dir)
+        plot_regret_distribution(rank_scores_by_metric_by_model['regret_at_k'], k, rank_model_colors, arguments.report_dir)
+        plot_n_correct_distribution(rank_scores_by_metric_by_model['n_correct_at_k'], k, rank_model_colors, arguments.report_dir)
+        for col_name in rank_leaderboard.columns:
+            if 'aggregate_scores' in col_name and 'at_k' in col_name:
                 new_col_name = col_name.replace('at_k', 'at_{}'.format(k))
                 rank_leaderboard[new_col_name] = np.nan
                 for model_name in rank_leaderboard['model_name']:
@@ -633,7 +675,19 @@ def report_handler(arguments: argparse.Namespace):
             rank_columns.remove(col_name)
         elif 'train' in col_name:
             rank_columns.remove(col_name)
+        elif 'scores_by_dataset_id' in col_name:
+            rank_columns.remove(col_name)
     rank_leaderboard = rank_leaderboard[rank_columns]
+
+    regression_columns = list(regression_leaderboard.columns)
+    for col_name in regression_leaderboard.columns:
+        if 'train' in col_name:
+            regression_columns.remove(col_name)
+        elif 'scores_by_dataset_id' in col_name:
+            regression_columns.remove(col_name)
+        elif 'aggregate_scores' in col_name:
+            regression_columns.remove(col_name)
+    regression_leaderboard = regression_leaderboard[regression_columns]
 
     path = get_regression_report_path(arguments.report_dir)
     regression_leaderboard.to_csv(path, index=False)
@@ -656,6 +710,11 @@ def get_result_paths(result_dirs: typing.Sequence[str]):
     result_paths = []
     for dir_ in result_dirs:
         path = os.path.join(dir_, 'run.json')
+        if os.path.isfile(path + '.tar.gz') and not os.path.isfile(path):
+            # unzip if needed
+            tar = tarfile.open(path + '.tar.gz', 'r:gz')
+            tar.extractall()
+            tar.close()
         if os.path.isfile(path):
             result_paths.append(path)
         else:
@@ -731,11 +790,10 @@ def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable
     # sort columns
     columns = list(leaderboard.columns)
     columns.remove(id_col)
-    columns.remove(score_col)
     columns.remove(counts.name)
     columns.remove('model_name')
     columns.remove('model_color')
-    leaderboard = leaderboard[['model_name', 'model_color', counts.name, score_col] + sorted(columns)]
+    leaderboard = leaderboard[['model_name', 'model_color', counts.name] + sorted(columns)]
 
     return leaderboard.round(8)
 
@@ -755,19 +813,130 @@ def _add_model_name_and_color_to_leaderboard(leaderboard):
     leaderboard['model_color'] = model_colors
 
 
-def plot_ndcg(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'ndcg.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean'], rank_report['model_color'], plot_path, 'NDCG@k', None)
+def plot_ndcg_over_k(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'ndcg_over_k.pdf')
+    plot.plot_at_k_scores_over_k(
+        rank_report['model_name'], rank_report['test.aggregate_scores.ndcg_at_k_mean_mean_over_runs'],
+        rank_report['test.aggregate_scores.ndcg_at_k_mean_std_dev_over_runs'],
+        rank_report['model_color'], plot_path, 'NDCG@k', None
+    )
 
 
-def plot_regret(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'regret.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean'], rank_report['model_color'], plot_path, 'Regret@k', None)
+def plot_regret_over_k(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'regret_over_k.pdf')
+    plot.plot_at_k_scores_over_k(
+        rank_report['model_name'], rank_report['test.aggregate_scores.regret_at_k_mean_mean_over_runs'],
+        rank_report['test.aggregate_scores.regret_at_k_mean_std_dev_over_runs'],
+        rank_report['model_color'], plot_path, 'Regret@k', None
+    )
 
 
-def plot_n_correct(rank_report: pd.DataFrame, output_dir: str):
-    plot_path = os.path.join(output_dir, 'topk.pdf')
-    plot.plot_at_k_scores(rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean'], rank_report['model_color'], plot_path, 'Top-K@k', None)
+def plot_n_correct_over_k(rank_report: pd.DataFrame, output_dir: str):
+    plot_path = os.path.join(output_dir, 'topk_over_k.pdf')
+    plot.plot_at_k_scores_over_k(
+        rank_report['model_name'], rank_report['test.aggregate_scores.n_correct_at_k_mean_mean_over_runs'],
+        rank_report['test.aggregate_scores.n_correct_at_k_mean_std_dev_over_runs'],
+        rank_report['model_color'], plot_path, 'Top-K@k', None
+    )
+
+
+def _get_score_distributions_by_metric_by_model(results: pd.DataFrame):
+    scores_by_metric_by_model = {}
+
+    def insert_score(path: typing.Sequence, score_value):
+        if np.isnan(score_value).any():
+            return
+
+        nonlocal scores_by_metric_by_model
+
+        obj = scores_by_metric_by_model
+        for i, key in enumerate(path):
+            if key not in obj:
+                if i < len(path) - 1:
+                    obj[key] = {}
+                else:
+                    obj[key] = []
+            obj = obj[key]
+
+        if type(score_value) == list:
+            obj.extend(score_value)
+        else:
+            obj.append(score_value)
+
+    model_colors = {}
+    for row_number, row in results.iterrows():
+        model_class = get_model_class(row['model_id'])
+        model_name = model_class.name
+        model_colors[model_name] = model_class.color
+        for column_name, cell_value in row.iteritems():
+            if column_name.startswith('test.scores_by_dataset_id'):
+                assert column_name.endswith('_by_run')
+
+                _, _, dataset_id, raw_metric_name = column_name.split('.')
+                metric_name = raw_metric_name.replace('_by_run', '')
+
+                if 'at_k' in metric_name:
+                    assert type(cell_value) == list and type(cell_value[0]) == list
+                    for run_scores_at_k in cell_value:
+                        for i, score_value in enumerate(run_scores_at_k):
+                            k = i+1  # index 0 contains values for k=1
+                            insert_score((metric_name, k, model_name), score_value)
+                            if k == len(run_scores_at_k):
+                                assert run_scores_at_k[i] == run_scores_at_k[-1]
+                                insert_score((metric_name, -1, model_name), score_value)
+                else:
+                    insert_score((metric_name, model_name), cell_value)
+
+    return scores_by_metric_by_model, model_colors
+
+
+def _plot_scores_at_k_distribution(score_name: str, scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    scores_at_k_by_model = scores_at_k_by_model[k]
+    ylabel = score_name
+    if k > 0:
+        ylabel += '@{}'.format(k)
+    title = 'Distributions of {}'.format(ylabel)
+    plot_path = os.path.join(output_dir, '{}_at_{}_distributions.pdf'.format(score_name.lower(), k))
+    plot.plot_violin_of_score_distributions(scores_at_k_by_model, model_colors, ylabel, title, plot_path)
+
+
+def plot_ndcg_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    _plot_scores_at_k_distribution('NDCG', scores_at_k_by_model, k, model_colors, output_dir)
+
+
+def plot_regret_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    _plot_scores_at_k_distribution('Regret', scores_at_k_by_model, k, model_colors, output_dir)
+
+
+def plot_n_correct_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    _plot_scores_at_k_distribution('Top-K', scores_at_k_by_model, k, model_colors, output_dir)
+
+
+def _plot_scores_distribution(score_name, scores_by_model, model_colors, output_dir):
+    ylabel = score_name
+    title = 'Distributions of {}'.format(ylabel)
+    plot_path = os.path.join(output_dir, '{}_distributions.pdf'.format(score_name.lower()))
+    plot.plot_violin_of_score_distributions(scores_by_model, model_colors, ylabel, title, plot_path)
+
+
+def plot_spearman_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Spearman Correlation', scores_by_model, model_colors, output_dir)
+
+
+def plot_spearman_p_values_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Spearman Correlation p-values', scores_by_model, model_colors, output_dir)
+
+
+def plot_pearson_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Pearson Correlation', scores_by_model, model_colors, output_dir)
+
+
+def plot_pearson_p_values_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Pearson Correlation p-values', scores_by_model, model_colors, output_dir)
+
+
+def plot_rmse_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('RMSE', scores_by_model, model_colors, output_dir)
 
 
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
@@ -793,35 +962,38 @@ def configure_agg_results_parser(parser: argparse.ArgumentParser):
 
 
 def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
-    scores_to_agg = []
+    # group results by problem and flatten
+    problem_name_to_scores_to_agg_map = {}  # problem_name: scores_to_agg
     for result in results_to_agg:
         for problem_scores in result['scores']:
             problem_scores['run_id'] = result['id']
-            scores_to_agg.append(utils.flatten(problem_scores))
-    scores_to_agg_df = pd.DataFrame(scores_to_agg)
+            problem_name = problem_scores['problem_name']
+            if problem_name not in problem_name_to_scores_to_agg_map:
+                problem_name_to_scores_to_agg_map[problem_name] = []
+            problem_name_to_scores_to_agg_map[problem_name].append(utils.flatten(problem_scores))
 
     agg_scores = []
-    for problem_name, problem_scores_to_agg_df in scores_to_agg_df.groupby('problem_name'):
+    for problem_name, problem_scores_to_agg in problem_name_to_scores_to_agg_map.items():
+        problem_scores_to_agg_df = pd.DataFrame(problem_scores_to_agg).dropna(axis=1, how='all')
+        # record metadata
         flat_agg_problem_scores = {
             'problem_name': problem_name,
-            'model_id': problem_scores_to_agg_df['model_id'][0]
+            'model_id': problem_scores_to_agg_df['model_id'].iloc[0],
+            'aggregated_run_ids': problem_scores_to_agg_df['run_id'].tolist(),
         }
+        for col_name, column in problem_scores_to_agg_df.iteritems():
+            column_values = column.values.tolist()  # each row is a different run
 
-        flat_problem_scores_to_agg = utils.flatten(dict(problem_scores_to_agg_df))
-        flat_problem_scores_to_agg_df = pd.DataFrame(flat_problem_scores_to_agg)
-        for col_name in flat_problem_scores_to_agg_df:
-            if 'train_scores' in col_name or 'test_scores' in col_name:
-                column = flat_problem_scores_to_agg_df[col_name].values
-                if isinstance(column[0], collections.Iterable):
-                    agg_score = np.mean(np.stack(column, axis=0), axis=0).tolist()
-                    flat_agg_problem_scores[col_name] = agg_score
-                elif column[0] is not None:
-                    agg_score = np.mean(column).tolist()
-                    flat_agg_problem_scores[col_name] = agg_score
+            # keep scores over all datasets and runs
+            if 'scores_by_dataset_id' in col_name:
+                flat_agg_problem_scores[col_name+'_by_run'] = column_values
 
-        agg_problem_scores = utils.inflate(flat_agg_problem_scores)
-        agg_problem_scores['aggregated_ids'] = list(problem_scores_to_agg_df['run_id'])
-        agg_scores.append(agg_problem_scores)
+            # compute mean and std dev over all runs for all other scores
+            elif 'train_scores' in col_name or 'test_scores' in col_name:
+                flat_agg_problem_scores[col_name+'_mean_over_runs'] = np.mean(column_values, axis=0).tolist()
+                flat_agg_problem_scores[col_name+'_std_dev_over_runs'] = np.std(column_values, axis=0).tolist()
+
+        agg_scores.append(utils.inflate(flat_agg_problem_scores))
 
     return agg_scores
 
@@ -834,13 +1006,15 @@ def agg_results_handler(arguments: argparse.Namespace):
     else:
         raise ValueError('no results to aggregate')
 
-    run_id = str(uuid.uuid4())
-    print(run_id)
+    results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
+
+    results_ids = sorted([result['id'] for result in results_to_agg])
+    uuid_namespace = uuid.UUID('a8ec5977-701e-443b-89e7-8974e0e4ea6c')
+    run_id = str(uuid.uuid5(uuid_namespace, json.dumps(results_ids)))
+
     git_commit = utils.get_git_commit_hash()
 
     output_dir = os.path.join(getattr(arguments, 'output_dir'), run_id)
-
-    results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
 
     agg_scores = aggregate_result_scores(results_to_agg)
 
