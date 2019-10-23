@@ -87,10 +87,16 @@ elif [ "$COMMAND" == "evaluate" ]; then
         exit 1
     fi
 
+    if [ $MODE == "DEV" ]; then
+        model_config_path=./model_configs/${MODEL}_config.json
+    elif [ "$MODE" == "PROD" ]; then
+        model_config_path=./model_configs_tuned/${MODEL}_config.json
+    fi
+
     for ((i=0; i<$N_RUNS; i++)); do
         python3 -m dna $COMMAND \
             --model $MODEL \
-            --model-config-path ./model_configs_tuned/${MODEL}_config.json \
+            --model-config-path $model_config_path \
             --problem regression rank \
             --train-path $train_path \
             --test-path $test_path \

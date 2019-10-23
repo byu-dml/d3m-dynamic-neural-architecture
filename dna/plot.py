@@ -1,14 +1,7 @@
-import collections
-import colorsys
-import itertools
-import os
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import numpy as np
-
-from dna.models import get_model_class
 
 
 def plot_at_k_scores_over_k(
@@ -27,13 +20,16 @@ def plot_at_k_scores_over_k(
     if title is not None:
         plt.title(title)
     plt.legend(loc=0)
-    plt.savefig(plot_path)
+    plt.tight_layout()
+    plt.savefig(plot_path, bbox_inches='tight')
     plt.clf()
 
 
 def plot_violin_of_score_distributions(scores_by_model, model_colors, ylabel, title, plot_path):
-    ax = sns.violinplot(data=pd.DataFrame(scores_by_model), palette=model_colors, cut=0)
+    data = pd.DataFrame(scores_by_model)
+    ax = sns.violinplot(data=data, palette=model_colors, cut=0)
+    plt.setp(ax.get_xticklabels(), rotation=30, horizontalalignment='right')
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.savefig(plot_path)
+    plt.savefig(plot_path, bbox_inches='tight')
     plt.close()

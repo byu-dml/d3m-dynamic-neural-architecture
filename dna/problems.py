@@ -1,17 +1,15 @@
 import argparse
+import copy
+import os
+import time
 import typing
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import time
-import os
-import matplotlib.pyplot as plt
-import copy
 
-from dna import utils
+from dna import metrics, utils
 from dna.data import group_json_objects
-from dna import metrics
-from dna import utils
 
 
 class ProblemBase:
@@ -328,8 +326,7 @@ class RankProblem(PredictByGroupProblemBase):
             actual_ranks = utils.rank(actuals)
 
             # Average all the scores at k to make the plot title a reasonable length
-            group_scores = scores_by_group[dataset_id]
-            group_scores = self.shorten_k_rank_scores(group_scores)
+            group_scores = self.shorten_k_rank_scores(scores_by_group[dataset_id])
 
             plot_name = dataset_id + '_plot'
             super()._plot_base(predicted_ranks, actual_ranks, plot_name, plot_dir, group_scores, type(self).__name__)

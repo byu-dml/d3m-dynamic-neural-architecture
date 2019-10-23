@@ -1,6 +1,5 @@
 import argparse
 import collections
-import copy
 import hashlib
 import json
 import os
@@ -314,8 +313,7 @@ def handle_evaluate(model_config: typing.Dict, arguments: argparse.Namespace):
             })
 
             if arguments.verbose:
-                print(evaluate_result)
-                print()
+                print(evaluate_result, '\n')
 
     if output_dir is not None:
         record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=model_config, scores=result_scores)
@@ -846,6 +844,9 @@ def _get_score_distributions_by_metric_by_model(results: pd.DataFrame):
     scores_by_metric_by_model = {}
 
     def insert_score(path: typing.Sequence, score_value):
+        if np.isnan(score_value).any():
+            return
+
         nonlocal scores_by_metric_by_model
 
         obj = scores_by_metric_by_model
