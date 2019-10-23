@@ -29,81 +29,55 @@ def plot_at_k_scores_over_k(
     plt.clf()
 
 
-def plot_violin_of_score_distributions(distributions_by_model_num, model_mapping, score_name, plot_path):
-    model_counter = []
-    values = []
-    for model_num in distributions_by_model_num.keys():
-        values.extend(distributions_by_model_num[model_num])
-        model_counter.extend([model_mapping[model_num] for i in range(len(distributions_by_model_num[model_num]))])
-    plot_df = pd.DataFrame({"model_number": model_counter, "values": values})
-    # make it prettier
-    ax = sns.violinplot(x="model_number", y="values", data=plot_df, cut=0)
-    plt.title('Distribution of Metric: {}'.format(score_name))
-    plt.xlabel('{}'.format(score_name))
-    plt.ylabel('Frequency')
+def plot_violin_of_score_distributions(scores_by_model, score_name, plot_path):
+    # todo: use model names and colors
+    ax = sns.violinplot(data=pd.DataFrame(scores_by_model), cut=0)
+    plt.title('Distribution of {}'.format(score_name))
+    plt.xlabel('Model')
+    plt.ylabel('{}'.format(score_name))
     plt.savefig(plot_path)
     plt.close()
 
 
 def create_distribution_plots(results: pd.DataFrame, output_dir: str, list_of_k: list):
-    model_mapping = results["model_id"].tolist() # index maps id to model name
-    # gather relevant column names
-    use_cols = [col_name for col_name in results.columns if 'scores_by_dataset' in col_name]
-    results = results[use_cols]
-    # gather relevant metrics
-    metrics = set([col_name.split(".")[-1] for col_name in use_cols])
+    scores_by_metric_by_model = {}
 
-    distribution_dict = {}
-    # go through metric by metric
-    for metric in metrics:
-        # find the relevant column
-        for col_name in results:
-            for model_num in range(len(results[col_name])):
-                model_data = results[col_name][model_num]
-                if metric in col_name:
+    def insert_score(metric_name, model_id, score_value):
+        nonlocal scores_by_metric_by_model
 
-                    # initialize the metric dict
-                    if metric not in distribution_dict:
-                        if "at_k" in col_name:
-                            for k in list_of_k:
-                                new_metric_name = metric + "_k={}".format(k if k != -1 else "all")
-                                # only make a new dict if it's not present
-                                if new_metric_name not in distribution_dict:
-                                    distribution_dict[new_metric_name] = {}
-                        else:   
-                            distribution_dict[metric] = {}
+        if metric_name not in scores_by_metric_by_model:
+            scores_by_metric_by_model[metric_name] = {}
 
-                    # aggregate
-                    if "at_k" not in col_name:
-                        if metric in distribution_dict and model_num in distribution_dict[metric]:
-                            distribution_dict[metric][model_num].extend(model_data)
-                        else:
-                            # initialize the dict
-                            distribution = model_data # each one is a series of a list
-                            distribution_dict[metric][model_num] = distribution
-                    else:
-                        # we have a run by K series-list structure -> turn into n by K array, zipping by the longest and filling with nans
-                        pad = len(max(model_data, key=len))
-                        distribution_array = np.array([i + [0]*(pad-len(i)) for i in model_data])
-                        for k in list_of_k:
-                            if distribution_array.shape[1] < k:
-                                # if there are less than k pipelines, skip it
-                                continue
-                            new_metric_name = metric + "_k={}".format(k if k != -1 else "all")
-                            distribution = distribution_array[:, k] # get the k-th columns, which is the distribution at that k
-                            if metric in distribution_dict and model_num in distribution_dict[metric]:
-                                distribution_dict[new_metric_name][model_num].extend(distribution.tolist())
-                            else:
-                                # initialize the dict mapping to a list so that we can extend it
-                                distribution_dict[new_metric_name][model_num] = distribution.tolist() 
-    
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
+        if model_id not in scores_by_metric_by_model[metric_name]:
+            scores_by_metric_by_model[metric_name][model_id] = []
 
-    # plot aggregate scores in violin plot and save to `output_dir`
-    for metric_key in distribution_dict.keys():
-        score_name = metric_key.replace("_k_by_run", "")
+        if type(score_value) == list:
+            scores_by_metric_by_model[metric_name][model_id].extend(score_value)
+        else:
+            scores_by_metric_by_model[metric_name][model_id].append(score_value)
+
+    for row_number, row in results.iterrows():
+        model_id = row['model_id']
+        for column_name, cell_value in row.iteritems():
+            if column_name.startswith('test.scores_by_dataset_id'):
+                assert column_name.endswith('_by_run')
+
+                _, _, dataset_id, raw_metric_name = column_name.split('.')
+                metric_name = raw_metric_name.replace('_by_run', '')
+
+                if 'at_k' in metric_name:
+                    for k in list_of_k:
+                        pretty_metric_name = metric_name.replace('k', str(k) if k != -1 else 'Max_k')
+                        assert type(cell_value) == list and type(cell_value[0]) == list
+                        for run_scores_at_k in cell_value:
+                            if k <= len(run_scores_at_k):
+                                insert_score(pretty_metric_name, model_id, run_scores_at_k[k-1]) # index 0 contains values for k=1
+
+                else:
+                    insert_score(metric_name, model_id, cell_value)
+
+    for metric_name, scores_by_model_id in scores_by_metric_by_model.items():
         plot_violin_of_score_distributions(
-            distribution_dict[metric_key], model_mapping, score_name=score_name,
-            plot_path=os.path.join(output_dir, '{}-violin-plot.png'.format(score_name))
+            scores_by_model_id, metric_name,
+            plot_path=os.path.join(output_dir, '{}_distributions.pdf'.format(metric_name))
         )
