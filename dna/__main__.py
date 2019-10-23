@@ -677,7 +677,19 @@ def report_handler(arguments: argparse.Namespace):
             rank_columns.remove(col_name)
         elif 'train' in col_name:
             rank_columns.remove(col_name)
+        elif 'scores_by_dataset_id' in col_name:
+            rank_columns.remove(col_name)
     rank_leaderboard = rank_leaderboard[rank_columns]
+
+    regression_columns = list(regression_leaderboard.columns)
+    for col_name in regression_leaderboard.columns:
+        if 'train' in col_name:
+            regression_columns.remove(col_name)
+        elif 'scores_by_dataset_id' in col_name:
+            regression_columns.remove(col_name)
+        elif 'aggregate_scores' in col_name:
+            regression_columns.remove(col_name)
+    regression_leaderboard = regression_leaderboard[regression_columns]
 
     path = get_regression_report_path(arguments.report_dir)
     regression_leaderboard.to_csv(path, index=False)
@@ -780,11 +792,10 @@ def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable
     # sort columns
     columns = list(leaderboard.columns)
     columns.remove(id_col)
-    columns.remove(score_col)
     columns.remove(counts.name)
     columns.remove('model_name')
     columns.remove('model_color')
-    leaderboard = leaderboard[['model_name', 'model_color', counts.name, score_col] + sorted(columns)]
+    leaderboard = leaderboard[['model_name', 'model_color', counts.name] + sorted(columns)]
 
     return leaderboard.round(8)
 
