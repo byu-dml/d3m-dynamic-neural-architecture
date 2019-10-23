@@ -645,18 +645,25 @@ def report_handler(arguments: argparse.Namespace):
     if not os.path.isdir(arguments.report_dir):
         os.makedirs(arguments.report_dir)
 
+    rank_scores_by_metric_by_model, rank_model_colors = _get_score_distributions_by_metric_by_model(rank_results)
+    regression_scores_by_metric_by_model, regression_model_colors = _get_score_distributions_by_metric_by_model(regression_results)
+
     plot_ndcg_over_k(rank_leaderboard, arguments.report_dir)
     plot_regret_over_k(rank_leaderboard, arguments.report_dir)
     plot_n_correct_over_k(rank_leaderboard, arguments.report_dir)
 
-    # create violin plots
-    list_of_k = [1, 25, 100, -1]
-    plot.create_distribution_plots(regression_results, arguments.report_dir, list_of_k)
-    plot.create_distribution_plots(rank_results, arguments.report_dir, list_of_k)
+    plot_spearman_distribution(rank_scores_by_metric_by_model['spearman_correlation'], rank_model_colors, arguments.report_dir)
+    plot_spearman_p_values_distribution(rank_scores_by_metric_by_model['spearman_p_value'], rank_model_colors, arguments.report_dir)
+    plot_pearson_distribution(regression_scores_by_metric_by_model['pearson_correlation'], regression_model_colors, arguments.report_dir)
+    plot_pearson_p_values_distribution(regression_scores_by_metric_by_model['pearson_p_value'], regression_model_colors, arguments.report_dir)
+    plot_rmse_distribution(regression_scores_by_metric_by_model['rmse'], regression_model_colors, arguments.report_dir)
 
-    for col_name in rank_leaderboard.columns:
-        if 'aggregate_scores' in col_name and 'at_k' in col_name:
-            for k in list_of_k:
+    for k in [1, 25, 100, -1]:
+        plot_ndcg_distribution(rank_scores_by_metric_by_model['ndcg_at_k'], k, rank_model_colors, arguments.report_dir)
+        plot_regret_distribution(rank_scores_by_metric_by_model['regret_at_k'], k, rank_model_colors, arguments.report_dir)
+        plot_n_correct_distribution(rank_scores_by_metric_by_model['n_correct_at_k'], k, rank_model_colors, arguments.report_dir)
+        for col_name in rank_leaderboard.columns:
+            if 'aggregate_scores' in col_name and 'at_k' in col_name:
                 new_col_name = col_name.replace('at_k', 'at_{}'.format(k))
                 rank_leaderboard[new_col_name] = np.nan
                 for model_name in rank_leaderboard['model_name']:
@@ -822,6 +829,102 @@ def plot_n_correct_over_k(rank_report: pd.DataFrame, output_dir: str):
         rank_report['test.aggregate_scores.n_correct_at_k_mean_std_dev_over_runs'],
         rank_report['model_color'], plot_path, 'Top-K@k', None
     )
+
+
+def _get_score_distributions_by_metric_by_model(results: pd.DataFrame):
+    scores_by_metric_by_model = {}
+
+    def insert_score(path: typing.Sequence, score_value):
+        nonlocal scores_by_metric_by_model
+
+        obj = scores_by_metric_by_model
+        for i, key in enumerate(path):
+            if key not in obj:
+                if i < len(path) - 1:
+                    obj[key] = {}
+                else:
+                    obj[key] = []
+            obj = obj[key]
+
+        if type(score_value) == list:
+            obj.extend(score_value)
+        else:
+            obj.append(score_value)
+
+    model_colors = {}
+    for row_number, row in results.iterrows():
+        model_class = get_model_class(row['model_id'])
+        model_name = model_class.name
+        model_colors[model_name] = model_class.color
+        for column_name, cell_value in row.iteritems():
+            if column_name.startswith('test.scores_by_dataset_id'):
+                assert column_name.endswith('_by_run')
+
+                _, _, dataset_id, raw_metric_name = column_name.split('.')
+                metric_name = raw_metric_name.replace('_by_run', '')
+
+                if 'at_k' in metric_name:
+                    assert type(cell_value) == list and type(cell_value[0]) == list
+                    for run_scores_at_k in cell_value:
+                        for i, score_value in enumerate(run_scores_at_k):
+                            k = i+1  # index 0 contains values for k=1
+                            insert_score((metric_name, k, model_name), score_value)
+                            if k == len(run_scores_at_k):
+                                assert run_scores_at_k[i] == run_scores_at_k[-1]
+                                insert_score((metric_name, -1, model_name), score_value)
+                else:
+                    insert_score((metric_name, model_name), cell_value)
+
+    return scores_by_metric_by_model, model_colors
+
+
+def _plot_scores_at_k_distribution(score_name: str, scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    scores_at_k_by_model = scores_at_k_by_model[k]
+    ylabel = score_name
+    if k > 0:
+        ylabel += '@{}'.format(k)
+    title = 'Distributions of {}'.format(ylabel)
+    plot_path = os.path.join(output_dir, '{}_at_{}_distributions.pdf'.format(score_name.lower(), k))
+    plot.plot_violin_of_score_distributions(scores_at_k_by_model, model_colors, ylabel, title, plot_path)
+
+
+def plot_ndcg_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    _plot_scores_at_k_distribution('NDCG', scores_at_k_by_model, k, model_colors, output_dir)
+
+
+def plot_regret_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    _plot_scores_at_k_distribution('Regret', scores_at_k_by_model, k, model_colors, output_dir)
+
+
+def plot_n_correct_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
+    _plot_scores_at_k_distribution('Top-K', scores_at_k_by_model, k, model_colors, output_dir)
+
+
+def _plot_scores_distribution(score_name, scores_by_model, model_colors, output_dir):
+    ylabel = score_name
+    title = 'Distributions of {}'.format(ylabel)
+    plot_path = os.path.join(output_dir, '{}_distributions.pdf'.format(score_name.lower()))
+    plot.plot_violin_of_score_distributions(scores_by_model, model_colors, ylabel, title, plot_path)
+
+
+def plot_spearman_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Spearman Correlation', scores_by_model, model_colors, output_dir)
+
+
+def plot_spearman_p_values_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Spearman Correlation p-values', scores_by_model, model_colors, output_dir)
+
+
+def plot_pearson_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Pearson Correlation', scores_by_model, model_colors, output_dir)
+
+
+def plot_pearson_p_values_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('Pearson Correlation p-values', scores_by_model, model_colors, output_dir)
+
+
+def plot_rmse_distribution(scores_by_model, model_colors, output_dir: str):
+    _plot_scores_distribution('RMSE', scores_by_model, model_colors, output_dir)
 
 
 def save_result_paths_csv(*args: pd.DataFrame, report_dir):
