@@ -1,4 +1,5 @@
 import os
+import random
 import shutil
 
 import autosklearn.regression as autosklearn
@@ -160,12 +161,16 @@ class MetaAutoSklearn(SklearnBase):
     def __init__(self, seed=0, **kwargs):
         super().__init__(seed=seed)
 
-        tmp_dir = './tmp'
-        if os.path.isdir(tmp_dir):
-            shutil.rmtree(tmp_dir)
+        tmp_dir = self._init_tmp_dir()
+        while os.path.isdir(tmp_dir):
+            tmp_dir = self._init_tmp_dir()
 
         self.regressor = autosklearn.AutoSklearnRegressor(seed=seed, **kwargs, tmp_folder=tmp_dir)
         self.fitted = False
+
+    @staticmethod
+    def _init_tmp_dir():
+        return os.path.join('.', 'tmp', '{}'.format(random.randint(2**63, 2**64-1)))
 
 
 class AutoSklearnMetalearner(RegressionModelBase, RankModelBase):
