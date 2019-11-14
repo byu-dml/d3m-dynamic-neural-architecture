@@ -18,6 +18,7 @@ from tuningdeap import TuningDeap
 
 from dna import plot, utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
+from dna import metrics
 from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
@@ -464,7 +465,6 @@ def configure_rescore_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         '--plot', default=False, action='store_true', help='whether to remake the plots'
     )
-
 
 
 def rescore_handler(arguments: argparse.Namespace):
@@ -1007,6 +1007,11 @@ def agg_results_handler(arguments: argparse.Namespace):
         raise ValueError('no results to aggregate')
 
     results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
+    for i in range(1, len(results_to_agg)):
+        model_config_0 = results_to_agg[0]['model_config']
+        model_config_1 = results_to_agg[1]['model_config']
+        if model_config_0 != model_config_1:
+            raise ValueError('Results from different models should not be aggregated')
 
     results_ids = sorted([result['id'] for result in results_to_agg])
     uuid_namespace = uuid.UUID('a8ec5977-701e-443b-89e7-8974e0e4ea6c')
@@ -1018,7 +1023,34 @@ def agg_results_handler(arguments: argparse.Namespace):
 
     agg_scores = aggregate_result_scores(results_to_agg)
 
-    record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
+    record_run(
+        run_id, git_commit, output_dir, arguments=arguments, model_config=results_to_agg[0]['model_config'],
+        scores=agg_scores
+    )
+
+    result_arguments = results_to_agg[0]['arguments']
+
+    train_data, test_data = get_train_and_test_data(
+        result_arguments['train_path'], result_arguments['test_path'], result_arguments['test_size'], result_arguments['split_seed'],
+        result_arguments['metafeature_subset'], result_arguments['cache_dir'], result_arguments['no_cache']
+    )
+
+    predictions_description = pd.DataFrame(test_data)[['dataset_id', 'pipeline_id', 'test_f1_macro']]
+    has_regression_results = False
+    for i, results in enumerate(results_to_agg):
+        for scores in results['scores']:
+            if scores['problem_name'] == 'regression':
+                test_predictions = scores['test_predictions']
+                if metrics.rmse(test_predictions, predictions_description['test_f1_macro']) != scores['test_scores']['total_scores']['rmse']:
+                    raise ValueError('rmse is not deterministic based on results and results arguments')
+
+                predictions_description['predictions{}'.format(i)] = test_predictions
+
+                has_regression_results = True
+
+    if has_regression_results:
+        predictions_path = os.path.join(output_dir, 'predictions.csv')
+        predictions_description.to_csv(predictions_path, index=False)
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
