@@ -24,6 +24,13 @@ from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
 
 
+MODEL_ID_ORDER = (
+    'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn', 'lstm',
+    'attention_regression', 'daglstm_regression', 'dag_attention_regression', 'dna_regression'
+)
+MODEL_NAME_ORDER = tuple(get_model_class(model_id).name for model_id in MODEL_ID_ORDER)
+
+
 def configure_split_parser(parser):
     parser.add_argument(
         '--data-path', type=str, action='store', required=True,
@@ -779,10 +786,7 @@ def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable
     # sort rows
     leaderboard.model_id = leaderboard.model_id.astype('category')
     leaderboard.model_id.cat.set_categories(
-        [
-            'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn',
-            'lstm', 'attention_regression', 'daglstm_regression', 'dag_attention_regression', 'dna_regression'
-        ],
+        MODEL_ID_ORDER,
         inplace=True
     )
     leaderboard.sort_values(['model_id'], inplace=True)
@@ -897,7 +901,7 @@ def _plot_scores_at_k_distribution(score_name: str, scores_at_k_by_model: pd.Dat
         ylabel += '@{}'.format(k)
     title = 'Distributions of {}'.format(ylabel)
     plot_path = os.path.join(output_dir, '{}_at_{}_distributions.pdf'.format(score_name.lower(), k))
-    plot.plot_violin_of_score_distributions(scores_at_k_by_model, model_colors, ylabel, title, plot_path)
+    plot.plot_violin_of_score_distributions(scores_at_k_by_model, model_colors, MODEL_NAME_ORDER, ylabel, title, plot_path)
 
 
 def plot_ndcg_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
@@ -916,7 +920,7 @@ def _plot_scores_distribution(score_name, scores_by_model, model_colors, output_
     ylabel = score_name
     title = 'Distributions of {}'.format(ylabel)
     plot_path = os.path.join(output_dir, '{}_distributions.pdf'.format(score_name.lower()))
-    plot.plot_violin_of_score_distributions(scores_by_model, model_colors, ylabel, title, plot_path)
+    plot.plot_violin_of_score_distributions(scores_by_model, model_colors, MODEL_NAME_ORDER, ylabel, title, plot_path)
 
 
 def plot_spearman_distribution(scores_by_model, model_colors, output_dir: str):
