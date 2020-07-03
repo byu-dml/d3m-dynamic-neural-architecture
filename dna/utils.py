@@ -78,3 +78,26 @@ class NumpyJSONEncoder(json.JSONEncoder):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
+
+
+def has_path(data, path) -> bool:
+    """
+    Returns `True` if `data` has the key path identified
+    by `path`. The keys can be dictionary keys or list/tuple
+    indices.
+    """
+    walk = data
+    for key in path:
+        if isinstance(walk, dict):
+            if key in walk:
+                walk = walk[key]
+            else:
+                return False
+        elif isinstance(walk, list) or isinstance(walk, tuple):
+            if isinstance(key, int) and key < len(walk):
+                walk = walk[key]
+            else:
+                return False
+        else:
+            return False
+    return True

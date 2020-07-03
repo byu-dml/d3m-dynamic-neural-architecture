@@ -1,10 +1,14 @@
 import json
-import pymongo
 import re
-from bson import json_util
 from dateutil.parser import parse
 import collections
 import os
+
+from bson import json_util
+import pymongo
+from tqdm import tqdm
+
+from dna.utils import has_path
 
 
 try:
@@ -52,26 +56,15 @@ class DatabaseToJson:
         except Exception as e:
             print("Cannot connect to the Mongo Client at port {}. Error is {}".format(mongo_port, e))
 
-    def get_primitives_used(self, pipeline_run):
-        """
-        A helper function for getting the primitives used
-        :param pipeline_run: a dictionary-like object containing the pipeline run
-        :return: a list of strings where each string is the python path of the primitive
-        """
-        primitives = []
-        for step in pipeline_run['steps']:
-            primitives.append(step['primitive']['python_path'])
-        return primitives
-
     def get_time_elapsed(self, pipeline_run):
         """
         A helper function for finding the time of the pipeline_run
         :param pipeline_run: a dictionary-like object containing the pipeline run
         :return: the total time in seconds it took the pipeline to execute
         """
-        begin = pipeline_run["steps"][0]["method_calls"][0]["start"]
+        begin = pipeline_run["start"]
         begin_val = parse(begin)
-        end = pipeline_run["steps"][-1]["method_calls"][-1]["end"]
+        end = pipeline_run["end"]
         end_val = parse(end)
         total_time = (end_val - begin_val).total_seconds()
         return total_time
@@ -92,12 +85,19 @@ class DatabaseToJson:
         """
         Collects and gathers the data needed for the DNA system from a pipeline run
         :param pipeline_run: the pipeline run object to be summarized
-        :return: a dictionary object summarizing the pipeline run
+        :return: a dictionary object summarizing the pipeline run. `None` is returned
+            if the pipeline run is not useable for the metadataset. 
         """
-        pipeline = self.get_pipeline_from_run(pipeline_run)
+        pipeline = pipeline_run["pipeline"]
+        pipeline_run_id = pipeline_run["id"]
         pipeline_id = pipeline["id"]
         simple_pipeline  = self.parse_simpler_pipeline(pipeline)
-        problem_type = self.get_problem_type_from_pipeline(pipeline)
+        if simple_pipeline is None:
+            # This pipeline is not useable for the metadataset.
+            return None
+        problem_type = self.get_problem_type(pipeline_run["problem"])
+        if problem_type == "unsupported":
+            return None
         raw_dataset_name = pipeline_run["datasets"][0]["id"]
         test_accuracy = pipeline_run["run"]["results"]["scores"][0]["value"]
         test_predict_time = self.get_time_elapsed(pipeline_run)
@@ -106,6 +106,7 @@ class DatabaseToJson:
         pipeline_run_info = {
                                 "pipeline": simple_pipeline,
                                 "pipeline_id": pipeline_id,
+                                "pipeline_run_id": pipeline_run_id,
                                 "problem_type": problem_type,
                                 "raw_dataset_name": raw_dataset_name,
                                 "test_accuracy": test_accuracy,
@@ -124,9 +125,12 @@ class DatabaseToJson:
         db = self.mongo_client.metalearning
         collection = db.metafeatures
         try:
-            metafeatures = collection.find({"$and": [{"datasets.id": pipeline_run["datasets"][0]["id"]},
-                                                     {"datasets.digest": pipeline_run["datasets"][0]["digest"]}]})[0]
-            features = metafeatures["steps"][2]["method_calls"][1]["metadata"]["produce"][0]["metadata"]["data_metafeatures"]
+            mf_pipeline_run = collection.find_one({"$and": [{"datasets.id": pipeline_run["datasets"][0]["id"]},
+                                                     {"datasets.digest": pipeline_run["datasets"][0]["digest"]}]})
+            mf_steps = [step for step in mf_pipeline_run["steps"] if has_path(step, ["method_calls", 1, "metadata", "produce", 0, "metadata", "data_metafeatures"])]
+            if len(mf_steps) != 1:
+                raise AssertionError(f"expected metafeatures pipeline run to have 1 metafeatures step, not {len(mf_steps)}")
+            features = mf_steps[0]["method_calls"][1]["metadata"]["produce"][0]["metadata"]["data_metafeatures"]
             features_flat = flatten(features)
             # TODO: implement this
             metafeatures_time = 0
@@ -141,18 +145,22 @@ class DatabaseToJson:
         It writes the file to data/complete_pipelines_and_metafeatures.json
         :param mongo_client: a connection to the Mongo database
         """
-        db = self.mongo_client.metalearning
+        db = self.mongo_client.analytics
         collection = db.pipeline_runs
-        collection_size = collection.count()
-        pipeline_cursor = collection.find()
+        # For our metadataset, we only need pipeline runs
+        # that have scores associated with them; PRODUCE phase runs that
+        # completed successfully.
+        pipeline_run_filter = {"run.phase": "PRODUCE", "status.state": "SUCCESS"}
+        n_runs = collection.count(pipeline_run_filter)
+        pipeline_run_cursor = collection.find(pipeline_run_filter)
+
+        print("Collecting and distilling pipeline runs into a metadataset...")
         list_of_experiments = {"classification": [], "regression": []}
-        for index, pipeline_run in enumerate(pipeline_cursor):
-            if index % 1000 == 0:
-                print("At {} out of {} documents".format(index, collection_size))
-                # if index == 2000:
-                #     # running into memory errors
-                #     break
+        for index, pipeline_run in tqdm(enumerate(pipeline_run_cursor), total=n_runs):
             pipeline_run_info = self.get_pipeline_run_info(pipeline_run)
+            if pipeline_run_info is None:
+                # This pipeline run is not useable for the metadataset.
+                continue
             metafeatures = self.get_metafeature_info(pipeline_run)
             # TODO: get all metafeatures so we don't need this
             if metafeatures != {}:
@@ -161,8 +169,10 @@ class DatabaseToJson:
 
         for problem_type in list_of_experiments.keys():
             final_data_file = json.dumps(list_of_experiments[problem_type], sort_keys=True, indent=4, default=json_util.default)
-            with open("data/complete_pipelines_and_metafeatures_test_{}.json".format(problem_type), "w") as file:
+            final_data_path = "data/complete_pipelines_and_metafeatures_test_{}.json".format(problem_type)
+            with open(final_data_path, "w") as file:
                 file.write(final_data_file)
+            print(f"Wrote metadataset for problem type {problem_type} to path {final_data_path}.")
 
         return
 
@@ -175,49 +185,83 @@ class DatabaseToJson:
         """
         return re.search(r"\b{}\b".format(phrase), text, re.IGNORECASE) is not None
 
-    def get_problem_type_from_pipeline(self, pipeline):
+    def get_problem_type(self, problem):
         """
-        This function finds the problem type from the pipeline steps
-        :param pipeline: the full d3m pipeline
+        This function finds the problem type from a problem description.
+        :param problem: a d3m problem description
         :return: a string containing the type of problem
         """
-        is_classification = self.is_phrase_in("d3m.primitives.classification", json.dumps(pipeline['steps']))
-        is_regression = self.is_phrase_in("d3m.primitives.regression", json.dumps(pipeline['steps']))
-        if is_classification and is_regression:
-            print("Cannot be both")
-            raise Exception
-        elif is_classification:
-            predictor_model = "classification"
-        elif is_regression:
-            predictor_model = "regression"
+        # First, find the keywords characterizing the problem.
+        if has_path(problem, ["problem", "task_keywords"]):
+            task_keywords = {w.lower() for w in problem["problem"]["task_keywords"]}
+        elif has_path(problem, ["problem", "task_type"]):
+            task_keywords = {
+                problem["problem"]["task_type"].lower(),
+                problem["problem"]["task_subtype"].lower()
+            }
         else:
-            print("Cannot be none")
-            raise Exception
-
-        return predictor_model
+            raise ValueError(
+                "Could not find any keywords identifying "
+                f"the task type for problem:\n{json.dumps(problem, indent=4)}"
+            )
+        
+        # Next determine the problem type from those keywords.
+        is_classification = "classification" in task_keywords
+        is_regression = "regression" in task_keywords
+        if is_classification and is_regression:
+            raise Exception(
+                "Problem is both regression and classification:\n"
+                f"{json.dumps(problem, indent=4)}"
+            )
+        elif is_classification:
+            return "classification"
+        elif is_regression:
+            return "regression"
+        else:
+            return "unsupported"
 
     def parse_simpler_pipeline(self, full_pipeline):
         """
         This function takes a pipeline object from D3M and turns it into a list of dictionaries where
         each dictionary is a primitive containing the primitive name and the inputs (a list of ints)
+
         :param full_pipeline: the full d3m pipeline
-        :return: The simplified pipeline
+        :return: The simplified pipeline. `None` is returned if the pipeline is not useable for the
+            metadataset.
         """
         pipeline_steps = full_pipeline["steps"]
         simple_pipeline = []
         for pipeline_step in pipeline_steps:
             pipeline_step_name = pipeline_step["primitive"]["python_path"]
             inputs_list = []
+            if "arguments" not in pipeline_step:
+                # This pipeline is not using the normal arguments API (it may be a keras pipeline),
+                # so we don't have an accurate view of what its computation graph actually is,
+                # so we won't use it for this metadataset.
+                return None
             for key, value in pipeline_step["arguments"].items():
-                string_name = value["data"]
-                pipeline_step_inputs = self.parse_input_string(string_name)
-                inputs_list.append(pipeline_step_inputs)
+                inputs = value["data"]
+                pipeline_step_inputs = self.parse_inputs(inputs)
+                inputs_list += pipeline_step_inputs
+                
             # add info to our pipeline
             simple_pipeline.append({"name": pipeline_step_name, "inputs": inputs_list})
 
         return simple_pipeline
+    
+    def parse_inputs(self, inputs) -> list:
+        """
+        Handles the case where D3M primitive step input strings can be either
+        a list or a string. 
+        """
+        if isinstance(inputs, str):
+            return [self.parse_input_string(inputs)]
+        elif isinstance(inputs, list):
+            return [self.parse_input_string(input) for input in inputs]
+        else:
+            raise ValueError(f"unsupported inputs type {type(inputs)}")
 
-    def parse_input_string(self, string_name):
+    def parse_input_string(self, string_name: str):
         """
         This helper function parses the input name from the D3M version (aka `steps.0.produce` to 0)
         :param string_name: the string name from D3M
