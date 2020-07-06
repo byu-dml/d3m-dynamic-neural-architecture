@@ -47,7 +47,7 @@ class UtilsTestCase(unittest.TestCase):
         self.assertEqual(expected_flattened, flattened)
         self.assertEqual(utils.inflate(expected_flattened), to_flatten)
 
-    def transpose_jagged_2darray(self):
+    def test_transpose_jagged_2darray(self):
         jagged_2darray = [
             [0, 1],
             [2, 3, 4],
@@ -62,3 +62,11 @@ class UtilsTestCase(unittest.TestCase):
         }
         transpose = utils.transpose_jagged_2darray(jagged_2darray)
         self.assertEqual(desired_transpose, transpose)
+    
+    def test_has_path(self):
+        data = {"a": {"b": ["c"]}}
+        self.assertTrue(utils.has_path(data, ["a", "b", 0]))
+        self.assertFalse(utils.has_path(data, ["a", "b", 1]))
+        self.assertFalse(utils.has_path(data, ["a", "b", "c"]))
+        self.assertFalse(utils.has_path(data, ["y", "z"]))
+
