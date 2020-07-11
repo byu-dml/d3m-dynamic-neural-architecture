@@ -5,6 +5,7 @@ import torch.nn as nn
 
 from .torch_utils import get_activation, get_reduction
 from .submodule import Submodule
+from dna import constants
 
 
 class DNAModule(nn.Module):
@@ -64,6 +65,11 @@ class DNAModule(nn.Module):
                 layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
                 seed=self._dna_base_seed + i
             )
+        # Map all primitives not seen during the fit phase to an `unknown` primitive.
+        dynamic_submodules[constants.UNKNOWN] = Submodule(
+            layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
+            seed=self._dna_base_seed + i
+        )
         return dynamic_submodules
 
     def forward(self, args):
@@ -71,7 +77,11 @@ class DNAModule(nn.Module):
         outputs = {'inputs.0': self._input_submodule(x)}
         for i, step in enumerate(pipeline['steps']):
             inputs = self._reduce([outputs[j] for j in step['inputs']])
-            submodule = self._dynamic_submodules[step['name']]
+            step_name = step['name']
+            if step_name in self._dynamic_submodules:
+                submodule = self._dynamic_submodules[step_name]
+            else:
+                submodule = self._dynamic_submodules[constants.UNKNOWN]
             h = self._activation(submodule(inputs))
             outputs[i] = h
         return torch.squeeze(self._output_submodule(h))
