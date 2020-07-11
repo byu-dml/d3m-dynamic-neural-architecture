@@ -337,7 +337,10 @@ class SklearnBase(RegressionModelBase, RankModelBase):
         for primitive in pipeline[self.steps_key]:
             primitive_name = primitive[self.prim_name_key]
             # get the position of the one hot encoding
-            primitive_index = np.argmax(self.one_hot_primitives_map[primitive_name])
+            if primitive_name in self.one_hot_primitives_map:
+                primitive_index = np.argmax(self.one_hot_primitives_map[primitive_name])
+            else:
+                primitive_index = np.argmax(self.one_hot_primitives_map[constants.UNKNOWN])
             encoding[primitive_index] = 1
         return encoding
 
