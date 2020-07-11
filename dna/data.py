@@ -9,6 +9,8 @@ import pandas as pd
 import torch
 import torch.utils.data
 
+from dna import constants
+
 
 def group_json_objects(json_objects, group_key):
     """
@@ -523,10 +525,10 @@ class RNNDataLoader(GroupDataLoader):
         encoding = []
         for primitive in pipeline:
             primitive_name = primitive[prim_name_key]
-            try:
+            if primitive_name in primitive_to_enc:
                 encoded_primitive = primitive_to_enc[primitive_name]
-            except():
-                raise KeyError('A primitive in this data set is not in the primitive encoding')
+            else:
+                encoded_primitive = primitive_to_enc[constants.UNKNOWN]
 
             encoding.append(encoded_primitive)
         return encoding

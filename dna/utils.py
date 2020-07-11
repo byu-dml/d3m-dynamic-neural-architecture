@@ -6,6 +6,8 @@ import git
 import pandas as pd
 import numpy as np
 
+from dna import constants
+
 
 def rank(values: typing.Sequence) -> typing.Sequence:
     return type(values)((pd.Series(values).rank(ascending=False) - 1))
@@ -101,3 +103,30 @@ def has_path(data, path) -> bool:
         else:
             return False
     return True
+
+
+def get_primitive_one_hot_mapping(
+    data, *, pipeline_key: str, steps_key: str, prim_name_key: str
+) -> typing.Tuple[dict, int]:
+    primitive_names = set()
+
+    # Get a set of all the primitives in the data set
+    for instance in data:
+        primitives = instance[pipeline_key][steps_key]
+        for primitive in primitives:
+            primitive_name = primitive[prim_name_key]
+            primitive_names.add(primitive_name)
+        
+    primitive_names = sorted(primitive_names)
+    primitive_names.append(constants.UNKNOWN)  # to handle unseen primitives
+
+    # Get one hot encodings of all the primitives
+    n_primitives = len(primitive_names)
+    encoding = np.identity(n=n_primitives)
+
+    # Create a mapping of primitive names to one hot encodings
+    primitive_name_to_enc = {}
+    for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
+        primitive_name_to_enc[primitive_name] = primitive_encoding
+
+    return primitive_name_to_enc, n_primitives

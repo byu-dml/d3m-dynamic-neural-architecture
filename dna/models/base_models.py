@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from dna import utils
 from dna.data import split_data_by_group, RNNDataLoader, group_json_objects, Dataset, GroupDataLoader
+from dna import constants
 
 
 class ModelBase:
@@ -281,7 +282,9 @@ class SklearnBase(RegressionModelBase, RankModelBase):
         self.prim_name_key = 'name'
 
     def fit(self, data, *, output_dir=None, verbose=False):
-        self.one_hot_primitives_map = self._one_hot_encode_mapping(data)
+        self.one_hot_primitives_map, self.n_primitives = utils.get_primitive_one_hot_mapping(
+            data, pipeline_key=self.pipeline_key, steps_key=self.steps_key, prim_name_key=self.prim_name_key
+        )
         data = pd.DataFrame(data)
         y = data['test_f1_macro']
         X_data = self.prepare_data(data)
@@ -322,29 +325,6 @@ class SklearnBase(RegressionModelBase, RankModelBase):
         X_data = pd.concat([encoded_pipelines, metafeature_df], axis=1, ignore_index=True)
         assert X_data.shape[1] == (encoded_pipelines.shape[1] + metafeature_df.shape[1]), 'dataframe was combined incorrectly'
         return X_data
-
-    def _one_hot_encode_mapping(self, data):
-        primitive_names = set()
-
-        # Get a set of all the primitives in the train set
-        for instance in data:
-            primitives = instance[self.pipeline_key][self.steps_key]
-            for primitive in primitives:
-                primitive_name = primitive[self.prim_name_key]
-                primitive_names.add(primitive_name)
-
-        primitive_names = sorted(primitive_names)
-
-        # Get one hot encodings of all the primitives
-        self.n_primitives = len(primitive_names)
-        encoding = np.identity(n=self.n_primitives)
-
-        # Create a mapping of primitive names to one hot encodings
-        primitive_name_to_enc = {}
-        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
-            primitive_name_to_enc[primitive_name] = primitive_encoding
-
-        return primitive_name_to_enc
 
     def one_hot_encode_pipelines(self, data):
         return pd.DataFrame([self.encode_pipeline(pipeline) for pipeline in data[self.pipeline_key]])
@@ -399,34 +379,14 @@ class RNNRegressionRankModelBase(PyTorchRegressionRankModelBase):
     ):
 
         # Get the mapping of primitives to their one hot encoding
-        self.primitive_name_to_enc = self._get_primitive_name_to_enc(train_data=train_data)
+        self.primitive_name_to_enc, self.num_primitives = utils.get_primitive_one_hot_mapping(
+            train_data, pipeline_key=self.pipeline_key, steps_key=self.steps_key, prim_name_key=self.prim_name_key
+        )
 
         PyTorchModelBase.fit(
             self, train_data, n_epochs, learning_rate, batch_size, drop_last, validation_ratio, patience,
             output_dir=output_dir, verbose=verbose
         )
-
-    def _get_primitive_name_to_enc(self, train_data):
-        primitive_names = set()
-
-        # Get a set of all the primitives in the train set
-        for instance in train_data:
-            primitives = instance[self.pipeline_key][self.steps_key]
-            for primitive in primitives:
-                primitive_name = primitive[self.prim_name_key]
-                primitive_names.add(primitive_name)
-
-        # Get one hot encodings of all the primitives
-        self.num_primitives = len(primitive_names)
-        encoding = np.identity(n=self.num_primitives)
-
-        # Create a mapping of primitive names to one hot encodings
-        primitive_name_to_enc = {}
-        primitive_names = sorted(primitive_names)
-        for (primitive_name, primitive_encoding) in zip(primitive_names, encoding):
-            primitive_name_to_enc[primitive_name] = primitive_encoding
-
-        return primitive_name_to_enc
 
     def _get_pipeline_structures(self, train_data):
         # Get all the pipeline structure for each pipeline structure group before encoding the pipelines
