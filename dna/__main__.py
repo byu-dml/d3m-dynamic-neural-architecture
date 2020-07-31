@@ -57,7 +57,9 @@ def configure_split_parser(parser):
 def split_handler(arguments: argparse.Namespace):
     data_path = getattr(arguments, 'data_path')
     data = get_data(data_path)
-    train_data, test_data = split_data_by_group(data, 'dataset_id', arguments.test_size, arguments.split_seed)
+    train_data, test_data = split_data_by_group(
+        data, 'dataset_id', 'pipeline.steps.name', arguments.test_size, arguments.split_seed
+    )
 
     train_path = getattr(arguments, 'train_path')
     if train_path is None:
@@ -557,7 +559,9 @@ def get_train_and_test_data(
     train_data = get_data(in_train_path)
     if in_test_path is None:
         assert not load_cached_data
-        train_data, test_data = split_data_by_group(train_data, 'dataset_id', test_size, split_seed)
+        train_data, test_data = split_data_by_group(
+            train_data, 'dataset_id', 'pipeline.steps.name', test_size, split_seed
+        )
     else:
         test_data = get_data(in_test_path)
 
@@ -575,6 +579,9 @@ def get_train_and_test_data(
 
 
 def get_ootsp_split_data(train_data, test_data, split_ratio, split_seed):
+    # TODO: Why is `split_ratio` necessary here? It only seems to be
+    # reducing the size of the training data set. Also, when `split_ratio < 1`,
+    # we can no longer ensure that all the primitives are present in the training set.
     train_pipeline_ids = sorted(set(instance['pipeline_id'] for instance in train_data))
     k = int(split_ratio * len(train_pipeline_ids))
 

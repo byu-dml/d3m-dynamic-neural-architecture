@@ -70,3 +70,21 @@ class UtilsTestCase(unittest.TestCase):
         self.assertFalse(utils.has_path(data, ["a", "b", "c"]))
         self.assertFalse(utils.has_path(data, ["y", "z"]))
 
+    def test_get_values_by_path(self):
+        data_with_list = {"a": [{"b": 1}, {"b": 2}, {"b": 3}]}
+        self.assertEqual([1,2,3], utils.get_values_by_path(data_with_list, ["a", "b"]))
+
+        partial_data = {"a": {"b": [{"c": 1}, {"d": 2}, {"c": 3}]}}
+        self.assertEqual([1,3], utils.get_values_by_path(partial_data, ["a", "b", "c"]))
+
+        long_data = {"a": [{"b": {"c": {"d": 1}}}, {"b": {"c": {"d": 1}}}]}
+        self.assertEqual([1,1], utils.get_values_by_path(long_data, ["a", "b", "c", "d"]))
+
+        uneven_depth_data = {"a": {"b": [{"c": 1}, 2, {"c": 3}]}}
+        self.assertEqual([1,3], utils.get_values_by_path(uneven_depth_data, ["a", "b", "c"]))
+
+        list_data = [{"a": {"b": 1}}, {"a": {"b": 2}}, {"a": {"b": 3}}]
+        self.assertEqual([1,2,3], utils.get_values_by_path(list_data, ["a", "b"]))
+
+        nested_lists_data = [{"a": [{"b": 1}, {"b": 1}]}, {"a": [{"b": 1}, {"b": 1}]}]
+        self.assertEqual([1,1,1,1], utils.get_values_by_path(nested_lists_data, ["a", "b"]))

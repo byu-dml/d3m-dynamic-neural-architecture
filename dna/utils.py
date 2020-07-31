@@ -1,6 +1,7 @@
 import collections
 import typing
 import json
+import itertools
 
 import git
 import pandas as pd
@@ -78,6 +79,30 @@ class NumpyJSONEncoder(json.JSONEncoder):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
+
+
+def get_values_by_path(data, path: list) -> list:
+    """
+    Retrieves all values in `data` found at `path`, where path is
+    a sequence of keys. If a list data structure is found along the
+    path, the values matching `path` for all elements in the list
+    will be included in the results. 
+    """
+    if len(path) == 0:
+        return [data]
+    elif isinstance(data, (list, tuple)):
+        # Concatenate the results returned by each item in the list.
+        return list(itertools.chain.from_iterable(get_values_by_path(item, path) for item in data))
+    elif isinstance(data, dict):
+        # Descend further down the tree.
+        if path[0] in data:
+            return get_values_by_path(data[path[0]], path[1:])
+        else:
+            return []
+    else:
+        # The path has not been resolved and we've reached a
+        # data type we can't key into, so return no results.
+        return []
 
 
 def has_path(data, path) -> bool:

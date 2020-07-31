@@ -238,7 +238,9 @@ class PyTorchModelBase:
         if validation_ratio == 0:
             return train_data, None
 
-        return split_data_by_group(train_data, 'dataset_id', validation_ratio, split_seed)
+        return split_data_by_group(
+            train_data, 'dataset_id', 'pipeline.steps.name', validation_ratio, split_seed
+        )
 
 
 class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase):

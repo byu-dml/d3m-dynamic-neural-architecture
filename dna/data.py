@@ -3,14 +3,18 @@ import os
 import random
 import tarfile
 import typing
+from collections import defaultdict
+import itertools
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.utils.data
 
+from dna.utils import get_values_by_path
 
-def group_json_objects(json_objects, group_key):
+
+def group_json_objects(json_objects: typing.List[typing.Dict], group_key: str) -> dict:
     """
     Groups JSON data by group_key.
 
@@ -38,7 +42,99 @@ def group_json_objects(json_objects, group_key):
     return grouped_objects
 
 
-def split_data_by_group(data: typing.List[typing.Dict], group_by_key: str, test_size: typing.Union[int, float], seed: int):
+def group_data_using_grouped_indices(
+    data: typing.List[typing.Dict], grouped_data_indices: dict, groups: list
+) -> dict:
+    """
+    Takes `data`, `grouped_data_indices` (a mapping of group names to data indices),
+    and `groups` (the names of the groups of data we want to keep), and returns a
+    mapping of group names to the actual data instances (not just the indices), to
+    make the data more easily useable.
+    """
+    grouped_data = defaultdict(list)
+    for group in groups:
+        for i in grouped_data_indices[group]:
+            grouped_data[group].append(data[i])
+    return grouped_data
+
+
+def flatten_grouped_data(
+    grouped_data: dict,
+) -> typing.List[typing.Dict]:
+    """
+    Flattens a mapping of group names to group members to just
+    a list of members.
+    """
+    # Concatenate all the group lists into one list.
+    return list(itertools.chain.from_iterable(grouped_data.values()))
+
+
+def get_coverage(
+    data: list,
+    coverage_key: str
+) -> set:
+    """
+    Gets a set of all unique values found under `coverage_key`
+    for all the data within `data`.
+    """
+    coverage_path = coverage_key.split(".")
+    return set(get_values_by_path(data, coverage_path))
+
+
+def ensure_coverage(
+    train_data_grouped: dict,
+    test_data_grouped: dict,
+    coverage_key: str,
+    seed: int
+) -> tuple:
+    """
+    Takes the group split `split_data_by_group` has found and ensures that
+    all unique values of `coverage_key` are found at least once in the training
+    set. Mutates the train and test sets to ensure coverage.
+    """
+    rng = random.Random()
+    rng.seed(seed)
+
+    train_coverage = get_coverage(flatten_grouped_data(train_data_grouped), coverage_key)
+    test_coverage = get_coverage(flatten_grouped_data(test_data_grouped), coverage_key)
+
+    while len(test_coverage - train_coverage) > 0:
+        # The test set has unique values for the coverage key that are not
+        # found inside the training set.
+
+        # 1. Find groups in the test set that have primitives not used in
+        #    the training set.
+        test_data_grouped_not_covered = {
+            group_name: instances
+            for group_name, instances
+            in test_data_grouped.items()
+            if len(get_coverage(instances, coverage_key) - train_coverage) > 0
+        }
+
+        # 2. Randomly select one of those groups, and randomly select a training
+        #    set group, and swap them.
+        test_group_name, test_group_instances = rng.choice(list(test_data_grouped_not_covered.items()))
+        train_group_name, train_group_instances = rng.choice(list(train_data_grouped.items()))
+        del train_data_grouped[train_group_name]
+        train_data_grouped[test_group_name] = test_group_instances
+        del test_data_grouped[test_group_name]
+        test_data_grouped[train_group_name] = train_group_instances
+
+        # 3. Repeat that process until there are no primitives in the test set
+        #    that are not also present in the training set.
+        train_coverage = get_coverage(flatten_grouped_data(train_data_grouped), coverage_key)
+        test_coverage = get_coverage(flatten_grouped_data(test_data_grouped), coverage_key)
+
+    return train_data_grouped, test_data_grouped    
+
+
+def split_data_by_group(
+    data: typing.List[typing.Dict],
+    group_by_key: str,
+    coverage_key: str,
+    test_size: typing.Union[int, float],
+    seed: int,
+):
     grouped_data_indices = group_json_objects(data, group_by_key)
     groups = list(grouped_data_indices.keys())
 
@@ -53,18 +149,18 @@ def split_data_by_group(data: typing.List[typing.Dict], group_by_key: str, test_
 
     train_groups = groups[test_size:]
     assert len(train_groups) == len(groups) - test_size
+    train_data_grouped = group_data_using_grouped_indices(data, grouped_data_indices, train_groups)
+
     test_groups = groups[:test_size]
     assert len(test_groups) == test_size
+    test_data_grouped = group_data_using_grouped_indices(data, grouped_data_indices, test_groups)
 
-    train_data = []
-    for group in train_groups:
-        for i in grouped_data_indices[group]:
-            train_data.append(data[i])
+    train_data_grouped, test_data_grouped = ensure_coverage(
+        train_data_grouped, test_data_grouped, coverage_key, seed
+    )
 
-    test_data = []
-    for group in test_groups:
-        for i in grouped_data_indices[group]:
-            test_data.append(data[i])
+    train_data = flatten_grouped_data(train_data_grouped)
+    test_data = flatten_grouped_data(test_data_grouped)
 
     return train_data, test_data
 

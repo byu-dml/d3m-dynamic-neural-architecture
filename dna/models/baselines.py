@@ -249,9 +249,15 @@ class AutoSklearnMetalearner(RegressionModelBase, RankModelBase):
 
     @staticmethod
     def _process_metafeatures(data):
-        metafeatures = pd.DataFrame(data)[['dataset_id', 'metafeatures']].set_index('dataset_id')
-        metafeatures = pd.DataFrame(metafeatures['metafeatures'].tolist(), metafeatures.index)
+        metafeatures = pd.DataFrame(data)
+        # Keep just the dataset_id and metafeatures, and expand each
+        # metafeature out into its own column.
+        metafeatures = pd.concat(
+            [metafeatures.dataset_id, metafeatures.metafeatures.apply(pd.Series)],
+            axis="columns"
+        )
         metafeatures.drop_duplicates(inplace=True)
+        metafeatures.set_index("dataset_id", drop=True, inplace=True)
         return metafeatures
 
 class MLPRegressionModel(PyTorchRegressionRankModelBase):
