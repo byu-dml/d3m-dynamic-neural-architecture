@@ -41,6 +41,15 @@ def flatten(d, parent_key='', sep='_'):
 
 
 class DatabaseToJson:
+
+    supported_problem_types = {
+        # `d3m_metric_name` is the name of the metric as it exists in
+        # the D3M pipeline run documents. `dna_metric_name` is the name we use for
+        # the metric in this repo.
+        "classification": {"d3m_metric_name": "F1_MACRO", "dna_metric_name": "test_f1_macro"},
+        "regression": {"d3m_metric_name": "ROOT_MEAN_SQUARED_ERROR", "dna_metric_name": "test_rmse"}
+    }
+
     def __init__(self):
         self.connect_to_mongo()
 
@@ -90,7 +99,6 @@ class DatabaseToJson:
         """
         pipeline = pipeline_run["pipeline"]
         pipeline_run_id = pipeline_run["id"]
-        pipeline_id = pipeline["id"]
         simple_pipeline  = self.parse_simpler_pipeline(pipeline)
         if simple_pipeline is None:
             # This pipeline is not useable for the metadataset.
@@ -98,23 +106,38 @@ class DatabaseToJson:
         problem_type = self.get_problem_type(pipeline_run["problem"])
         if problem_type == "unsupported":
             return None
-        raw_dataset_name = pipeline_run["datasets"][0]["id"]
-        test_accuracy = pipeline_run["run"]["results"]["scores"][0]["value"]
+        test_score = self.get_score(
+            pipeline_run,
+            self.supported_problem_types[problem_type]["d3m_metric_name"]
+        )
+        if test_score is None:
+            # This pipeline run was not scored using the supported metric for this
+            # problem type.
+            return None
+        dataset_id = pipeline_run["datasets"][0]["id"]
         test_predict_time = self.get_time_elapsed(pipeline_run)
-        train_accuracy = 0
-        train_predict_time = 0  # TODO have this find the fit pipeline and get the time
+        # TODO have this find the fit pipeline and get the train score
+        # and train predict time, then include those in the returned dictionary.
         pipeline_run_info = {
-                                "pipeline": simple_pipeline,
-                                "pipeline_id": pipeline_id,
-                                "pipeline_run_id": pipeline_run_id,
-                                "problem_type": problem_type,
-                                "raw_dataset_name": raw_dataset_name,
-                                "test_accuracy": test_accuracy,
-                                "test_time": test_predict_time,
-                                "train_accuracy": train_accuracy,
-                                "train_time": train_predict_time
-                            }
+            "pipeline": simple_pipeline,
+            "pipeline_run_id": pipeline_run_id,
+            "problem_type": problem_type,
+            "dataset_id": dataset_id,
+            self.supported_problem_types[problem_type]["dna_metric_name"]: test_score,
+            "test_time": test_predict_time,
+        }
         return pipeline_run_info
+    
+    def get_score(self, pipeline_run: dict, score_name: str):
+        """
+        Finds and returns the score identified by `score_name`. If there
+        is no score by that name, returns `None`.
+        """
+        for score_dict in pipeline_run["run"]["results"]["scores"]:
+            if score_dict["metric"]["metric"] == score_name:
+                return score_dict["value"]
+        # There was no score found under `score_name`.
+        return None
 
     def get_metafeature_info(self, pipeline_run):
         """
@@ -139,7 +162,7 @@ class DatabaseToJson:
             # don't use this pipeline_run
             return {}
 
-    def collect_pipeline_runs(self):
+    def collect_pipeline_runs(self) -> None:
         """
         This is the main function that collects, and writes to file, all pipeline runs and metafeature information
         It writes the file to data/complete_pipelines_and_metafeatures.json
@@ -155,7 +178,7 @@ class DatabaseToJson:
         pipeline_run_cursor = collection.find(pipeline_run_filter)
 
         print("Collecting and distilling pipeline runs into a metadataset...")
-        list_of_experiments = {"classification": [], "regression": []}
+        list_of_experiments = {problem_type: [] for problem_type in self.supported_problem_types}
         for index, pipeline_run in tqdm(enumerate(pipeline_run_cursor), total=n_runs):
             pipeline_run_info = self.get_pipeline_run_info(pipeline_run)
             if pipeline_run_info is None:
@@ -174,7 +197,6 @@ class DatabaseToJson:
                 file.write(final_data_file)
             print(f"Wrote metadataset for problem type {problem_type} to path {final_data_path}.")
 
-        return
 
     def is_phrase_in(self, phrase, text):
         """
@@ -205,20 +227,17 @@ class DatabaseToJson:
                 f"the task type for problem:\n{json.dumps(problem, indent=4)}"
             )
         
-        # Next determine the problem type from those keywords.
-        is_classification = "classification" in task_keywords
-        is_regression = "regression" in task_keywords
-        if is_classification and is_regression:
-            raise Exception(
-                "Problem is both regression and classification:\n"
-                f"{json.dumps(problem, indent=4)}"
+        # Next determine the problem type(s) from those keywords.
+        problem_types = {keyword for keyword in task_keywords if keyword in self.supported_problem_types}
+        if len(problem_types) == 1:
+            return problem_types.pop()
+        elif len(problem_types) > 1:
+            raise AssertionError(
+                "Problem has more than one supported problem "
+                f"type {problem_types}. Don't know which to use."
             )
-        elif is_classification:
-            return "classification"
-        elif is_regression:
-            return "regression"
-        else:
-            return "unsupported"
+        # No supported problem types were found in the problem description.
+        return "unsupported"
 
     def parse_simpler_pipeline(self, full_pipeline):
         """
@@ -230,7 +249,7 @@ class DatabaseToJson:
             metadataset.
         """
         pipeline_steps = full_pipeline["steps"]
-        simple_pipeline = []
+        simplified_steps = []
         for pipeline_step in pipeline_steps:
             pipeline_step_name = pipeline_step["primitive"]["python_path"]
             inputs_list = []
@@ -245,9 +264,9 @@ class DatabaseToJson:
                 inputs_list += pipeline_step_inputs
                 
             # add info to our pipeline
-            simple_pipeline.append({"name": pipeline_step_name, "inputs": inputs_list})
+            simplified_steps.append({"name": pipeline_step_name, "inputs": inputs_list})
 
-        return simple_pipeline
+        return { "id": full_pipeline["id"], "steps": simplified_steps }
     
     def parse_inputs(self, inputs) -> list:
         """
