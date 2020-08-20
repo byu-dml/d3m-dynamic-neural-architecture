@@ -24,8 +24,9 @@ def plot_at_k_scores_over_k(
     plt.clf()
 
 
-def plot_violin_of_score_distributions(scores_by_model, model_colors, ylabel, title, plot_path):
+def plot_violin_of_score_distributions(scores_by_model, model_colors, model_order, ylabel, title, plot_path):
     data = pd.DataFrame.from_dict(scores_by_model, orient='index').T
+    data = data.reindex(model_order, axis=1).dropna(axis=1, how='all')
     ax = sns.violinplot(data=data, palette=model_colors, cut=0)
     plt.setp(ax.get_xticklabels(), rotation=30, horizontalalignment='right')
     plt.ylabel(ylabel)

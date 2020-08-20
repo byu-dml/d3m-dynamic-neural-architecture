@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 
 from sklearn.neighbors import NearestNeighbors
-import sklearn.utils
 
 
 class MinMaxScaler:
@@ -165,14 +164,18 @@ class KNearestDatasets(object):
 
         nearest_datasets, distances = self.kNearestDatasets(x, k=-1, return_distance=True)
         if 0. in distances:
-            distances = [int(dist == 0.) for dist in distances]
-        distances = pd.Series(distances, nearest_datasets).reindex(self.runs.columns)
+            # Distances of 0 get a weight of 1 and distances above 0 get a weight of 0
+            weights = [int(dist == 0.) for dist in distances]
+        else:
+            # Farther distances get a lower weight
+            weights = 1 / distances
+        weights = pd.Series(weights, nearest_datasets).reindex(self.runs.columns)
 
         regressed_values = {}
         for pipeline_id, dataset_scores in self.runs.iterrows():
-            denom = distances[~dataset_scores.isnull()].sum()
+            denom = weights[~dataset_scores.isnull()].sum()
             if denom > 0.:
-                num = (dataset_scores * distances).sum()
+                num = (dataset_scores * weights).sum()
                 regressed_values[pipeline_id] = num / denom
 
         return pd.Series(regressed_values)

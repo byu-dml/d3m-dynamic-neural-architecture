@@ -18,9 +18,17 @@ from tuningdeap import TuningDeap
 
 from dna import plot, utils
 from dna.data import get_data, preprocess_data, split_data_by_group, group_json_objects
+from dna import metrics
 from dna.models import get_model, get_model_class
 from dna.models.base_models import ModelBase
 from dna.problems import get_problem, ProblemBase
+
+
+MODEL_ID_ORDER = (
+    'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn', 'lstm',
+    'attention_regression', 'daglstm_regression', 'dag_attention_regression', 'dna_regression'
+)
+MODEL_NAME_ORDER = tuple(get_model_class(model_id).name for model_id in MODEL_ID_ORDER)
 
 
 def configure_split_parser(parser):
@@ -466,7 +474,6 @@ def configure_rescore_parser(parser: argparse.ArgumentParser):
     )
 
 
-
 def rescore_handler(arguments: argparse.Namespace):
     if arguments.results_path is not None:
         result_paths = [arguments.results_path]
@@ -779,10 +786,7 @@ def make_leaderboard(results: pd.DataFrame, score_col: str, opt: typing.Callable
     # sort rows
     leaderboard.model_id = leaderboard.model_id.astype('category')
     leaderboard.model_id.cat.set_categories(
-        [
-            'mean_regression', 'random', 'linear_regression', 'autosklearn', 'random_forest', 'meta_autosklearn',
-            'lstm', 'attention_regression', 'daglstm_regression', 'dag_attention_regression', 'dna_regression'
-        ],
+        MODEL_ID_ORDER,
         inplace=True
     )
     leaderboard.sort_values(['model_id'], inplace=True)
@@ -897,7 +901,7 @@ def _plot_scores_at_k_distribution(score_name: str, scores_at_k_by_model: pd.Dat
         ylabel += '@{}'.format(k)
     title = 'Distributions of {}'.format(ylabel)
     plot_path = os.path.join(output_dir, '{}_at_{}_distributions.pdf'.format(score_name.lower(), k))
-    plot.plot_violin_of_score_distributions(scores_at_k_by_model, model_colors, ylabel, title, plot_path)
+    plot.plot_violin_of_score_distributions(scores_at_k_by_model, model_colors, MODEL_NAME_ORDER, ylabel, title, plot_path)
 
 
 def plot_ndcg_distribution(scores_at_k_by_model: pd.DataFrame, k: typing.Sequence[int], model_colors, output_dir: str):
@@ -916,7 +920,7 @@ def _plot_scores_distribution(score_name, scores_by_model, model_colors, output_
     ylabel = score_name
     title = 'Distributions of {}'.format(ylabel)
     plot_path = os.path.join(output_dir, '{}_distributions.pdf'.format(score_name.lower()))
-    plot.plot_violin_of_score_distributions(scores_by_model, model_colors, ylabel, title, plot_path)
+    plot.plot_violin_of_score_distributions(scores_by_model, model_colors, MODEL_NAME_ORDER, ylabel, title, plot_path)
 
 
 def plot_spearman_distribution(scores_by_model, model_colors, output_dir: str):
@@ -1007,6 +1011,11 @@ def agg_results_handler(arguments: argparse.Namespace):
         raise ValueError('no results to aggregate')
 
     results_to_agg = [json.load(open(results_path)) for results_path in tqdm(sorted(result_paths))]
+    for i in range(1, len(results_to_agg)):
+        model_config_0 = results_to_agg[0]['model_config']
+        model_config_1 = results_to_agg[1]['model_config']
+        if model_config_0 != model_config_1:
+            raise ValueError('Results from different models should not be aggregated')
 
     results_ids = sorted([result['id'] for result in results_to_agg])
     uuid_namespace = uuid.UUID('a8ec5977-701e-443b-89e7-8974e0e4ea6c')
@@ -1018,7 +1027,34 @@ def agg_results_handler(arguments: argparse.Namespace):
 
     agg_scores = aggregate_result_scores(results_to_agg)
 
-    record_run(run_id, git_commit, output_dir, arguments=arguments, model_config=None, scores=agg_scores)
+    record_run(
+        run_id, git_commit, output_dir, arguments=arguments, model_config=results_to_agg[0]['model_config'],
+        scores=agg_scores
+    )
+
+    result_arguments = results_to_agg[0]['arguments']
+
+    train_data, test_data = get_train_and_test_data(
+        result_arguments['train_path'], result_arguments['test_path'], result_arguments['test_size'], result_arguments['split_seed'],
+        result_arguments['metafeature_subset'], result_arguments['cache_dir'], result_arguments['no_cache']
+    )
+
+    predictions_description = pd.DataFrame(test_data)[['dataset_id', 'pipeline_id', 'test_f1_macro']]
+    has_regression_results = False
+    for i, results in enumerate(results_to_agg):
+        for scores in results['scores']:
+            if scores['problem_name'] == 'regression':
+                test_predictions = scores['test_predictions']
+                if metrics.rmse(test_predictions, predictions_description['test_f1_macro']) != scores['test_scores']['total_scores']['rmse']:
+                    raise ValueError('rmse is not deterministic based on results and results arguments')
+
+                predictions_description['predictions{}'.format(i)] = test_predictions
+
+                has_regression_results = True
+
+    if has_regression_results:
+        predictions_path = os.path.join(output_dir, 'predictions.csv')
+        predictions_description.to_csv(predictions_path, index=False)
 
 
 def handler(arguments: argparse.Namespace, parser: argparse.ArgumentParser):
