@@ -50,7 +50,7 @@ class ProbabilisticMatrixFactorization(PyTorchRegressionRankModelBase):
     """
 
     def __init__(self, k: int, loss_function_args, *,  device: str = 'cuda:0', seed=0):
-        super().__init__(y_dtype=torch.float32, device=device, seed=seed)
+        super().__init__(device=device, seed=seed)
         self.k = k
         self.loss_function_args = loss_function_args
 

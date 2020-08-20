@@ -266,7 +266,7 @@ class MLPRegressionModel(PyTorchRegressionRankModelBase):
             self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
             loss_function_name: str, use_skip: bool = False, dropout = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
-        super().__init__(y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name)
+        super().__init__(device=device, seed=seed, loss_function_name=loss_function_name)
 
         self.n_hidden_layers = n_hidden_layers
         self.hidden_layer_size = hidden_layer_size

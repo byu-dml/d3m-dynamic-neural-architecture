@@ -245,7 +245,7 @@ class PyTorchModelBase:
 
 class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase, RankModelBase):
 
-    def __init__(self, y_dtype, device, seed, loss_function_name=None, loss_function_args=None):
+    def __init__(self, device, seed, loss_function_name=None, loss_function_args=None):
         # different arguments means different function calls
         PyTorchModelBase.__init__(
             self, y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name,
@@ -371,7 +371,7 @@ class RNNRegressionRankModelBase(PyTorchRegressionRankModelBase):
         use_skip, loss_function_name: str, *, device: str = 'cuda:0', seed: int = 0
     ):
 
-        super().__init__(y_dtype=torch.float32, seed=seed, device=device, loss_function_name=loss_function_name)
+        super().__init__(seed=seed, device=device, loss_function_name=loss_function_name)
 
         self.activation_name = activation_name
         self.dropout = dropout
