@@ -247,6 +247,8 @@ class PyTorchRegressionRankModelBase(PyTorchModelBase, RegressionModelBase, Rank
 
     def __init__(self, device, seed, loss_function_name=None, loss_function_args=None):
         # different arguments means different function calls
+        if loss_function_name is None:
+            loss_function_name = 'rmse'
         PyTorchModelBase.__init__(
             self, y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name,
             loss_function_args=loss_function_args
