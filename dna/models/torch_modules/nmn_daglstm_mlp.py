@@ -17,4 +17,3 @@ class NMN(nn.Module):
 
     def forward(self, args):
         pass
-
