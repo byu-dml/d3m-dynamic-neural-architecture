@@ -1,7 +1,8 @@
 from .base_models import PyTorchRegressionRankModelBase
+from .torch_modules.nmn_daglstm_mlp import NMNDAGLSTMMLP
 
 
-class NeuralModuleNetwork(PyTorchRegressionRankModelBase):
+class NeuralModuleNetworkModel(PyTorchRegressionRankModelBase):
 
     name = 'NMN'
     color = 'fuschia'
@@ -10,4 +11,12 @@ class NeuralModuleNetwork(PyTorchRegressionRankModelBase):
         super().__init__(device, seed)
 
     def _get_model(self, train_data):
-        pass
+        module_ids = self._get_module_ids(train_data)
+        return NMNDAGLSTMMLP(module_ids)
+
+    def _get_module_ids(self, train_data) -> set:
+        module_ids = set()
+        for instance in train_data:
+            for step in instance['pipeline']['steps']:
+                module_ids.add(step['name'])
+        return module_ids

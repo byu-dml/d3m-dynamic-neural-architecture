@@ -10,7 +10,7 @@ from .dag_lstm_regression_model import DAGLSTMRegressionModel
 from .hidden_dag_lstm_regression_model import HiddenDAGLSTMRegressionModel
 from .attention_regression_model import AttentionRegressionModel
 from .dag_attention_regression_model import DAGAttentionRegressionModel
-from .neural_module_network import NeuralModuleNetwork
+from .neural_module_network import NeuralModuleNetworkModel
 from .probabilistic_matrix_factorization import ProbabilisticMatrixFactorization
 
 
@@ -36,7 +36,7 @@ def get_model_class(model_id: str):
         'random': RandomBaseline,
         'meta_autosklearn': MetaAutoSklearn,
         'probabilistic_matrix_factorization': ProbabilisticMatrixFactorization,
-        'nmn': NeuralModuleNetwork,
+        'nmn': NeuralModuleNetworkModel,
     }[model_id.lower()]
 
 
