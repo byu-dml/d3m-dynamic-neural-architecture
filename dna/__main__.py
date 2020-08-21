@@ -513,7 +513,7 @@ def handle_rescore(results_path: str, output_dir: str, plot: bool):
             os.mkdir(plot_dir)
 
     # For each problem, re-score using the predictions and data and ensure the scores are the same as before
-    for problem_scores in results['scores']:
+    for problem_scores in results.get('scores', []):
         problem = get_problem(problem_scores['problem_name'], **results['arguments'])
         if problem is None:
             continue
@@ -976,7 +976,7 @@ def aggregate_result_scores(results_to_agg: typing.List[typing.Dict]):
     # group results by problem and flatten
     problem_name_to_scores_to_agg_map = {}  # problem_name: scores_to_agg
     for result in results_to_agg:
-        for problem_scores in result['scores']:
+        for problem_scores in result.get('scores', []):
             problem_scores['run_id'] = result['id']
             problem_name = problem_scores['problem_name']
             if problem_name not in problem_name_to_scores_to_agg_map:
@@ -1049,7 +1049,7 @@ def agg_results_handler(arguments: argparse.Namespace):
     predictions_description = pd.DataFrame(test_data)[['dataset_id', 'pipeline_id', 'test_f1_macro']]
     has_regression_results = False
     for i, results in enumerate(results_to_agg):
-        for scores in results['scores']:
+        for scores in results.get('scores', []):
             if scores['problem_name'] == 'regression':
                 test_predictions = scores['test_predictions']
                 if metrics.rmse(test_predictions, predictions_description['test_f1_macro']) != scores['test_scores']['total_scores']['rmse']:
