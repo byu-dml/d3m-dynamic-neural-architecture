@@ -3,7 +3,7 @@ from torch import nn
 from torch_transformer import Encoder
 from torch_multi_head_attention import MultiHeadAttention
 
-from .submodule import Submodule
+from .fully_connected_module import FullyConnectedModule
 from .torch_utils import PyTorchRandomStateContext, get_activation, get_reduction
 
 
@@ -26,7 +26,7 @@ class AttentionMLP(nn.Module):
 
         attention_in_features = features_per_head * n_heads
 
-        self.embedder = Submodule([in_features, attention_in_features], 'relu', False, False, 0, device=device, seed=seed)
+        self.embedder = FullyConnectedModule([in_features, attention_in_features], 'relu', False, False, 0, device=device, seed=seed)
 
         self.reduction = get_reduction(reduction_name)
         self.reduction_dim = 1
@@ -45,7 +45,7 @@ class AttentionMLP(nn.Module):
 
         mlp_input_size = attention_in_features + mlp_extra_input_size
         mlp_layer_sizes = [mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
-        self.mlp = Submodule(
+        self.mlp = FullyConnectedModule(
             mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=device, seed=seed+1
         )
 

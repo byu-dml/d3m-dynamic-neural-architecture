@@ -14,7 +14,7 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
         reduction_name: str = 'max', loss_function_name: str = 'rmse', use_skip: bool = False, dropout = 0.0,  *,
         device: str = 'cuda:0', seed: int = 0
     ):
-        super().__init__(y_dtype=torch.float32, device=device, seed=seed, loss_function_name=loss_function_name)
+        super().__init__(device=device, seed=seed, loss_function_name=loss_function_name)
         self.n_hidden_layers = n_hidden_layers
         self.hidden_layer_size = hidden_layer_size
         self.activation_name = activation_name

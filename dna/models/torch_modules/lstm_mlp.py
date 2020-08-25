@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from .torch_utils import PyTorchRandomStateContext
-from .submodule import Submodule
+from .fully_connected_module import FullyConnectedModule
 
 
 class LSTMMLP(nn.Module):
@@ -34,7 +34,7 @@ class LSTMMLP(nn.Module):
 
         mlp_input_size = hidden_size + mlp_extra_input_size
         mlp_layer_sizes = [mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
-        self._mlp = Submodule(
+        self._mlp = FullyConnectedModule(
             mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=device,
             seed=seed+2
         )

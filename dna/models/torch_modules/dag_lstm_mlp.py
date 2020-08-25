@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from .dag_lstm import DAGLSTM
-from .submodule import Submodule
+from .fully_connected_module import FullyConnectedModule
 
 class DAGLSTMMLP(nn.Module):
     """
@@ -31,7 +31,7 @@ class DAGLSTMMLP(nn.Module):
 
         mlp_input_size = lstm_hidden_state_size + mlp_extra_input_size
         mlp_layer_sizes = [mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
-        self._mlp = Submodule(
+        self._mlp = FullyConnectedModule(
             mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=self.device,
             seed=self._mlp_seed,
         )

@@ -7,3 +7,4 @@ rescore/
 .cache/
 tmp/
 leaderboards
+*.swp

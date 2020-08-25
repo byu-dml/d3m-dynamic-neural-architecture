@@ -2,7 +2,7 @@ import torch.nn as nn
 
 from .torch_utils import PyTorchRandomStateContext, get_activation
 from .dag_lstm import DAGLSTM
-from .submodule import Submodule
+from .fully_connected_module import FullyConnectedModule
 
 
 class HiddenMLPDAGLSTMMLP(nn.Module):
@@ -27,7 +27,7 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
 
         input_mlp_layer_sizes = [input_mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [lstm_hidden_state_size]
         input_layers = [
-            Submodule(
+            FullyConnectedModule(
                 input_mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout,
                 device=self.device, seed=self._input_mlp_seed
             ),
@@ -53,7 +53,7 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
 
         output_mlp_input_size = lstm_hidden_state_size
         output_mlp_layer_sizes = [output_mlp_input_size] + [mlp_hidden_layer_size] * mlp_n_hidden_layers + [output_size]
-        self._output_mlp = Submodule(
+        self._output_mlp = FullyConnectedModule(
             output_mlp_layer_sizes, mlp_activation_name, mlp_use_batch_norm, mlp_use_skip, dropout, device=self.device,
             seed=self._output_mlp_seed,
         )
