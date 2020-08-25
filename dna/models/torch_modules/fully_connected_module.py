@@ -5,11 +5,15 @@ import torch.nn as nn
 from .torch_utils import PyTorchRandomStateContext, get_activation
 
 
-class Submodule(nn.Module):
+class FullyConnectedModule(nn.Module):
+    """A torch module with fully connected layers with a non-linear activation between each layer.
+     Also supports optional batch normalization and dropout between each layer and a single skip
+    connection from the beginning to the end of the module.
+    """
 
     def __init__(
-            self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool, use_skip: bool = False,
-            dropout: float = 0.0, *, device: str = 'cuda:0', seed: int = 0
+        self, layer_sizes: typing.List[int], activation_name: str, use_batch_norm: bool,
+        use_skip: bool = False, dropout: float = 0.0, *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__()
 

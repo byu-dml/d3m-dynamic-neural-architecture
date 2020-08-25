@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from .torch_utils import get_activation, get_reduction
-from .submodule import Submodule
+from .fully_connected_module import FullyConnectedModule
 
 
 class DNAModule(nn.Module):
@@ -44,14 +44,14 @@ class DNAModule(nn.Module):
 
     def _get_input_submodule(self):
         layer_sizes = [self.input_layer_size] + [self.hidden_layer_size] * (self.n_layers - 1)
-        return Submodule(
+        return FullyConnectedModule(
             layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
             seed=self._input_seed
         )
 
     def _get_output_submodule(self):
         layer_sizes = [self.hidden_layer_size] * (self.n_layers - 1) + [self.output_layer_size]
-        return Submodule(
+        return FullyConnectedModule(
             layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
             seed=self._output_seed
         )
@@ -60,7 +60,7 @@ class DNAModule(nn.Module):
         dynamic_submodules = torch.nn.ModuleDict()
         for i, (submodule_id, submodule_input_size) in enumerate(sorted(self.submodule_input_sizes.items())):
             layer_sizes = [self.hidden_layer_size * submodule_input_size] + [self.hidden_layer_size] * (self.n_layers - 1)
-            dynamic_submodules[submodule_id] = Submodule(
+            dynamic_submodules[submodule_id] = FullyConnectedModule(
                 layer_sizes, self.activation_name, self.use_batch_norm, self.use_skip, self.dropout, device=self.device,
                 seed=self._dna_base_seed + i
             )

@@ -2,7 +2,7 @@ import typing
 
 import torch.nn as nn
 
-from .submodule import Submodule
+from .fully_connected_module import FullyConnectedModule
 
 
 class MLP(nn.Module):
@@ -13,7 +13,7 @@ class MLP(nn.Module):
     ):
         super().__init__()
 
-        self.mlp = Submodule(
+        self.mlp = FullyConnectedModule(
             layer_sizes, activation_name, use_batch_norm, use_skip, dropout, device=device, seed=seed
         )
 
