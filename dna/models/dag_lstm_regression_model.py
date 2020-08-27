@@ -1,5 +1,5 @@
 from .lstm_model import LSTMModel
-from .torch_modules.dag_lstm_mlp import DAGLSTMMLP
+from .torch_modules.daglstm_mlp import DAGLSTMMLPModule
 
 
 class DAGLSTMRegressionModel(LSTMModel):
@@ -33,7 +33,7 @@ class DAGLSTMRegressionModel(LSTMModel):
         )
 
     def _get_model(self, train_data):
-        return DAGLSTMMLP(
+        return DAGLSTMMLPModule(
             lstm_input_size=self.num_primitives,
             lstm_hidden_state_size=self.hidden_state_size,
             lstm_n_layers=self.lstm_n_layers,

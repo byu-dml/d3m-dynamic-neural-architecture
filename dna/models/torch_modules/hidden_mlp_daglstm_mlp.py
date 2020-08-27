@@ -1,11 +1,11 @@
 import torch.nn as nn
 
 from .torch_utils import PyTorchRandomStateContext, get_activation
-from .dag_lstm import DAGLSTM
-from .fully_connected_module import FullyConnectedModule
+from .daglstm import DAGLSTMModule
+from .fully_connected import FullyConnectedModule
 
 
-class HiddenMLPDAGLSTMMLP(nn.Module):
+class HiddenMLPDAGLSTMMLPModule(nn.Module):
     """
     The HiddenMLPDAGLSTMMLP combines a feature vector and a DAG using an MLP and a DAGLSTM and passes the final
     embedding to an output MLP. The feature vector is first transformed using an input MLP and is then used as the
@@ -44,7 +44,7 @@ class HiddenMLPDAGLSTMMLP(nn.Module):
                 input_layers.append(input_batch_norm)
         self._input_mlp = nn.Sequential(*input_layers)
 
-        self._dag_lstm = DAGLSTM(
+        self._dag_lstm = DAGLSTMModule(
             lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction_name, device=self.device,
             seed=self._lstm_seed
         )

@@ -2,7 +2,7 @@ import typing
 
 import torch.nn as nn
 
-from .fully_connected_module import FullyConnectedModule
+from .fully_connected import FullyConnectedModule
 
 
 class MLP(nn.Module):
