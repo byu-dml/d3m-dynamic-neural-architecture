@@ -1,5 +1,5 @@
 from .base_models import PyTorchRegressionRankModelBase
-from .torch_modules.nmn_daglstm_mlp import NMNDAGLSTMMLP
+from .torch_modules.nmn import NMNModule
 
 
 class NeuralModuleNetworkModel(PyTorchRegressionRankModelBase):
