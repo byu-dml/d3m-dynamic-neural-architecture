@@ -4,15 +4,16 @@ import torch
 import torch.nn as nn
 
 from .torch_utils import get_activation, get_reduction
-from .fully_connected_module import FullyConnectedModule
+from .fully_connected import FullyConnectedModule
 
 
 class DNAModule(nn.Module):
 
     def __init__(
-        self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int, hidden_layer_size: int,
-        output_layer_size: int, activation_name: str, use_batch_norm: bool, use_skip: bool = False, dropout: float = 0.0,
-        reduction_name: str = 'max', *, device: str = 'cuda:0', seed: int = 0
+        self, submodule_input_sizes: typing.Dict[str, int], n_layers: int, input_layer_size: int,
+        hidden_layer_size: int, output_layer_size: int, activation_name: str, use_batch_norm: bool,
+        use_skip: bool = False, dropout: float = 0.0, reduction_name: str = 'max',
+        *, device: str = 'cuda:0', seed: int = 0
     ):
         super().__init__()
         self.submodule_input_sizes = submodule_input_sizes
@@ -29,7 +30,6 @@ class DNAModule(nn.Module):
         else:
             self.reduction = get_reduction(reduction_name)
             self.reduction_dim = 0
-        self.reduction_name = reduction_name
         self.use_batch_norm = use_batch_norm
         self.use_skip = use_skip
         self.dropout = dropout

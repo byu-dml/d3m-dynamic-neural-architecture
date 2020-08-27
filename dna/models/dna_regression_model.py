@@ -1,7 +1,7 @@
 import torch
 
 from .base_models import PyTorchRegressionRankModelBase
-from .torch_modules.dna_module import DNAModule
+from .torch_modules.dna import DNAModule
 
 
 class DNARegressionModel(PyTorchRegressionRankModelBase):
@@ -10,9 +10,9 @@ class DNARegressionModel(PyTorchRegressionRankModelBase):
     color = 'lime'
 
     def __init__(
-        self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str, use_batch_norm: bool,
-        reduction_name: str = 'max', loss_function_name: str = 'rmse', use_skip: bool = False, dropout = 0.0,  *,
-        device: str = 'cuda:0', seed: int = 0
+        self, n_hidden_layers: int, hidden_layer_size: int, activation_name: str,
+        use_batch_norm: bool, reduction_name: str = 'max', loss_function_name: str = 'rmse',
+        use_skip: bool = False, dropout = 0.0,  *, device: str = 'cuda:0', seed: int = 0,
     ):
         super().__init__(device=device, seed=seed, loss_function_name=loss_function_name)
         self.n_hidden_layers = n_hidden_layers

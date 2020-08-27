@@ -3,7 +3,7 @@ from torch import nn
 from torch_transformer import Encoder
 from torch_multi_head_attention import MultiHeadAttention
 
-from .fully_connected_module import FullyConnectedModule
+from .fully_connected import FullyConnectedModule
 from .torch_utils import PyTorchRandomStateContext, get_activation, get_reduction
 
 

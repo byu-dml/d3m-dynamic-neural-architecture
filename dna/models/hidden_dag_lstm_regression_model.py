@@ -1,5 +1,5 @@
 from .dag_lstm_regression_model import DAGLSTMRegressionModel
-from .torch_modules.hidden_mlp_dag_lstm_mlp import HiddenMLPDAGLSTMMLP
+from .torch_modules.hidden_mlp_daglstm_mlp import HiddenMLPDAGLSTMMLPModule
 
 class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
 
@@ -20,7 +20,7 @@ class HiddenDAGLSTMRegressionModel(DAGLSTMRegressionModel):
 
     def _get_model(self, train_data):
         n_features = len(train_data[0][self.features_key])
-        return HiddenMLPDAGLSTMMLP(
+        return HiddenMLPDAGLSTMMLPModule(
             lstm_input_size=self.num_primitives,
             lstm_hidden_state_size=self.hidden_state_size,
             lstm_n_layers=self.lstm_n_layers,

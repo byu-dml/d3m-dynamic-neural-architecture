@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-from .dag_lstm import DAGLSTM
-from .fully_connected_module import FullyConnectedModule
+from .daglstm import DAGLSTMModule
+from .fully_connected import FullyConnectedModule
 
-class DAGLSTMMLP(nn.Module):
+class DAGLSTMMLPModule(nn.Module):
     """
     A DAG LSTM MLP embeds a DAG, concatenates that embedding with another feature vector, and passes the concatenated
     features to an MLP.
@@ -22,7 +22,7 @@ class DAGLSTMMLP(nn.Module):
         self._lstm_seed = seed + 1
         self._mlp_seed = seed + 2
 
-        self._dag_lstm = DAGLSTM(
+        self._dag_lstm = DAGLSTMModule(
             lstm_input_size, lstm_hidden_state_size, lstm_n_layers, dropout, reduction_name, device=self.device,
             seed=self._lstm_seed
         )

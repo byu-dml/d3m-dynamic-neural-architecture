@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from .torch_utils import PyTorchRandomStateContext
-from .fully_connected_module import FullyConnectedModule
+from .fully_connected import FullyConnectedModule
 
 
 class LSTMMLP(nn.Module):

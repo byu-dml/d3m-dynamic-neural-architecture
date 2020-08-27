@@ -4,14 +4,14 @@ import torch.nn as nn
 from .torch_utils import PyTorchRandomStateContext, get_reduction
 
 
-class DAGLSTM(nn.Module):
-    """
-    A modified LSTM that handles directed acyclic graphs (DAGs) by reusing and aggregating hidden states.
+class DAGLSTMModule(nn.Module):
+    """A modified LSTM that handles directed acyclic graphs (DAGs) by  copying and aggregating
+    hidden states.
     """
 
     def __init__(
-            self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction_name: str, *, device: str,
-            seed: int
+            self, input_size: int, hidden_size: int, n_layers: int, dropout: float, reduction_name:
+             str, *, device: str, seed: int
     ):
         super().__init__()
 
