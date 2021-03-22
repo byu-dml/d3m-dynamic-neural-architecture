@@ -761,6 +761,7 @@ def load_result(result_path: str):
             problem_name = problem_scores['problem_name']
             if problem_name in ['regression', 'rank']:
                 parsed_scores = parse_scores(problem_scores)
+                result_path = os.path.abspath(result_path)
                 parsed_scores['path'] = os.path.dirname(result_path)
                 result[problem_name] = parsed_scores
     except Exception as e:
